@@ -11,11 +11,11 @@
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
 import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=44';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=44';
-import { listDirSafe } from './templates.js?v=44';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=44';
-import { safePath } from './write.js?v=44';
+import { MARKDOWN_RE } from './constants.js?v=45';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=45';
+import { listDirSafe } from './templates.js?v=45';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=45';
+import { safePath } from './write.js?v=45';
 
 /* --------------------------------------------------------------- deleting */
 
@@ -65,12 +65,12 @@ function removeStamp() {
 }
 
 /**
- * 为「这一次删除」挑一个桶目录名: <root>/.remove/<当天日期 20261004>; 同一天里再删一次就 -2、-3 排下去。
- * **一次删除只调用一次** —— 这次删除要搬走的多个文件(连带的小节/知识点/题目)都用同一个桶,
- * 桶内部因此只会有「这一次删除」的东西。这里只挑名字, 不建目录(等第一个文件真的搬进来时再建)。
+ * 为「这一次删除 / 移出」挑一个桶目录名: <box>/<当天日期 20261004>; 同一天里再来一次就 -2、-3 排下去。
+ * box 就是某个 .remove 目录 —— 画布内的删除是 <画布根>/.remove, 一级画布「移出列表」是 <同层>/.remove。
+ * **一次删除只调用一次**: 这次要搬走的东西(连带的小节/知识点/题目)都用同一个桶,
+ * 桶内部因此只会有「这一次」的东西。这里只挑名字, 不建目录(等第一个东西真的搬进来时再建)。
  */
-export function removeBucketFor(config, stamp) {
-	const box = removeBoxFor(config);
+export function bucketNameIn(box, stamp) {
 	const base = stamp || removeStamp();
 	let candidate = `${box}/${base}`;
 	let index = 1;
@@ -79,6 +79,11 @@ export function removeBucketFor(config, stamp) {
 		candidate = `${box}/${base}-${index}`;
 	}
 	return candidate;
+}
+
+/** 画布内的删除: 桶就在 <画布根>/.remove 下 */
+export function removeBucketFor(config, stamp) {
+	return bucketNameIn(removeBoxFor(config), stamp);
 }
 
 /** 桶目录的显示名(= 它在 .remove 下那一层目录名), 给前端提示用 */

@@ -371,7 +371,7 @@ D. 非风险点
 - 右上 `⇪ 导入目录`：**一个输入框 + 一个 `📁 选择…` 按钮** —— 点按钮弹宿主的目录选择窗体（桌面版 = 系统「选择文件夹」框，网页版 = 宿主内置的目录浏览器）选好目录，路径自动填进输入框（也可以手打/粘贴绝对路径，按 Enter 或点 `导入`）。这个目录就成了**学习库**：例如 `/Users/你/Desktop/RootNotes` 下面有 `xxx学习笔记/`、`软考学习笔记/`（各自带 `notes/`、`questions/`），导入后这两张卡就进了一级画布列表，同时在该库里建好共用的 `.templates/`（以及库级的 `.config/rk-study.json`）。空目录也能导入（只是暂时没有画布）；目录本身已经是一张画布时（有 `notes/` 或 `questions/`）只把这一张登记进列表，**磁盘上什么都不写**，也不会把它的子目录（`notes/`）当成画布。
 - **模板共用规则**（一个画布的模板目录按顺序找）：① 父目录是**学习库**就用库根目录的 `.templates`（判据：那一层已经有 `.templates`，或者父目录下还有别的画布）—— 库里所有画布共用这一份，**画布自己不再各建一份**；库里那份被删掉后，再从画布改模板也只会重建在库根目录，不会在画布里冒出来；② 自带根目录的画布才用**画布根目录的 `.templates`**；③ 老画布原来放在 `<画布>/notes/.templates` 的继续认（那里有文件就用那里）。所以现在新建的画布，`notes/` 里不会再出现 `.templates`。
 - **没有「内置画布」**：一级画布列表以 `localStorage` 为即时来源、同时和学习库的 `<库>/.config/rk-study.json` 双向同步 —— 插件配置（`cordis.patch.yml`）里的 `root` 只是「没带 `?root=` 时的兜底根」，不会自动变成一张卡片（那张带「内置」标签的卡已取消）。所以插件仓库里不需要 `notes/`、`questions/`：笔记放在你自己的目录里（例如 `~/Notes/系统架构师/`），仓库只管插件代码。
-- 卡片上还能**改名**与**移出列表**。改名 = **直接重命名磁盘上的那个目录**（目录名就是画布名，笔记与题目跟着目录一起走）；改成同层已有的名字会被拦下（`name-taken`），弹窗不关、磁盘不动。移出列表会把画布目录**移到同一层的 `.remove/` 里**（同层已有同名备份就往后排成 `名字-2`、`名字-3`…，从不覆盖；想恢复就把目录移回上一层）。移出还会记一个**墓碑**：之后再 `重新扫描`、刷新、重新导入同一个库都不会把它加回来 —— 只有在**同一个路径** `＋ 新建学习画布`、或重新 `⇪ 导入目录` 这个库时才解除。
+- 卡片上还能**改名**与**移出列表**。改名 = **直接重命名磁盘上的那个目录**（目录名就是画布名，笔记与题目跟着目录一起走）；改成同层已有的名字会被拦下（`name-taken`），弹窗不关、磁盘不动。移出列表会把画布目录**移到同一层的 `.remove/` 里**（排布跟画布内删除章节 / 知识点是同一套：**同一层的 `.remove/` 下按天开桶** —— `<同层>/.remove/20261004/<画布名>`，同一天里移出多个就往后排 `20261004-2`、`20261004-3`，从不覆盖；想恢复就把目录从桶里移回上一层）。移出还会记一个**墓碑**：之后再 `重新扫描`、刷新、重新导入同一个库都不会把它加回来 —— 只有在**同一个路径** `＋ 新建学习画布`、或重新 `⇪ 导入目录` 这个库时才解除。
 - 画布卡片是**穿透**的：卡片空白处按住鼠标 = 直接拖动画布（`pointer-events:none`，指针事件落到 canvas 上），卡片上的文字也不可选中（`user-select:none`）；只有真正要执行事件的部件（`进入画布 ›` 与 `改名` / `移出列表` 按钮）照旧接收鼠标（`pointer-events:auto`）。`＋ 新建学习画布` 那张虚线卡本身就是按钮，仍然整块可点。
 - 列表、手动移出的墓碑、以及一级画布上的字号 / 配色，都记在 `localStorage`（`rk-study:roots` / `rk-study:removed-roots` / `rk-study:font-scale` / `rk-study:skin`）；「当前在哪张画布」只活在这一个页面会话里，打开 / 刷新都从**一级画布**（全部画布总览）开始；**学习库那一级**的这些状态还会写进 `<库>/.config/rk-study.json`（`canvases` / `removed` / `ui` / `zoom`），所以换浏览器、换机器、重装插件，导入同一个库就能把画布列表与移出记录读回来；每个画布的统计与 Git 范围都只算当前这个根目录。
 
@@ -401,7 +401,7 @@ D. 非风险点
 ├─ .config/
 │  └─ rk-study.json     ← 画布清单 / 移出记录 / 字号配色 / 一级画布视野
 ├─ .templates/          ← 库里共用的模板（导入 / 新建画布时建）
-├─ .remove/             ← 「移出列表」的画布目录整份移到这里（想恢复就移回上一层）
+├─ .remove/20261004/    ← 「移出列表」的画布目录整份移到这里（按天开桶；想恢复就移回上一层）
 └─ <各张画布>/           ← 每张画布 = 一个目录（自己不再有 .config）
 ```
 
@@ -447,7 +447,7 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 | `templates.js` | 547 | 小节 / 知识点 / 题目文件 / 题目的模板与题目计数 + 内置的「公式与结构模板」默认库 |
 | `fsguard.js` | 69 | 路径边界：`insideRoot`（经 `ctx.fs.resolve` 复核，符号链接指向外面也挡得住）、`writePolicyOf`（写操作的沙箱策略）、`denyOutsideRoot`；`mkdir` 的边界由调用方给 —— 新建画布 / 导入学习库 / 移出列表的目标本来就在请求 root 之外（父目录才是这几件事的边界）。取舍见文件头 |
 | `write.js` | 54 | 路径校验与写文件（经 `ctx.fs.writeText`，必要时 `mkdir` 兜底） |
-| `delete.js` | 264 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段），以及排除判断 |
+| `delete.js` | 264 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `bucketNameIn` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`；「移出列表」用同一个 `bucketNameIn` 在**同层** `.remove/` 下开桶）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段），以及排除判断 |
 | `scan.js` | 326 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存 |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
 | `routes.js` | 1494 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root |
@@ -455,10 +455,10 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**两个版本号（`?v=N` 与 `client.js` 的 `MODULE_VERSION`）要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=44）
-> sed -i '' 's/?v=43/?v=44/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 130）
-> sed -i '' 's/MODULE_VERSION = 128;/MODULE_VERSION = 130;/' plugin/rk-study/client.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=45）
+> sed -i '' 's/?v=44/?v=45/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 131）
+> sed -i '' 's/MODULE_VERSION = 128;/MODULE_VERSION = 131;/' plugin/rk-study/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >

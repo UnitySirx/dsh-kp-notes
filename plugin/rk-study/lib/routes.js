@@ -6,19 +6,19 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=44';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, safeDirPath, saveRemovedText } from './delete.js?v=44';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=44';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=44';
-import { buildNodes, scanHeadings } from './headings.js?v=44';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=44';
-import { parseDocument } from './parse.js?v=44';
-import { pointRegion, rebuildPoint } from './points.js?v=44';
-import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=44';
-import { buildCatalog } from './scan.js?v=44';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=44';
-import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=44';
-import { readBody, safePath, writeMarkdown } from './write.js?v=44';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=45';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText } from './delete.js?v=45';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=45';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=45';
+import { buildNodes, scanHeadings } from './headings.js?v=45';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=45';
+import { parseDocument } from './parse.js?v=45';
+import { pointRegion, rebuildPoint } from './points.js?v=45';
+import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=45';
+import { buildCatalog } from './scan.js?v=45';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=45';
+import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=45';
+import { readBody, safePath, writeMarkdown } from './write.js?v=45';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -1131,8 +1131,8 @@ export function apply(ctx, rawConfig) {
 		return { ok: true, root: target, from, name, renamed: true };
 	}
 
-	/* 一级画布「移出列表」= 把目录移到同一层的 .remove/ 里 —— 点开头, 扫描直接跳过, 内容原样保留,
-	 * 想恢复就把目录移回上一层。同层已经有同名备份就往后排 -2 / -3 …, 从不覆盖任何东西。 */
+	/* 一级画布「移出列表」= 把目录移到同一层 .remove/ 里 —— 点开头, 扫描直接跳过, 内容原样保留,
+	 * 想恢复就把目录移回上一层。排布跟「删除章节/知识点」一样: .remove/<当天 YYYYMMDD>/<画布名>, 同一天里移出多个就往后排 -2 / -3 …, 从不覆盖任何东西。 */
 	async function removeRoot(payload) {
 		const from = validateRoot(payload && payload.path);
 		if (!from) return { ok: false, error: 'bad-path', message: '需要一个绝对路径(不能包含 ..)' };
@@ -1145,22 +1145,19 @@ export function apply(ctx, rawConfig) {
 		}
 		const name = from.replace(/\/+$/, '').split('/').pop() || 'canvas';
 		const box = `${parent}/.remove`;
-		let target = `${box}/${name}`;
-		let index = 2;
-		while ((await pathExists(target)) && index < 1000) {
-			target = `${box}/${name}-${index}`;
-			index += 1;
-		}
+		/* 跟画布内的删除同一套: 先按当天日期开一个桶, 画布目录整个放进桶里 */
+		const dir = bucketNameIn(box);
+		const target = `${dir}/${name}`;
 		if (await pathExists(target)) return { ok: false, error: 'remove-full', message: '备份目录里同名太多了' };
 		try {
-			await mkdirAt(box, undefined, parent);
+			await mkdirAt(dir, undefined, parent);
 			renameSync(from, target);
 		} catch (error) {
 			return { ok: false, error: 'remove-failed', message: error instanceof Error ? error.message : String(error) };
 		}
 		caches.delete(from);
 		caches.delete(target);
-		return { ok: true, root: target, from, name, box, removed: true };
+		return { ok: true, root: target, from, name, box, bucket: dir.slice(box.length + 1), removed: true };
 	}
 
 	/* 笔记库目录下面的一级画布 = 直接子目录里带 notes/ 或 questions/ 的那些。
