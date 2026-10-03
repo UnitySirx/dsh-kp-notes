@@ -284,7 +284,7 @@ D. 非风险点
 
 ### 删除（不真删：一律移到当前画布的 `.remove/`，都有二次确认）
 
-**插件里的每个「删除」都是移动**：目标被 `rename` 到**当前一级画布根目录下的 `.remove/`**，**一次删除 = 在这里新建一个时间戳桶目录**，桶里保留原来的相对路径结构（删掉章节 `notes/01-第一章`，桶里就是 `notes/01-第一章/` 与 `questions/01-第一章/`）。桶与桶互不相干，所以**删两次就留两份，谁也不覆盖谁**（同一个章节删两次，第二次进的是新桶，第一次那份原样还在），也**不会把不同次的删除混进同一条路径**（先删整个章节、之后又删重建章节里的某个知识点 —— 后者进它自己那个新桶，不会落进上次那份章节备份里）。同一秒里连开两个桶，名字往后排成 `…-2`、`…-3`。`.remove` 以点开头，扫描时跳过，所以它不会出现在画布、思维导图或搜索里。要找回：在画布根目录下打开 `.remove/`，挑时间对得上的那个桶，把东西移回原位即可；`rm -rf .remove` 就等于真正清空回收站。
+**插件里的每个「删除」都是移动**：目标被 `rename` 到**当前一级画布根目录下的 `.remove/`**，**一次删除 = 在这里新建一个日期桶目录**（名字就是当天的 `YYYYMMDD`，例如 `20261004`），桶里保留原来的相对路径结构（删掉章节 `notes/01-第一章`，桶里就是 `notes/01-第一章/` 与 `questions/01-第一章/`）。桶与桶互不相干，所以**删两次就留两份，谁也不覆盖谁**（同一个章节删两次，第二次进的是新桶，第一次那份原样还在），也**不会把不同次的删除混进同一条路径**（先删整个章节、之后又删重建章节里的某个知识点 —— 后者进它自己那个新桶，不会落进上次那份章节备份里）。同一天里再删一次，名字往后排成 `20261004-2`、`20261004-3`（桶名只到「天」，一天里删几次就有几个桶；文件本身的修改时间由 `rename` 原样保留，想知道具体几点几分看它就行）。`.remove` 以点开头，扫描时跳过，所以它不会出现在画布、思维导图或搜索里。要找回：在画布根目录下打开 `.remove/`，挑日期对得上的那个桶，把东西移回原位即可；`rm -rf .remove` 就等于真正清空回收站。
 
 | 位置 | 按钮 | 移到 `.remove/<桶>/` 里的是什么 |
 | --- | --- | --- |
@@ -447,7 +447,7 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 | `templates.js` | 547 | 小节 / 知识点 / 题目文件 / 题目的模板与题目计数 + 内置的「公式与结构模板」默认库 |
 | `fsguard.js` | 69 | 路径边界：`insideRoot`（经 `ctx.fs.resolve` 复核，符号链接指向外面也挡得住）、`writePolicyOf`（写操作的沙箱策略）、`denyOutsideRoot`；`mkdir` 的边界由调用方给 —— 新建画布 / 导入学习库 / 移出列表的目标本来就在请求 root 之外（父目录才是这几件事的边界）。取舍见文件头 |
 | `write.js` | 54 | 路径校验与写文件（经 `ctx.fs.writeText`，必要时 `mkdir` 兜底） |
-| `delete.js` | 264 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `removeBucketFor`（挑一个时间戳桶 `YYYY-MM-DD_HHmmss`，撞名就排 `-2`、`-3`）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段），以及排除判断 |
+| `delete.js` | 264 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段），以及排除判断 |
 | `scan.js` | 326 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存 |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
 | `routes.js` | 1494 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root |
@@ -455,10 +455,10 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**两个版本号（`?v=N` 与 `client.js` 的 `MODULE_VERSION`）要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=43）
-> sed -i '' 's/?v=42/?v=43/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 125）
-> sed -i '' 's/MODULE_VERSION = 128;/MODULE_VERSION = 129;/' plugin/rk-study/client.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=44）
+> sed -i '' 's/?v=43/?v=44/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 130）
+> sed -i '' 's/MODULE_VERSION = 128;/MODULE_VERSION = 130;/' plugin/rk-study/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >

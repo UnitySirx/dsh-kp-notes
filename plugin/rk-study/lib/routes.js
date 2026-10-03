@@ -6,19 +6,19 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=43';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, safeDirPath, saveRemovedText } from './delete.js?v=43';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=43';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=43';
-import { buildNodes, scanHeadings } from './headings.js?v=43';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=43';
-import { parseDocument } from './parse.js?v=43';
-import { pointRegion, rebuildPoint } from './points.js?v=43';
-import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=43';
-import { buildCatalog } from './scan.js?v=43';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=43';
-import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=43';
-import { readBody, safePath, writeMarkdown } from './write.js?v=43';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=44';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, safeDirPath, saveRemovedText } from './delete.js?v=44';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=44';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=44';
+import { buildNodes, scanHeadings } from './headings.js?v=44';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=44';
+import { parseDocument } from './parse.js?v=44';
+import { pointRegion, rebuildPoint } from './points.js?v=44';
+import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=44';
+import { buildCatalog } from './scan.js?v=44';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=44';
+import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=44';
+import { readBody, safePath, writeMarkdown } from './write.js?v=44';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -506,7 +506,7 @@ export function apply(ctx, rawConfig) {
 		const markdown = await ctx.fs.readText(target);
 		const trimmed = removeQuestionBlock(markdown, Number(payload.order));
 		if (!trimmed) throw new Error(`question-not-found: ${relPath}#${payload.order}`);
-		/* 删掉的这一道题不丢: 先另存一份到画布根目录的 .remove/<时间戳桶>/ 里, 再重写文件 */
+		/* 删掉的这一道题不丢: 先另存一份到画布根目录的 .remove/<日期桶>/ 里, 再重写文件 */
 		const bucket = removeBucketFor(config);
 		const movedTo = saveRemovedText(config, relPath, trimmed.removed, Number(payload.order), bucket);
 		await writeMarkdown(ctx, config, relPath, trimmed.markdown);

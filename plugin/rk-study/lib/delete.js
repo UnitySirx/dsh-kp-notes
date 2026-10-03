@@ -1,8 +1,8 @@
 /* rk-study · host/delete —— 从 host.js 第 1027-1183 行原样切出 */
 /* 这里**不做真正的删除**: 每个「删除」入口都是把目标**移到当前画布根目录下的 .remove/ 里**
  * (deleteFile = renameSync 单个文件, deleteDir = renameSync 整个目录, 内容/题目块 = 另存一份
- * markdown 片段)。**一次删除 = .remove 下新建的一个时间戳桶目录, 桶里保留原来的相对路径结构**:
- *   .remove/2026-10-03_234342/notes/01-第一章/01-01-甲.md
+ * markdown 片段)。**一次删除 = .remove 下新建的一个日期桶目录(名字就是删除当天的 YYYYMMDD), 桶里保留原来的相对路径结构**:
+ *   .remove/20261004/notes/01-第一章/01-01-甲.md
  * 桶与桶之间互不相干, 所以既不会覆盖(每删一次都留一份, 捞得回来), 也不会把不同次删除的东西
  * 混进同一条路径(先删整个章节、之后又删它里面某个知识点, 后者进的是它自己那个桶)。
  * .remove 以点开头, lib/scan.js 与 lib/util.js 扫描时都会跳过它, 不会出现在画布/思维导图里。
@@ -11,11 +11,11 @@
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
 import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=43';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=43';
-import { listDirSafe } from './templates.js?v=43';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=43';
-import { safePath } from './write.js?v=43';
+import { MARKDOWN_RE } from './constants.js?v=44';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=44';
+import { listDirSafe } from './templates.js?v=44';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=44';
+import { safePath } from './write.js?v=44';
 
 /* --------------------------------------------------------------- deleting */
 
@@ -57,15 +57,15 @@ export function removeBoxFor(config) {
 	return `${config.root}/${REMOVE_DIR}`;
 }
 
-/** 桶目录名: 本地时间 2026-10-03_234342(一眼能看出是哪天哪一秒删的) */
+/** 桶目录名: 删除当天的本地日期 20261004(一天里删多次就往后排成 20261004-2、-3) */
 function removeStamp() {
 	const now = new Date();
 	const pad = (value) => String(value).padStart(2, '0');
-	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+	return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
 }
 
 /**
- * 为「这一次删除」挑一个桶目录名: <root>/.remove/<时间戳>; 同一秒内连开两个桶就 -2、-3 排下去。
+ * 为「这一次删除」挑一个桶目录名: <root>/.remove/<当天日期 20261004>; 同一天里再删一次就 -2、-3 排下去。
  * **一次删除只调用一次** —— 这次删除要搬走的多个文件(连带的小节/知识点/题目)都用同一个桶,
  * 桶内部因此只会有「这一次删除」的东西。这里只挑名字, 不建目录(等第一个文件真的搬进来时再建)。
  */
@@ -88,7 +88,7 @@ export function removeBucketName(bucket) {
 }
 
 /**
- * 把 abs 搬进桶里(保留相对路径), 返回相对 .remove 的路径(形如 2026-10-03_234342/notes/01-甲.md)。
+ * 把 abs 搬进桶里(保留相对路径), 返回相对 .remove 的路径(形如 20261004/notes/01-甲.md)。
  * bucket 省略时自己新开一个桶; 一次删除里搬多个文件时, 由调用方把同一个 bucket 传进来。
  */
 export function moveIntoRemove(config, relPath, abs, bucket) {
@@ -105,7 +105,7 @@ export function moveIntoRemove(config, relPath, abs, bucket) {
 /**
  * 内容级删除(题目 / 知识点块是文件里的一段, 没有文件可移): 把被删掉的这段 markdown
  * 另存成 <root>/.remove/<桶>/<原相对路径>.removed-<题号>.md, 开头留一行注释说明来处。
- * 和文件删除一样进时间戳桶: 同一道题删两次就是两个桶里各一份, 谁也不覆盖谁。
+ * 和文件删除一样进日期桶: 同一道题删两次就是两个桶里各一份, 谁也不覆盖谁。
  */
 export function saveRemovedText(config, relPath, text, order, bucket) {
 	const body = String(text ?? '').trim();
