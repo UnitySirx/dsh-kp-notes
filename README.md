@@ -563,7 +563,7 @@ client 半边（`plugin/rk-study/client/`，按依赖从下往上；每个模块
 | [mermaid](https://mermaid.js.org/) | 11.17.2 | MIT | 流程图 / 时序图 / 状态图（`mermaid.min.js`） |
 | [zt-react-milkdown](https://www.npmjs.com/package/zt-react-milkdown) | 0.1.32 | MIT | 所见即所得编辑器（`zt-milkdown/zt-milkdown.js` + `.css`，Milkdown 内核） |
 
-插件自身的开源许可**尚未选定**（仓库里还没有 `LICENSE` 文件），定下来会补在这里。
+插件自身以 **MIT** 许可开源：见仓库根目录的 [`LICENSE`](LICENSE)（`plugin/rk-study/LICENSE` 是同一份副本，给发 npm 包时带上）。上面这三份第三方资源同样都是 MIT，各自的版权声明随文件保留在 `plugin/rk-study/vendor/` 里。
 
 ## 反馈
 

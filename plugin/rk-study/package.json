@@ -4,6 +4,24 @@
   "private": true,
   "type": "module",
   "description": "系统架构设计师 · 学习画布：Markdown 笔记驱动的卡片画布",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UnitySirx/dsh-kp-notes.git",
+    "directory": "plugin/rk-study"
+  },
+  "homepage": "https://github.com/UnitySirx/dsh-kp-notes#readme",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "markdown",
+    "notes",
+    "knowledge-base",
+    "study",
+    "canvas",
+    "katex",
+    "mermaid"
+  ],
   "icon": "./icon.svg",
   "meta": {
     "title": "系统架构设计师 · 学习画布",
