@@ -6,19 +6,19 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=40';
-import { deleteDirEntry, deleteEntry, questionDirFor, safeDirPath } from './delete.js?v=40';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=40';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=40';
-import { buildNodes, scanHeadings } from './headings.js?v=40';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=40';
-import { parseDocument } from './parse.js?v=40';
-import { pointRegion, rebuildPoint } from './points.js?v=40';
-import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=40';
-import { buildCatalog } from './scan.js?v=40';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=40';
-import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=40';
-import { readBody, safePath, writeMarkdown } from './write.js?v=40';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=41';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, safeDirPath, saveRemovedText } from './delete.js?v=41';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=41';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=41';
+import { buildNodes, scanHeadings } from './headings.js?v=41';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=41';
+import { parseDocument } from './parse.js?v=41';
+import { pointRegion, rebuildPoint } from './points.js?v=41';
+import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=41';
+import { buildCatalog } from './scan.js?v=41';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=41';
+import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=41';
+import { readBody, safePath, writeMarkdown } from './write.js?v=41';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -506,6 +506,8 @@ export function apply(ctx, rawConfig) {
 		const markdown = await ctx.fs.readText(target);
 		const trimmed = removeQuestionBlock(markdown, Number(payload.order));
 		if (!trimmed) throw new Error(`question-not-found: ${relPath}#${payload.order}`);
+		/* 删掉的这一道题不丢: 先另存一份到画布根目录的 .remove/ 里, 再重写文件 */
+		const movedTo = saveRemovedText(config, relPath, trimmed.removed, Number(payload.order));
 		await writeMarkdown(ctx, config, relPath, trimmed.markdown);
 		cache.data = null;
 		return {
@@ -513,6 +515,8 @@ export function apply(ctx, rawConfig) {
 			path: relPath,
 			removed: trimmed.title,
 			remaining: trimmed.remaining,
+			movedTo,
+			box: REMOVE_DIR,
 			markdown: trimmed.markdown,
 		};
 	}

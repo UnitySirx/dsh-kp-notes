@@ -224,6 +224,7 @@ export function createDict(deps) {
 		pointChanged: '这个知识点和文件对不上了（可能刚被改过），刷新页面再试一次',
 		pointMissing: '没找到这个知识点',
 		deleted: '已删除',
+		movedToBox: '已移到 .remove/',
 		cascade: '连带删除关联文件',
 		/* Git 提交 */
 		gitCommit: 'Git 提交',
@@ -526,6 +527,7 @@ export function createDict(deps) {
 		pointChanged: 'This point no longer matches the file (it changed), refresh and retry',
 		pointMissing: 'Knowledge point not found',
 		deleted: 'Deleted',
+		movedToBox: 'Moved to .remove/',
 		cascade: 'related files removed',
 		/* Git commit */
 		gitCommit: 'Git commit',

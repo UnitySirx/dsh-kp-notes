@@ -1,6 +1,6 @@
 /* rk-study · host/questions —— 从 host.js 第 1185-1252 行原样切出 */
-import { buildNodes, hasAnswerLine, isQuestionHeading, scanHeadings } from './headings.js?v=40';
-import { parseFrontmatter, stripInline } from './util.js?v=40';
+import { buildNodes, hasAnswerLine, isQuestionHeading, scanHeadings } from './headings.js?v=41';
+import { parseFrontmatter, stripInline } from './util.js?v=41';
 
 export function questionBlockNodes(markdown) {
 	const lines = String(markdown ?? '').split(/\r?\n/);
@@ -39,6 +39,8 @@ export function removeQuestionBlock(markdown, order) {
 	return {
 		markdown: kept.join('\n'),
 		title: stripInline(blocks[index].title),
+		/* 被删掉的那一段原文: 调用方会把它另存到画布的 .remove/ 里 */
+		removed: lines.slice(range.from, range.to).join('\n').trim(),
 		remaining: blocks.length - 1,
 	};
 }

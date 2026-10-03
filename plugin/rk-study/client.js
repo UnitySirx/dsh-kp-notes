@@ -5,7 +5,7 @@
  * 题目答案默认遮挡，点一下才展开；并且可以直接在插件里新建 / 编辑 markdown。
  */
 window.__ModuleLoader__.load({
-	id: '@local/rk-study',
+	id: 'dsh-kp-notes',
 	factory(require) {
 		const React = require('react');
 		const h = React.createElement;
@@ -62,8 +62,8 @@ window.__ModuleLoader__.load({
 			return ctx.effect(() => {
 				if (typeof document === 'undefined') return () => {};
 				const tag = document.createElement('style');
-				tag.dataset.plugin = '@local/rk-study';
-				tag.dataset.pluginCss = '@local/rk-study/rk-study.css';
+				tag.dataset.plugin = 'dsh-kp-notes';
+				tag.dataset.pluginCss = 'dsh-kp-notes/rk-study.css';
 				tag.textContent = CSS;
 				document.head.appendChild(tag);
 				return () => {
@@ -2067,7 +2067,7 @@ window.__ModuleLoader__.load({
 						const removed = await postAction({ action: 'delete', path: relPath });
 						const cascaded = (removed && removed.related) || [];
 						flash(
-							t('deleted') +
+							t('movedToBox') +
 								' · ' +
 								pathLabel(relPath) +
 								(cascaded.length ? '（' + t('cascade') + ' ×' + cascaded.length + '）' : ''),
@@ -2089,7 +2089,7 @@ window.__ModuleLoader__.load({
 						const removed = await postAction({ action: 'deleteDir', dir: chapter.dir });
 						const cascaded = (removed && removed.related) || [];
 						flash(
-							t('deleted') +
+							t('movedToBox') +
 								' · ' +
 								chapter.rel +
 								(cascaded.length ? '（' + t('cascade') + ' ×' + cascaded.length + '）' : ''),
@@ -2108,7 +2108,7 @@ window.__ModuleLoader__.load({
 				async (item) => {
 					try {
 						await postAction({ action: 'deleteQuestion', path: item.path, order: item.order });
-						flash(t('deleted') + ' · ' + (item.label || item.title));
+						flash(t('movedToBox') + ' · ' + (item.label || item.title));
 						await reload(true);
 					} catch (problem) {
 						flash('删除失败：' + ((problem && problem.message) || problem));
@@ -3055,7 +3055,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 127;
+		const MODULE_VERSION = 128;
 		const CLIENT_MODULES = ['dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
