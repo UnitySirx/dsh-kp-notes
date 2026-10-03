@@ -6,13 +6,13 @@
  * ctx.fs 没有 delete/unlink API, 移动只能用 node:fs —— 这是刻意保留的: 每个入口在动手之前
  * 都先过 assertInsideRoot(), 用 ctx.fs 的规范化目标确认「要移走的东西在 root 之内」;
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
-import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=41';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=41';
-import { listDirSafe } from './templates.js?v=41';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=41';
-import { safePath } from './write.js?v=41';
+import { MARKDOWN_RE } from './constants.js?v=42';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=42';
+import { listDirSafe } from './templates.js?v=42';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=42';
+import { safePath } from './write.js?v=42';
 
 /* --------------------------------------------------------------- deleting */
 
@@ -61,7 +61,7 @@ function removeStamp() {
 	return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
-/** 在 .remove 里挑一个不冲突的目标路径(重名就加时间戳, 还撞就再加序号) */
+/** 兜底目标路径: 只有「上次移出的是文件、这次来的是目录」这种类型对不上时才用(加时间戳, 还撞就再加序号) */
 export function removeDestFor(config, relPath, isDir) {
 	const box = removeBoxFor(config);
 	const clean = normalizeRelPath(relPath);
@@ -83,19 +83,40 @@ export function removeDestFor(config, relPath, isDir) {
 	return candidate;
 }
 
-/** 把 abs 移到 <root>/.remove/<relPath>(保留目录结构), 返回相对 .remove 的路径 */
+/**
+ * 把 abs 移到 <root>/.remove/<relPath>(保留目录结构), 返回相对 .remove 的路径。
+ * **同一个路径再删一次 = 占回同一个位置**: 上一次移出的副本被这次替代, 所以 .remove 里
+ * 一个路径永远只有一份, 不会堆出 01-66-20261003-234342 这种带时间戳的重名目录。
+ * 只有类型对不上(上次是文件、这次是目录, 或反过来)时才退回带时间戳的名字, 免得互相覆盖。
+ */
 export function moveIntoRemove(config, relPath, abs, isDir) {
 	const box = removeBoxFor(config);
-	const dest = removeDestFor(config, relPath, isDir);
+	const clean = normalizeRelPath(relPath);
+	const plain = `${box}/${clean}`;
+	let dest = plain;
+	let replace = false;
+	if (existsSync(plain)) {
+		let sameType = false;
+		try {
+			sameType = isDir ? statSync(plain).isDirectory() : statSync(plain).isFile();
+		} catch {
+			sameType = false;
+		}
+		replace = sameType;
+		if (!replace) dest = removeDestFor(config, clean, isDir);
+	}
 	const cut = dest.lastIndexOf('/');
 	if (cut > 0) mkdirSync(dest.slice(0, cut), { recursive: true });
+	/* 这里删掉的字节全都在 .remove 里面(上一次「删除」搬进来的旧副本), 不碰画布里的任何笔记 */
+	if (replace) rmSync(dest, { recursive: true, force: true });
 	renameSync(abs, dest);
 	return dest.slice(box.length + 1);
 }
 
 /**
  * 内容级删除(题目 / 知识点块是文件里的一段, 没有文件可移): 把被删掉的这段 markdown
- * 另存成 <root>/.remove/<原相对路径>.removed-<时间戳>-<序号>.md, 开头留一行注释说明来处。
+ * 另存成 <root>/.remove/<原相对路径>.removed-<题号>.md, 开头留一行注释说明来处。
+ * 文件名不带时间戳: 同一道题再删一次就覆盖上一次的片段, 免得 .remove 越堆越多。
  */
 export function saveRemovedText(config, relPath, text, order) {
 	const body = String(text ?? '').trim();
@@ -107,14 +128,8 @@ export function saveRemovedText(config, relPath, text, order) {
 	const base = slash < 0 ? clean : clean.slice(slash + 1);
 	const dot = base.lastIndexOf('.');
 	const stem = dot > 0 ? base.slice(0, dot) : base;
-	const stamp = removeStamp();
 	const tag = Number.isFinite(order) && order > 0 ? `-${Math.round(order)}` : '';
-	let dest = `${box}/${dir}${stem}.removed-${stamp}${tag}.md`;
-	let index = 1;
-	while (existsSync(dest)) {
-		dest = `${box}/${dir}${stem}.removed-${stamp}${tag}-${index}.md`;
-		index += 1;
-	}
+	const dest = `${box}/${dir}${stem}.removed${tag}.md`;
 	const cut = dest.lastIndexOf('/');
 	if (cut > 0) mkdirSync(dest.slice(0, cut), { recursive: true });
 	const header = `<!-- rk-study: 从 ${clean} 删除的一段内容${tag ? ` #${tag.slice(1)}` : ''}, ${new Date().toISOString()} -->`;

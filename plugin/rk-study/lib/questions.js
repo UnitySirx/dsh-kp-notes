@@ -1,6 +1,6 @@
 /* rk-study · host/questions —— 从 host.js 第 1185-1252 行原样切出 */
-import { buildNodes, hasAnswerLine, isQuestionHeading, scanHeadings } from './headings.js?v=41';
-import { parseFrontmatter, stripInline } from './util.js?v=41';
+import { buildNodes, hasAnswerLine, isQuestionHeading, scanHeadings } from './headings.js?v=42';
+import { parseFrontmatter, stripInline } from './util.js?v=42';
 
 export function questionBlockNodes(markdown) {
 	const lines = String(markdown ?? '').split(/\r?\n/);
