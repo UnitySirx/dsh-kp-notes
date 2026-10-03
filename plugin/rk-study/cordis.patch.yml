@@ -1,0 +1,10 @@
+- insert:
+    - id: rk-study-v2
+      name: 'file:///Users/unitysir/Desktop/rk-study/plugin/rk-study/host.js?entry=119'
+      config:
+        root: /Users/unitysir/Desktop/rk-study
+        exclude:
+          - plugin
+          - node_modules
+          - .git
+          - dist

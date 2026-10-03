@@ -1,0 +1,35 @@
+{
+  "name": "@local/rk-study",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "系统架构设计师 · 学习画布：Markdown 笔记驱动的卡片画布",
+  "icon": "./icon.svg",
+  "meta": {
+    "title": "系统架构设计师 · 学习画布",
+    "description": "用 Markdown 笔记驱动的学习画布：每个章节一张卡片，点击查看详情，题目可遮挡答案自测"
+  },
+  "exports": {
+    ".": "./host.js",
+    "./client": "./client.js",
+    "./host": "./host.js"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.18.4"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  }
+}
