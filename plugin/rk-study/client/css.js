@@ -65,50 +65,53 @@ export function createCss(deps) {
 		})
 		.join('\n');
 
-	const LIGHT_CSS = `
-/* ===================== 浅色主题: 只加 .rk-light 一层覆盖 =====================
- * 深色那套(默认)一行没改: rk-light 只覆盖底色 / 文字 / 线条 / 阴影, 强调色仍取自所选皮肤
- * (用 --rk-a1..a3), 所以浅色下每套 Material 配色的色相也都保住了。层级:
- * .rk-root.rk-skin-<id>(皮肤强调色) 之后才是 .rk-root.rk-light(底色文字), 所以浅色能盖住深色底。
- * 主题由 client.js 按「深色 / 浅色 / 跟随系统」加类。 */
-.rk-root.rk-light {
-  --rk-bg-0:#f5f8fc; --rk-bg-1:#ffffff; --rk-bg-2:#eef3fa; --rk-bg-3:#e2eaf4;
-  --rk-line-1:rgba(var(--rk-a2),.2); --rk-line-2:rgba(var(--rk-a2),.34); --rk-line-3:rgba(var(--rk-a2),.54);
-  --rk-text:#141d2b; --rk-text-2:#5b6c80; --rk-warn:#96650a; --rk-danger:#c73a4e;
-  --rk-panel:linear-gradient(180deg, rgba(255,255,255,.97), rgba(241,246,252,.97));
-  --rk-glow:0 0 0 1px rgba(var(--rk-a2),.22), 0 12px 28px rgba(21,38,64,.14);
-  background:var(--rk-bg-0); color:var(--rk-text);
+	const HOST_CSS = `
+/* ===================== 跟随主题: 只加 .rk-follow 一层映射 =====================
+ * 插件自己的配色(默认那套深色 + 15 套皮肤)一行没改: 这一档只是把插件的底色 / 文字 / 线条
+ * 全部换成当前 DeepSeek Harness 的主题 token(--dsw-alias-*), 强调色由 client.js 填宿主的 brand 色。
+ * 于是选「跟随主题」时插件不再上自己的颜色, 平台是什么样就是什么样。
+ * 这些 token 由宿主主题插件写在 body 的行内样式上, 会继承进插件子树。 */
+.rk-root.rk-follow {
+  --rk-bg-0:transparent;
+  --rk-bg-1:var(--dsw-alias-bg-layer-1, #1c1a2a);
+  --rk-bg-2:var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  --rk-bg-3:var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-layer-1));
+  --rk-line-1:var(--dsw-alias-border-l1, rgba(255,255,255,.1));
+  --rk-line-2:var(--dsw-alias-border-l2, var(--dsw-alias-border-l1));
+  --rk-line-3:var(--dsw-alias-border-l3, var(--dsw-alias-border-l2, var(--dsw-alias-border-l1)));
+  --rk-text:var(--dsw-alias-label-primary, #f3f0fb);
+  --rk-text-2:var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary));
+  --rk-accent:var(--dsw-alias-brand-primary);
+  --rk-accent-2:var(--dsw-alias-brand-primary);
+  --rk-panel:var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1));
+  --rk-glow:0 0 0 1px var(--dsw-alias-border-l1, transparent);
+  --rk-warn:var(--dsw-alias-state-warning-primary, #c08a2e);
+  --rk-danger:var(--dsw-alias-state-danger-primary, #d9534f);
+  background:transparent; color:var(--dsw-alias-label-primary, inherit);
 }
-.rk-root.rk-light ::selection { background:rgba(var(--rk-a1),.3); color:#0b1620; }
-.rk-root.rk-light .rk-head { background:linear-gradient(180deg, rgba(255,255,255,.99), rgba(238,244,251,.9)); box-shadow:0 8px 22px rgba(21,38,64,.1); }
-.rk-root.rk-light .rk-btn { background:linear-gradient(180deg,#ffffff,#eef3fa); border-color:var(--rk-line-2); color:#1e2c3f; }
-.rk-root.rk-light .rk-btn:hover { border-color:var(--rk-accent); color:#0d2436; }
-.rk-root.rk-light .rk-btn.rk-primary { background:linear-gradient(135deg, rgba(var(--rk-a1),.2), rgba(var(--rk-a3),.22)); border-color:var(--rk-line-3); color:#0d2233; box-shadow:0 2px 10px rgba(var(--rk-a1),.18); }
-.rk-root.rk-light .rk-btn.rk-primary:hover { box-shadow:inset 0 0 0 1px rgba(var(--rk-a1),.45); }
-.rk-root.rk-light .rk-menu, .rk-root.rk-light .rk-skin-pop, .rk-root.rk-light .rk-md-menu { background:linear-gradient(180deg,#ffffff,#f3f7fc); box-shadow:0 16px 34px rgba(21,38,64,.18); }
-.rk-root.rk-light .rk-del-pop { background:#ffffff; box-shadow:0 12px 26px rgba(21,38,64,.2); }
-.rk-root.rk-light .rk-toast { background:linear-gradient(135deg,#ffffff,#eef4fb); color:#141d2b; box-shadow:0 0 0 1px rgba(var(--rk-a1),.22), 0 12px 30px rgba(21,38,64,.2); }
-.rk-root.rk-light .rk-textarea, .rk-root.rk-light .rk-preview { background:#ffffff; color:#16202e; }
-.rk-root.rk-light .rk-textarea::placeholder, .rk-root.rk-light .rk-input::placeholder { color:#93a3b6; }
-.rk-root.rk-light .rk-input { background:#ffffff; color:#16202e; }
-.rk-root.rk-light .rk-preview-head, .rk-root.rk-light .rk-drawer-head { background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(240,246,252,.55)); }
-.rk-root.rk-light .rk-md-pre { background:#f3f7fc; color:#123243; box-shadow:inset 0 0 0 1px rgba(var(--rk-a2),.08); }
-.rk-root.rk-light .rk-code-inline { background:rgba(var(--rk-a1),.12); border-color:rgba(var(--rk-a1),.28); color:#0d5f7d; }
-.rk-root.rk-light .rk-field label, .rk-root.rk-light .rk-empty, .rk-root.rk-light .rk-skin-title { color:#5b6c80; }
-.rk-root.rk-light .rk-git-group { background:linear-gradient(180deg, rgba(255,255,255,.99), rgba(240,246,252,.94)); }
-.rk-root.rk-light .rk-stage { background-image:
-    radial-gradient(1100px 620px at 8% -12%, rgba(var(--rk-a1),.1), transparent 62%),
-    radial-gradient(900px 560px at 102% -6%, rgba(var(--rk-a3),.12), transparent 58%),
-    radial-gradient(700px 420px at 60% 108%, rgba(var(--rk-a2),.07), transparent 60%),
-    linear-gradient(rgba(var(--rk-a2),.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--rk-a2),.08) 1px, transparent 1px);
-  background-size:auto, auto, auto, 28px 28px, 28px 28px;
-  box-shadow:inset 0 0 140px rgba(21,38,64,.07);
-}
-.rk-root.rk-light .rk-chapter, .rk-root.rk-light .rk-rootcard, .rk-root.rk-light .rk-point, .rk-root.rk-light .rk-example, .rk-root.rk-light .rk-md-tablewrap { box-shadow:0 8px 20px rgba(21,38,64,.12); }
-.rk-root.rk-light .rk-point:hover { box-shadow:0 0 0 1px rgba(var(--rk-a2),.22), 0 16px 30px rgba(21,38,64,.16); }
-.rk-root.rk-light .rk-detail, .rk-root.rk-light .rk-drawer { box-shadow:-14px 0 32px rgba(21,38,64,.14); }
-.rk-root.rk-light .rk-swatch-dot { border-color:rgba(21,38,64,.3); }
+.rk-root.rk-follow ::selection { background:var(--dsw-alias-bg-document-selection, rgba(var(--rk-a1),.3)); }
+.rk-root.rk-follow .rk-head { background:var(--dsw-alias-bg-layer-2, transparent); box-shadow:none; }
+.rk-root.rk-follow .rk-btn { background:var(--dsw-alias-bg-layer-1); border-color:var(--rk-line-2); color:var(--dsw-alias-label-primary, inherit); }
+.rk-root.rk-follow .rk-btn:hover { background:var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); border-color:var(--rk-line-2); color:var(--dsw-alias-label-primary, inherit); }
+.rk-root.rk-follow .rk-btn.rk-primary { background:var(--dsw-alias-button-primary-dimmed, var(--dsw-alias-state-business-tertiary, transparent)); border-color:var(--dsw-alias-brand-primary); color:var(--dsw-alias-brand-primary); box-shadow:none; }
+.rk-root.rk-follow .rk-btn.rk-primary:hover { background:var(--dsw-alias-button-primary-hover, var(--dsw-alias-brand-primary)); color:var(--dsw-alias-brand-text, #fff); }
+.rk-root.rk-follow .rk-menu, .rk-root.rk-follow .rk-skin-pop, .rk-root.rk-follow .rk-md-menu { background:var(--dsw-alias-bg-layer-2, var(--dsw-alias-bg-layer-1)); border-color:var(--rk-line-2); box-shadow:0 16px 34px rgba(0,0,0,.28); }
+.rk-root.rk-follow .rk-del-pop { background:var(--dsw-alias-bg-layer-1); box-shadow:0 12px 26px rgba(0,0,0,.28); }
+.rk-root.rk-follow .rk-toast { background:var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-layer-1)); color:var(--dsw-alias-label-primary, inherit); box-shadow:0 0 0 1px var(--rk-line-2); }
+.rk-root.rk-follow .rk-textarea, .rk-root.rk-follow .rk-preview, .rk-root.rk-follow .rk-input { background:var(--dsw-alias-bg-layer-1); color:var(--dsw-alias-label-primary, inherit); }
+.rk-root.rk-follow .rk-textarea::placeholder, .rk-root.rk-follow .rk-input::placeholder { color:var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.rk-root.rk-follow .rk-preview-head, .rk-root.rk-follow .rk-drawer-head { background:var(--dsw-alias-bg-layer-2, transparent); }
+.rk-root.rk-follow .rk-md-pre { background:var(--dsw-alias-markdown-code-block, rgba(0,0,0,.25)); color:var(--dsw-alias-label-primary, inherit); box-shadow:none; }
+.rk-root.rk-follow .rk-code-inline { background:var(--dsw-alias-markdown-inline-code, transparent); border-color:var(--rk-line-2); color:var(--dsw-alias-label-primary, inherit); }
+.rk-root.rk-follow .rk-field label, .rk-root.rk-follow .rk-empty, .rk-root.rk-follow .rk-skin-title { color:var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary)); }
+.rk-root.rk-follow .rk-git-group { background:var(--dsw-alias-bg-layer-2, transparent); }
+.rk-root.rk-follow .rk-stage { background-image:none; box-shadow:none; }
+.rk-root.rk-follow .rk-chapter, .rk-root.rk-follow .rk-rootcard, .rk-root.rk-follow .rk-point, .rk-root.rk-follow .rk-example, .rk-root.rk-follow .rk-md-tablewrap { box-shadow:none; }
+.rk-root.rk-follow .rk-point:hover { box-shadow:0 0 0 1px var(--rk-line-2); }
+.rk-root.rk-follow .rk-detail, .rk-root.rk-follow .rk-drawer { box-shadow:-14px 0 32px rgba(0,0,0,.22); }
+.rk-root.rk-follow .rk-swatch-dot { border-color:var(--rk-line-2); }
+/* 跟随主题时皮肤色板不起作用(底色与强调色都取平台), 灰掉并禁点, 免得点了没反应 */
+.rk-root.rk-follow .rk-skin-grid { opacity:.4; pointer-events:none; }
 
 `;
 
@@ -722,7 +725,7 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 	.rk-stage { padding:12px 12px 40px; }
 }
 ${SKIN_CSS}
-${LIGHT_CSS}
+${HOST_CSS}
 `;
 
 		return { CSS, SKINS };

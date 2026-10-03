@@ -1,6 +1,6 @@
 - insert:
     - id: rk-study-v2
-      name: 'file:///Users/unitysir/Desktop/rk-study/plugin/rk-study/host.js?entry=119'
+      name: 'file:///Users/unitysir/Desktop/rk-study/plugin/rk-study/host.js?entry=120'
       config:
         root: /Users/unitysir/Desktop/rk-study
         exclude:

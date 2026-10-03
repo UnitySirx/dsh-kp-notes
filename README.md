@@ -27,7 +27,7 @@
 | **富文本编辑** | 编辑器抽屉默认所见即所得（Milkdown：`/` 斜杠菜单、选区工具条），一键切回「markdown 源码 + 实时预览」；文件开头的 YAML 头不会被富文本碰坏 |
 | **公式与流程图** | 正文里直接写 LaTeX 与 mermaid，本地渲染；语法写错只在原地报错，不弹引擎那层关不掉的遮罩 |
 | **输入助手** | 44 条公式模板 + 8 条结构 / 笔记 / 题目模板（模板本身就是两个可编辑的 markdown 文件），工具栏按钮 + 快捷键，外加一套自己实现的编辑键 |
-| **配色** | 深色 / 浅色 / **跟随系统** 三档主题 + 15 套皮肤（科技蓝 + 14 套 Material Design），还能让每张卡各用一色；整体字号 85% ~ 160%；全屏专注模式 |
+| **配色与主题** | **插件配色**（默认，自带 15 套皮肤：科技蓝 + 14 套 Material Design）/ **跟随主题**（直接吃当前 DeepSeek Harness 主题的底色 / 文字 / 强调色，不覆盖平台主题）两档；还能让每张卡各用一色；整体字号 85% ~ 160%；全屏专注模式 |
 | **Git** | `⎇ Git 提交` 一次提交整个学习库（提交前自动 `git pull --no-rebase`），可 `✦ AI 生成` 提交信息；绝不 `reset` / `checkout` / `rebase`，冲突了就停下来交给你 |
 
 ## 安装
@@ -318,7 +318,7 @@ D. 非风险点
 | 双击空白处 / 「复位」 | 把所有卡片缩放平移到刚好铺满可视区 |
 | 点 `100%` | 缩放回到原始大小（位置不动） |
 | `A－` / `字号 N%` / `A＋` | 改**整个插件的字号**（85% ~ 160%，六档，等比放大，等价于在根节点上设 CSS `zoom`）。点中间的 `字号 N%` 恢复 100%；选择存在浏览器本地（`localStorage` 的 `rk-study:font-scale`），刷新后保持；在一级画布上改还会同步进 `<库>/.config/rk-study.json` 的 `ui.fontScale`，换浏览器也保持。因为根节点整体缩放，画布的屏幕坐标换算都除以了缩放比，右键落点、滚轮锚点、拖动跟手都仍然精确 |
-| `◍ 配色` | 换整套配色（顶栏最右）。点开是 15 个色块：科技蓝（默认） + 14 个 **Material Design** 色（蓝 / 青 / 蓝绿 / 绿 / 柠檬 / 琥珀 / 橙 / 深橙 / 红 / 粉 / 紫 / 深紫 / 靛蓝 / 蓝灰），点一下立刻整块换色（菜单**不关**，方便一个个点着对比）。底色、描边、正文色都跟着主色色相算出来，保证层次与对比度一致。选择存在 `localStorage` 的 `rk-study:skin`，刷新后保持（一级画布上改还会同步进 `<库>/.config/rk-study.json` 的 `ui.skin`）；跟字号一样，全屏专注时也生效。弹层下面还有一个 **卡片各用一色** 开关（默认开）：让每个章节 / 小节 / 知识点带自己的颜色，一屏里不会全是同一个色，记在 `localStorage` 的 `rk-study:card-colors`（`0` = 关）。弹层顶部还有 **主题** 一档：**深色 / 浅色 / 跟随系统** —— 深色就是原来那套（默认，一个字没改）；浅色把底色 / 文字 / 线条 / 阴影换成浅色，强调色仍按所选皮肤算；「跟随系统」跟操作系统外观走（`prefers-color-scheme`，系统一变立刻就换，不用刷新）。主题记在 `localStorage` 的 `rk-study:theme`，一级画布上改也会同步进 `<库>/.config/rk-study.json` 的 `ui.theme`；正文里的流程图（mermaid）与富文本编辑器（Milkdown）也跟着一起换 |
+| `◍ 配色` | 换整套配色（顶栏最右）。点开是 15 个色块：科技蓝（默认） + 14 个 **Material Design** 色（蓝 / 青 / 蓝绿 / 绿 / 柠檬 / 琥珀 / 橙 / 深橙 / 红 / 粉 / 紫 / 深紫 / 靛蓝 / 蓝灰），点一下立刻整块换色（菜单**不关**，方便一个个点着对比）。底色、描边、正文色都跟着主色色相算出来，保证层次与对比度一致。选择存在 `localStorage` 的 `rk-study:skin`，刷新后保持（一级画布上改还会同步进 `<库>/.config/rk-study.json` 的 `ui.skin`）；跟字号一样，全屏专注时也生效。弹层下面还有一个 **卡片各用一色** 开关（默认开）：让每个章节 / 小节 / 知识点带自己的颜色，一屏里不会全是同一个色，记在 `localStorage` 的 `rk-study:card-colors`（`0` = 关）。弹层顶部还有 **主题** 一档（两档）：**插件配色**（默认，就是这套黑蓝科技皮肤，一个字没改）/ **跟随主题**。选「跟随主题」时插件不再用自己的底色，而是直接吃当前 **DeepSeek Harness** 主题的 `--dsw-alias-*` token —— 根节点背景透明、卡片 / 面板 / 输入框 / 弹层取宿主 `bg-layer-1/2/3`，文字取 `label-primary/secondary`，线条取 `border-l1/l2/l3`，强调色取宿主 `brand-primary`（换算成 `--rk-a1/--rk-a2/--rk-a3` 三个色相三元组），画布网格与径向光晕整个撤掉，配色色块变半透明并禁用（跟随主题时颜色由宿主决定），所以**不会覆盖平台主题**。宿主在 `html[data-ds-theme-source]` / `body[data-ds-dark-theme]` 上标了明暗，`client.js` 用 `MutationObserver` 盯着它们，宿主一换明暗插件立刻跟着换（不用刷新页面）。主题记在 `localStorage` 的 `rk-study:theme`（`plugin` / `follow`，老值 `light` / `auto` 自动迁到 `follow`），一级画布上改也会同步进 `<库>/.config/rk-study.json` 的 `ui.theme`；正文里的流程图（mermaid）与富文本编辑器（Milkdown）也跟着一起换 |
 | `⤢ 全屏` | 把左侧边栏与右侧栏一起藏掉，画布占满整个窗口（宿主的壳是「侧栏 \| 中列 \| 右栏」的网格，插件给 `<html>` 挂 `rk-focus`、把两侧列压成 `0px` 并把中列显式放到第二列；不改宿主代码，宿主结构变了顶多全屏不生效）。按钮随即变成 `⤡ 退出全屏`，按 `Esc` 也能退出。开关记在 `localStorage` 的 `rk-study:focus`，刷新后保持（老版本 `rk-study:window` 里 `floating:true` 的会自动升级成全屏） |
 | 拉窗口 / 藏侧栏 / 全屏 | 界面按**插件自己那一块**的宽度自适应：一级画布的列数在 3 / 2 / 1 列之间自动切换（卡片跟着重排，不再硬撑三列），缩到装不下时自动重新铺满一次（自己调好的视野不会被动），顶栏标题、路径与工具条提示超长一律省略号；容器窄于 1000px 时右侧详情面板改成**整块盖住画布**（不再把画布挤成一条缝）、顶栏统计与工具条提示收起，窄于 860px 按钮更紧凑、弹窗铺满容器、编辑抽屉的左右分栏改上下；窄于 700px 藏掉缩放 `－/＋`（`⌘`+滚轮、「复位」仍在）。用的是 CSS `@container rk (...)` 容器查询（只跟插件容器宽度走，宿主侧栏开合也算），不是 `@media` |
 | 搜索框 | 搜章节名、小节名、知识点标题与说明，命中后直接列知识点卡片 |
@@ -387,7 +387,7 @@ D. 非风险点
 | `rk-study:roots` | 画布列表 | 这台机器上要看哪些画布 |
 | `rk-study:removed-roots` | 移出列表的墓碑 | 移出的目录已经在同层 `.remove/` 里，墓碑保证重新扫描 / 导入也不会再加回来 |
 | `rk-study:default-root` | 学习库（新画布的父目录） | `⇪ 导入目录` 写入 |
-| `rk-study:font-scale` / `rk-study:skin` / `rk-study:card-colors` / `rk-study:theme` | 字号 / 配色 / 卡片各用一色 / 主题（深色 / 浅色 / 跟随系统） | 全局一套，所有画布共用 |
+| `rk-study:font-scale` / `rk-study:skin` / `rk-study:card-colors` / `rk-study:theme` | 字号 / 配色 / 卡片各用一色 / 主题（`plugin` 插件配色 / `follow` 跟随 DeepSeek Harness 主题） | 全局一套，所有画布共用 |
 | `rk-study:mode` / `rk-study:map-fold` / `rk-study:map-open` | 画布还是导图 / 导图折叠 / 知识点展开 | 同样全局一套 |
 | `rk-study:focus` | 是否全屏专注（`1` / `0`） | —— |
 
@@ -405,7 +405,7 @@ D. 非风险点
 | `.config/rk-study.json` 键 | 内容 | 说明 |
 | --- | --- | --- |
 | `version` | 格式版本 | 目前是 `1` |
-| `ui.fontScale` / `ui.skin` / `ui.cardColors` / `ui.theme` | 字号 / 配色 / 卡片各用一色 / 主题 | 在一级画布上改就写这里；进某张画布后改的仍只记本机 |
+| `ui.fontScale` / `ui.skin` / `ui.cardColors` / `ui.theme` | 字号 / 配色 / 卡片各用一色 / 主题（`plugin` / `follow`） | 在一级画布上改就写这里；进某张画布后改的仍只记本机 |
 | `zoom.roots` | 一级画布的视野 | `{ "x": …, "y": …, "scale": … }`；每张画布各自的视野记 `localStorage`（工作区路径因机器而异，不适合写进库里那份） |
 | `canvases` | 画布清单 | `[{ "path": "…", "name": "…" }]`，`name` 只是副本，真正的名字仍是磁盘目录名 |
 | `removed` | 移出列表的墓碑 | 绝对路径数组（目录本体已经被移到同层 `.remove/` 里），导入 / 扫描都不会把里面的路径再加回来 |
@@ -424,7 +424,7 @@ D. 非风险点
 | --- | --- |
 | `plugin/rk-study/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
 | `plugin/rk-study/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
-| `plugin/rk-study/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（3055 行） |
+| `plugin/rk-study/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（3113 行） |
 | `plugin/rk-study/client/*.js` | Client 半的实现，按职责拆成 11 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
 | `plugin/rk-study/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
 | `plugin/rk-study/package.json` | 包清单（`dsh.bundle.patch`、`dsh.client`、图标） |
@@ -466,7 +466,7 @@ client 半边（`plugin/rk-study/client/`，按依赖从下往上；每个模块
 | 模块 | 行数 | 职责 | 依赖 |
 | --- | --- | --- | --- |
 | `client/dict.js` | 614 | 中英文词典（`zh` / `en`） | — |
-| `client/css.js` | 727 | 全部样式（`const CSS` + 末尾的 `LIGHT_CSS` 浅色覆盖层） | — |
+| `client/css.js` | 733 | 全部样式（`const CSS` + 末尾的 `HOST_CSS` 宿主主题映射层：`.rk-root.rk-follow` 把 `--rk-*` 指到宿主 `--dsw-alias-*`） | — |
 | `client/util.js` | 94 | 缩放取整、字数、路径标签、小节 / 知识点查找、编辑器状态 | — |
 | `client/vendor.js` | 282 | KaTeX / mermaid 按需加载、公式与流程图组件（流程图配色跟着主题走，换主题自动重画） | React |
 | `client/md.js` | 285 | markdown 渲染器（表格 / 引用 / 代码 / 公式 / 流程图）+ 实时预览 | React、vendor |
@@ -498,14 +498,14 @@ client 半边（`plugin/rk-study/client/`，按依赖从下往上；每个模块
 
 ## 六、主题与配色
 
-默认是一套黑蓝科技皮肤（**深色**，插件自己的配色，不跟随宿主壳的主题）：深空底色 + 电光青蓝描边 + 玻璃面板，悬停有霓虹描边、卡片右下角有 HUD 角标、顶部标题条有流光。想要浅色或者跟着系统走，用顶栏 `◍ 配色` 里的 **主题**。
+默认是一套黑蓝科技皮肤（**插件配色**，插件自己的颜色，跟宿主壳的主题无关）：深空底色 + 电光青蓝描边 + 玻璃面板，悬停有霓虹描边、卡片右下角有 HUD 角标、顶部标题条有流光。想让插件跟着 **DeepSeek Harness** 的主题走，用顶栏 `◍ 配色` 里的 **主题** 切成「跟随主题」。
 
 顶栏 `◍ 配色` 可以整套换成 **Material Design** 的 14 个色（外加默认的科技蓝）：换皮肤只覆盖 `.rk-root` 上的一组 CSS 变量，布局规则一行都不动。配色选择器、色块表都在 `plugin/rk-study/client/css.js`（`SKINS` 表 + 生成的 `.rk-root.rk-skin-<id>` 规则）。
 
-主题是另一条正交的轴，三档：**深色**（默认，就是上面那套）/ **浅色** / **跟随系统**。
+主题是另一条正交的轴，两档：**插件配色**（默认，就是上面那套）/ **跟随主题**（吃宿主 DeepSeek Harness 的 token）。
 
-- **浅色**：只在样式末尾加一层 `.rk-root.rk-light { … }` 覆盖（底色 / 面板 / 文字 / 线条 / 阴影 / 画布网格与径向光晕），强调色仍然取所选皮肤的三个色相变量 `--rk-a1 / --rk-a2 / --rk-a3` —— 15 套配色在浅色下色相全都保住，**深色那套一行都没改**。
-- **跟随系统**：`matchMedia('(prefers-color-scheme: light)')` + `change` 监听，系统外观一变立刻换类名，**不用刷新页面**。
+- **插件配色**：还是原来那套（默认），深色那套样式一行没改；15 套 Material 皮肤只在插件配色下生效。
+- **跟随主题**：插件不再自己上色，而是把 `--rk-*` 映射到宿主 DeepSeek Harness 的 `--dsw-alias-*` token（`bg-layer-1/2/3`、`label-primary/secondary`、`border-l1/l2/l3`、`brand-primary`、`markdown-code-block`…），根节点背景设成透明 ⇒ 平台主题原样透出来，**不覆盖平台主题**；宿主明暗由 `html[data-ds-theme-source]` / `body[data-ds-dark-theme]` 标记，`client.js` 里的 `readHostDark()` + `MutationObserver` 盯着这两个属性，宿主一换立刻跟着换类名（不用刷新页面）。强调色用 `hostBrandTriplet()` 把宿主的 `brand-primary` 换成 `--rk-a1 / --rk-a2 / --rk-a3` 三个色相三元组，插件里所有 `rgba(var(--rk-a1), …)` 的淡色都跟着宿主品牌色走；跟随主题时配色色块半透明并禁用（颜色由宿主决定）。映射层是 `plugin/rk-study/client/css.js` 末尾的 `HOST_CSS`（`.rk-root.rk-follow { … }` + 一组覆盖规则）。
 - 主题还会传给两处「自带配色」的组件：**Milkdown** 富文本编辑器（包本身有 `zt-md-dark` / `zt-md-light` 两套 token，传 `theme` 就行）与 **mermaid** 流程图（`client/vendor.js` 的 `mermaidConfig()` 按当前主题给 `theme: 'default'` + 一套浅色 themeVariables；`MermaidBlock` 订阅主题，切换后自动重画）。
 
 - 想加一套配色：在 `SKINS` 里加一行 `{ id, name, hex, light }`（`hex` 取 Material 500、`light` 取 300），再在 `plugin/rk-study/client/dict.js` 里加 `skin<名字>` 的中英文，`⌘R` 后就能选 —— 底色 / 描边 / 正文色会按 `hex` 的色相自动算出来。

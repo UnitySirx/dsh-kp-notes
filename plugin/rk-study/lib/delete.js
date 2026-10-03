@@ -5,11 +5,11 @@
  * 除此之外不再新增裸 node:fs。 */
 import { existsSync, readdirSync, rmSync, rmdirSync, statSync, unlinkSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=39';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=39';
-import { listDirSafe } from './templates.js?v=39';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=39';
-import { safePath } from './write.js?v=39';
+import { MARKDOWN_RE } from './constants.js?v=40';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=40';
+import { listDirSafe } from './templates.js?v=40';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=40';
+import { safePath } from './write.js?v=40';
 
 /* --------------------------------------------------------------- deleting */
 

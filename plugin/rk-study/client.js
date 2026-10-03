@@ -589,37 +589,82 @@ window.__ModuleLoader__.load({
 				}
 			});
 			const [skinOpen, setSkinOpen] = useState(false);
-			/* 主题: 深色(默认, 就是原来那套) / 浅色 / 跟随系统。跟随系统 = 看系统的 prefers-color-scheme,
-			 * 系统在「浅色 ↔ 深色」之间切时立刻跟着换, 不需要刷新页面。 */
+			/* 宿主(DeepSeek Harness)现在是深色还是浅色: body[data-ds-dark-theme] 是权威标记,
+			 * 其次是 html[data-ds-theme-source], 都没有就退到 color-scheme / 系统偏好。 */
+			function readHostDark() {
+				try {
+					if (document.body && document.body.hasAttribute('data-ds-dark-theme')) return true;
+					const source = document.documentElement ? document.documentElement.getAttribute('data-ds-theme-source') : null;
+					if (source === 'dark') return true;
+					if (source === 'light') return false;
+					const scheme = (window.getComputedStyle(document.documentElement).colorScheme || '').trim();
+					const first = scheme.split(/\s+/)[0];
+					if (first === 'dark') return true;
+					if (first === 'light') return false;
+					return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+				} catch (problem) {
+					return true;
+				}
+			}
+			/* 把宿主的 brand 主色拆成 "r g b" 三元组: 插件里到处是 rgba(var(--rk-a1), x) 这种淡色,
+			 * 这样它们也跟着平台的强调色走, 而不是插件自己的色相。 */
+			function hostBrandTriplet() {
+				try {
+					const brand = (window.getComputedStyle(document.body).getPropertyValue('--dsw-alias-brand-primary') || '').trim();
+					if (brand === '') return null;
+					const probe = document.createElement('span');
+					probe.style.color = brand;
+					probe.style.display = 'none';
+					document.body.appendChild(probe);
+					const rgb = window.getComputedStyle(probe).color;
+					document.body.removeChild(probe);
+					const found = /rgba?\(([^)]+)\)/.exec(rgb);
+					if (!found) return null;
+					const nums = found[1].split(',').slice(0, 3).map((n) => Math.round(parseFloat(n)));
+					if (nums.length !== 3 || nums.some((n) => !isFinite(n))) return null;
+					return nums.join(' ');
+				} catch (problem) {
+					return null;
+				}
+			}
+			/* 主题: 插件配色(默认, 就是原来那套深色) / 跟随主题。跟随主题 = 底色 / 文字 / 线条全部用
+			 * 当前 DeepSeek Harness 的主题 token, 强调色取宿主的 brand 色, 插件不再自己上色;
+			 * 宿主切明暗(或系统外观变化)时立刻跟着换, 不用刷新页面。 */
 			const [theme, setTheme] = useState(() => {
 				try {
 					const saved = window.localStorage.getItem(THEME_KEY);
-					return saved === 'light' || saved === 'auto' ? saved : 'dark';
+					return saved === 'follow' || saved === 'light' || saved === 'auto' ? 'follow' : 'plugin';
 				} catch (problem) {
-					return 'dark';
+					return 'plugin';
 				}
 			});
-			const [sysLight, setSysLight] = useState(() => {
-				try {
-					return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
-				} catch (problem) {
-					return false;
-				}
-			});
+			const [hostDark, setHostDark] = useState(() => readHostDark());
 			useEffect(() => {
-				if (!window.matchMedia) return undefined;
-				const media = window.matchMedia('(prefers-color-scheme: light)');
-				const on = (event) => setSysLight(!!event.matches);
-				setSysLight(!!media.matches);
-				if (media.addEventListener) media.addEventListener('change', on);
-				else if (media.addListener) media.addListener(on);
+				const sync = () => setHostDark(readHostDark());
+				sync();
+				let watcher = null;
+				if (window.MutationObserver) {
+					watcher = new window.MutationObserver(sync);
+					watcher.observe(document.documentElement, { attributes: true, attributeFilter: ['data-ds-theme-source', 'class', 'style'] });
+					if (document.body) watcher.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'class', 'style'] });
+				}
+				let media = null;
+				const onMedia = () => sync();
+				if (window.matchMedia) {
+					media = window.matchMedia('(prefers-color-scheme: dark)');
+					if (media.addEventListener) media.addEventListener('change', onMedia);
+					else if (media.addListener) media.addListener(onMedia);
+				}
 				return () => {
-					if (media.removeEventListener) media.removeEventListener('change', on);
-					else if (media.removeListener) media.removeListener(on);
+					if (watcher) watcher.disconnect();
+					if (media) {
+						if (media.removeEventListener) media.removeEventListener('change', onMedia);
+						else if (media.removeListener) media.removeListener(onMedia);
+					}
 				};
 			}, []);
-			const light = theme === 'light' || (theme === 'auto' && sysLight);
-			const mdTheme = light ? 'light' : 'dark';
+			const follow = theme === 'follow';
+			const mdTheme = follow ? (hostDark ? 'dark' : 'light') : 'dark';
 			/* 卡片各用一色: 章节卡 / 小节行 / 知识点卡各自带一个强调色, 免得一屏全是一个颜色 */
 			const [cardColors, setCardColors] = useState(() => {
 				try {
@@ -699,6 +744,19 @@ window.__ModuleLoader__.load({
 				const mods = props.mods;
 				if (mods && typeof mods.setMermaidTheme === 'function') mods.setMermaidTheme(mdTheme);
 			}, [mdTheme, props.mods]);
+			/* 跟随主题时, 把宿主 brand 色填进插件的 --rk-a1..a3; 切回插件配色就把这几个变量撤掉 */
+			useEffect(() => {
+				const root = document.documentElement;
+				if (!root || !root.style) return;
+				const keys = ['--rk-a1', '--rk-a2', '--rk-a3'];
+				if (!follow) {
+					keys.forEach((key) => root.style.removeProperty(key));
+					return;
+				}
+				const triplet = hostBrandTriplet();
+				if (triplet === null) return;
+				keys.forEach((key) => root.style.setProperty(key, triplet));
+			}, [follow, hostDark]);
 			useEffect(() => {
 				try {
 					window.localStorage.setItem(ITEM_KEY, cardColors ? '1' : '0');
@@ -738,7 +796,7 @@ window.__ModuleLoader__.load({
 						const had = hadLocalUiRef.current || {};
 						if (!had.fontScale && FONT_STEPS.indexOf(Number(ui.fontScale)) >= 0) setFontScale(Number(ui.fontScale));
 						if (!had.skin && typeof ui.skin === 'string' && ui.skin !== '') setSkin(ui.skin);
-						if (!had.theme && (ui.theme === 'dark' || ui.theme === 'light' || ui.theme === 'auto')) setTheme(ui.theme);
+						if (!had.theme && typeof ui.theme === 'string') setTheme(ui.theme === 'follow' || ui.theme === 'light' || ui.theme === 'auto' ? 'follow' : 'plugin');
 						if (!had.cardColors && typeof ui.cardColors === 'boolean') setCardColors(ui.cardColors);
 						libReadyRef.current = true;
 						setLibTick((value) => value + 1);
@@ -2597,7 +2655,7 @@ window.__ModuleLoader__.load({
 
 			const panelRoot = h(
 				'div',
-				{ className: 'rk-root rk-skin-' + skin + (light ? ' rk-light' : ''), style: { zoom: String(fontScale / 100) } },
+				{ className: 'rk-root rk-skin-' + skin + (follow ? ' rk-follow' : ''), style: { zoom: String(fontScale / 100) } },
 				h(
 					'div',
 					{ className: 'rk-head' },
@@ -2730,9 +2788,8 @@ window.__ModuleLoader__.load({
 												'div',
 												{ className: 'rk-theme-seg' },
 												[
-													{ id: 'dark', name: 'themeDark' },
-													{ id: 'light', name: 'themeLight' },
-													{ id: 'auto', name: 'themeAuto' },
+													{ id: 'plugin', name: 'themePlugin' },
+													{ id: 'follow', name: 'themeFollow' },
 												].map((item) =>
 													h(
 														'button',
@@ -2740,7 +2797,7 @@ window.__ModuleLoader__.load({
 															key: item.id,
 															type: 'button',
 															className: 'rk-btn' + (theme === item.id ? ' rk-primary' : ' rk-ghost'),
-															title: item.id === 'auto' ? t('themeHint') : t(item.name),
+															title: item.id === 'follow' ? t('themeHint') : t(item.name),
 															onClick: () => setTheme(item.id),
 														},
 														t(item.name),
@@ -2998,7 +3055,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 126;
+		const MODULE_VERSION = 127;
 		const CLIENT_MODULES = ['dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
