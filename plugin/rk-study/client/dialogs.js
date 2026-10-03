@@ -135,7 +135,7 @@ export function createDialogs(deps) {
 		return text;
 	}
 
-	function QuestionDialog({ t, mode, from, form: initial, onCancel, onSubmit, onRaw, onEditTemplates }) {
+	function QuestionDialog({ t, mode, from, form: initial, onCancel, onSubmit, onRaw, onEditTemplates, theme }) {
 		const [form, setForm] = useState(() => questionFormFrom(initial || {}));
 		const [busy, setBusy] = useState(false);
 		const [problem, setProblem] = useState('');
@@ -177,7 +177,7 @@ export function createDialogs(deps) {
 							key: 'qmd-' + key + '-' + seed,
 							defaultValue: form[key] ?? '',
 							onChange: (next) => patch({ [key]: squeeze(next) }),
-							theme: 'dark',
+							theme: theme === 'light' ? 'light' : 'dark',
 							locale: mdLocaleOf(),
 							className: 'rk-md-zt',
 							placeholder: extra && extra.placeholder ? extra.placeholder : undefined,
@@ -349,7 +349,7 @@ export function createDialogs(deps) {
 		return text;
 	}
 
-	function PointDialog({ t, form: initial, onCancel, onSubmit, onRaw, onEditTemplates }) {
+	function PointDialog({ t, form: initial, onCancel, onSubmit, onRaw, onEditTemplates, theme }) {
 		const [form, setForm] = useState(() => ({
 			path: initial.path || '',
 			mode: initial.mode || 'file',
@@ -396,7 +396,7 @@ export function createDialogs(deps) {
 							key: 'pmd-body-' + seed,
 							defaultValue: form.body ?? '',
 							onChange: (next) => patch({ body: squeeze(next) }),
-							theme: 'dark',
+							theme: theme === 'light' ? 'light' : 'dark',
 							locale: mdLocaleOf(),
 							className: 'rk-md-zt',
 							placeholder: t('pointBodyPlaceholder'),

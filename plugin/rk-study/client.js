@@ -27,6 +27,8 @@ window.__ModuleLoader__.load({
 		const FONT_KEY = 'rk-study:font-scale';
 		/* 配色皮肤: 只换 .rk-root 上的一组 CSS 变量(见 client/css.js 的 SKINS), 记在本地 */
 		const SKIN_KEY = 'rk-study:skin';
+		/* 主题: dark / light / auto(跟随系统 prefers-color-scheme), 也记在本地 */
+		const THEME_KEY = 'rk-study:theme';
 	const ITEM_KEY = 'rk-study:card-colors';
 		/* 模式: 画布 / 思维导图(章节 → 小节 → 知识点, 左→右); 导图里折叠了哪些节点也记在本地 */
 		const MODE_KEY = 'rk-study:mode';
@@ -477,14 +479,16 @@ window.__ModuleLoader__.load({
 				let font = null;
 				let look = null;
 				let item = null;
+				let mode = null;
 				try {
 					font = window.localStorage.getItem(FONT_KEY);
 					look = window.localStorage.getItem(SKIN_KEY);
 					item = window.localStorage.getItem(ITEM_KEY);
+					mode = window.localStorage.getItem(THEME_KEY);
 				} catch (problem) {
 					/* 存储不可用 ⇒ 当成本地没有 */
 				}
-				hadLocalUiRef.current = { fontScale: font !== null, skin: look !== null, cardColors: item !== null };
+				hadLocalUiRef.current = { fontScale: font !== null, skin: look !== null, cardColors: item !== null, theme: mode !== null };
 			}
 			const flushLib = useCallback(() => {
 				libTimerRef.current = 0;
@@ -585,6 +589,37 @@ window.__ModuleLoader__.load({
 				}
 			});
 			const [skinOpen, setSkinOpen] = useState(false);
+			/* 主题: 深色(默认, 就是原来那套) / 浅色 / 跟随系统。跟随系统 = 看系统的 prefers-color-scheme,
+			 * 系统在「浅色 ↔ 深色」之间切时立刻跟着换, 不需要刷新页面。 */
+			const [theme, setTheme] = useState(() => {
+				try {
+					const saved = window.localStorage.getItem(THEME_KEY);
+					return saved === 'light' || saved === 'auto' ? saved : 'dark';
+				} catch (problem) {
+					return 'dark';
+				}
+			});
+			const [sysLight, setSysLight] = useState(() => {
+				try {
+					return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+				} catch (problem) {
+					return false;
+				}
+			});
+			useEffect(() => {
+				if (!window.matchMedia) return undefined;
+				const media = window.matchMedia('(prefers-color-scheme: light)');
+				const on = (event) => setSysLight(!!event.matches);
+				setSysLight(!!media.matches);
+				if (media.addEventListener) media.addEventListener('change', on);
+				else if (media.addListener) media.addListener(on);
+				return () => {
+					if (media.removeEventListener) media.removeEventListener('change', on);
+					else if (media.removeListener) media.removeListener(on);
+				};
+			}, []);
+			const light = theme === 'light' || (theme === 'auto' && sysLight);
+			const mdTheme = light ? 'light' : 'dark';
 			/* 卡片各用一色: 章节卡 / 小节行 / 知识点卡各自带一个强调色, 免得一屏全是一个颜色 */
 			const [cardColors, setCardColors] = useState(() => {
 				try {
@@ -653,6 +688,19 @@ window.__ModuleLoader__.load({
 			}, [skin, libTick, saveLib]);
 			useEffect(() => {
 				try {
+					window.localStorage.setItem(THEME_KEY, theme);
+				} catch (problem) {
+					/* 存不上就算了, 不影响使用 */
+				}
+				saveLib({ ui: { theme } });
+			}, [theme, libTick, saveLib]);
+			/* 图表(mermaid)配色也跟主题走: 设置一次, 已经画出来的图会自己重画 */
+			useEffect(() => {
+				const mods = props.mods;
+				if (mods && typeof mods.setMermaidTheme === 'function') mods.setMermaidTheme(mdTheme);
+			}, [mdTheme, props.mods]);
+			useEffect(() => {
+				try {
 					window.localStorage.setItem(ITEM_KEY, cardColors ? '1' : '0');
 				} catch (problem) {
 					/* 存不上就算了, 不影响使用 */
@@ -690,6 +738,7 @@ window.__ModuleLoader__.load({
 						const had = hadLocalUiRef.current || {};
 						if (!had.fontScale && FONT_STEPS.indexOf(Number(ui.fontScale)) >= 0) setFontScale(Number(ui.fontScale));
 						if (!had.skin && typeof ui.skin === 'string' && ui.skin !== '') setSkin(ui.skin);
+						if (!had.theme && (ui.theme === 'dark' || ui.theme === 'light' || ui.theme === 'auto')) setTheme(ui.theme);
 						if (!had.cardColors && typeof ui.cardColors === 'boolean') setCardColors(ui.cardColors);
 						libReadyRef.current = true;
 						setLibTick((value) => value + 1);
@@ -2548,7 +2597,7 @@ window.__ModuleLoader__.load({
 
 			const panelRoot = h(
 				'div',
-				{ className: 'rk-root rk-skin-' + skin, style: { zoom: String(fontScale / 100) } },
+				{ className: 'rk-root rk-skin-' + skin + (light ? ' rk-light' : ''), style: { zoom: String(fontScale / 100) } },
 				h(
 					'div',
 					{ className: 'rk-head' },
@@ -2676,6 +2725,32 @@ window.__ModuleLoader__.load({
 										h(
 											'div',
 											{ className: 'rk-skin-row' },
+											h('span', { title: t('themeHint') }, t('themeLabel')),
+											h(
+												'div',
+												{ className: 'rk-theme-seg' },
+												[
+													{ id: 'dark', name: 'themeDark' },
+													{ id: 'light', name: 'themeLight' },
+													{ id: 'auto', name: 'themeAuto' },
+												].map((item) =>
+													h(
+														'button',
+														{
+															key: item.id,
+															type: 'button',
+															className: 'rk-btn' + (theme === item.id ? ' rk-primary' : ' rk-ghost'),
+															title: item.id === 'auto' ? t('themeHint') : t(item.name),
+															onClick: () => setTheme(item.id),
+														},
+														t(item.name),
+													),
+												),
+											),
+										),
+										h(
+											'div',
+											{ className: 'rk-skin-row' },
 											h('span', { title: t('cardColorsHint') }, t('cardColors')),
 											h(
 												'button',
@@ -2759,6 +2834,7 @@ window.__ModuleLoader__.load({
 						? h(Editor, {
 								/* key: 换文件(例如从笔记跳到模板库文件)时让编辑器重新挂载, 否则 textarea 还留着上一个文件的内容 */
 								key: editor.path,
+								theme: mdTheme,
 								state: editorState(editor, catalog),
 								t,
 								saving,
@@ -2782,6 +2858,7 @@ window.__ModuleLoader__.load({
 					questionDialog
 						? h(QuestionDialog, {
 								t,
+								theme: mdTheme,
 								mode: questionDialog.mode,
 								from: questionDialog.pointTitle || '',
 								form: questionDialog,
@@ -2794,6 +2871,7 @@ window.__ModuleLoader__.load({
 					pointDialog
 						? h(PointDialog, {
 								t,
+								theme: mdTheme,
 								form: pointDialog,
 								onCancel: () => setPointDialog(null),
 								onSubmit: submitPoint,
@@ -2920,7 +2998,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 125;
+		const MODULE_VERSION = 126;
 		const CLIENT_MODULES = ['dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 

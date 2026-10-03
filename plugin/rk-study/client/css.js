@@ -65,6 +65,53 @@ export function createCss(deps) {
 		})
 		.join('\n');
 
+	const LIGHT_CSS = `
+/* ===================== 浅色主题: 只加 .rk-light 一层覆盖 =====================
+ * 深色那套(默认)一行没改: rk-light 只覆盖底色 / 文字 / 线条 / 阴影, 强调色仍取自所选皮肤
+ * (用 --rk-a1..a3), 所以浅色下每套 Material 配色的色相也都保住了。层级:
+ * .rk-root.rk-skin-<id>(皮肤强调色) 之后才是 .rk-root.rk-light(底色文字), 所以浅色能盖住深色底。
+ * 主题由 client.js 按「深色 / 浅色 / 跟随系统」加类。 */
+.rk-root.rk-light {
+  --rk-bg-0:#f5f8fc; --rk-bg-1:#ffffff; --rk-bg-2:#eef3fa; --rk-bg-3:#e2eaf4;
+  --rk-line-1:rgba(var(--rk-a2),.2); --rk-line-2:rgba(var(--rk-a2),.34); --rk-line-3:rgba(var(--rk-a2),.54);
+  --rk-text:#141d2b; --rk-text-2:#5b6c80; --rk-warn:#96650a; --rk-danger:#c73a4e;
+  --rk-panel:linear-gradient(180deg, rgba(255,255,255,.97), rgba(241,246,252,.97));
+  --rk-glow:0 0 0 1px rgba(var(--rk-a2),.22), 0 12px 28px rgba(21,38,64,.14);
+  background:var(--rk-bg-0); color:var(--rk-text);
+}
+.rk-root.rk-light ::selection { background:rgba(var(--rk-a1),.3); color:#0b1620; }
+.rk-root.rk-light .rk-head { background:linear-gradient(180deg, rgba(255,255,255,.99), rgba(238,244,251,.9)); box-shadow:0 8px 22px rgba(21,38,64,.1); }
+.rk-root.rk-light .rk-btn { background:linear-gradient(180deg,#ffffff,#eef3fa); border-color:var(--rk-line-2); color:#1e2c3f; }
+.rk-root.rk-light .rk-btn:hover { border-color:var(--rk-accent); color:#0d2436; }
+.rk-root.rk-light .rk-btn.rk-primary { background:linear-gradient(135deg, rgba(var(--rk-a1),.2), rgba(var(--rk-a3),.22)); border-color:var(--rk-line-3); color:#0d2233; box-shadow:0 2px 10px rgba(var(--rk-a1),.18); }
+.rk-root.rk-light .rk-btn.rk-primary:hover { box-shadow:inset 0 0 0 1px rgba(var(--rk-a1),.45); }
+.rk-root.rk-light .rk-menu, .rk-root.rk-light .rk-skin-pop, .rk-root.rk-light .rk-md-menu { background:linear-gradient(180deg,#ffffff,#f3f7fc); box-shadow:0 16px 34px rgba(21,38,64,.18); }
+.rk-root.rk-light .rk-del-pop { background:#ffffff; box-shadow:0 12px 26px rgba(21,38,64,.2); }
+.rk-root.rk-light .rk-toast { background:linear-gradient(135deg,#ffffff,#eef4fb); color:#141d2b; box-shadow:0 0 0 1px rgba(var(--rk-a1),.22), 0 12px 30px rgba(21,38,64,.2); }
+.rk-root.rk-light .rk-textarea, .rk-root.rk-light .rk-preview { background:#ffffff; color:#16202e; }
+.rk-root.rk-light .rk-textarea::placeholder, .rk-root.rk-light .rk-input::placeholder { color:#93a3b6; }
+.rk-root.rk-light .rk-input { background:#ffffff; color:#16202e; }
+.rk-root.rk-light .rk-preview-head, .rk-root.rk-light .rk-drawer-head { background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(240,246,252,.55)); }
+.rk-root.rk-light .rk-md-pre { background:#f3f7fc; color:#123243; box-shadow:inset 0 0 0 1px rgba(var(--rk-a2),.08); }
+.rk-root.rk-light .rk-code-inline { background:rgba(var(--rk-a1),.12); border-color:rgba(var(--rk-a1),.28); color:#0d5f7d; }
+.rk-root.rk-light .rk-field label, .rk-root.rk-light .rk-empty, .rk-root.rk-light .rk-skin-title { color:#5b6c80; }
+.rk-root.rk-light .rk-git-group { background:linear-gradient(180deg, rgba(255,255,255,.99), rgba(240,246,252,.94)); }
+.rk-root.rk-light .rk-stage { background-image:
+    radial-gradient(1100px 620px at 8% -12%, rgba(var(--rk-a1),.1), transparent 62%),
+    radial-gradient(900px 560px at 102% -6%, rgba(var(--rk-a3),.12), transparent 58%),
+    radial-gradient(700px 420px at 60% 108%, rgba(var(--rk-a2),.07), transparent 60%),
+    linear-gradient(rgba(var(--rk-a2),.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--rk-a2),.08) 1px, transparent 1px);
+  background-size:auto, auto, auto, 28px 28px, 28px 28px;
+  box-shadow:inset 0 0 140px rgba(21,38,64,.07);
+}
+.rk-root.rk-light .rk-chapter, .rk-root.rk-light .rk-rootcard, .rk-root.rk-light .rk-point, .rk-root.rk-light .rk-example, .rk-root.rk-light .rk-md-tablewrap { box-shadow:0 8px 20px rgba(21,38,64,.12); }
+.rk-root.rk-light .rk-point:hover { box-shadow:0 0 0 1px rgba(var(--rk-a2),.22), 0 16px 30px rgba(21,38,64,.16); }
+.rk-root.rk-light .rk-detail, .rk-root.rk-light .rk-drawer { box-shadow:-14px 0 32px rgba(21,38,64,.14); }
+.rk-root.rk-light .rk-swatch-dot { border-color:rgba(21,38,64,.3); }
+
+`;
+
 	const CSS = `
 .rk-root { display:flex; flex-direction:column; height:100%; min-height:0; position:relative; container-type:inline-size; container-name:rk; color:var(--rk-text); background:var(--rk-bg-0); }
 .rk-head { display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--rk-line-1); background:var(--rk-bg-1); flex:0 0 auto; }
@@ -632,8 +679,10 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 /* ===================== 配色选择器 ===================== */
 .rk-skin-wrap { position:relative; display:inline-flex; }
 .rk-swatch-dot { width:11px; height:11px; border-radius:3px; border:1px solid rgba(255,255,255,.35); }
-.rk-skin-pop { position:absolute; right:0; top:32px; z-index:9; width:238px; padding:9px; border-radius:10px; border:1px solid var(--rk-line-3); background:linear-gradient(180deg, rgba(12,22,42,.99), rgba(5,11,24,.99)); box-shadow:0 18px 44px rgba(1,6,16,.7); }
+.rk-skin-pop { position:absolute; right:0; top:32px; z-index:9; width:268px; padding:9px; border-radius:10px; border:1px solid var(--rk-line-3); background:linear-gradient(180deg, rgba(12,22,42,.99), rgba(5,11,24,.99)); box-shadow:0 18px 44px rgba(1,6,16,.7); }
 .rk-skin-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:9px; padding-top:8px; border-top:1px solid var(--rk-line-1); font-size:11px; color:var(--rk-text-2); }
+.rk-theme-seg { display:inline-flex; gap:4px; }
+.rk-theme-seg .rk-btn { padding:3px 7px; font-size:11px; }
 .rk-skin-row .rk-btn { padding:3px 9px; font-size:11px; }
 .rk-skin-title { font-size:11px; color:var(--rk-text-2); margin-bottom:7px; }
 .rk-skin-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; }
@@ -673,6 +722,7 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 	.rk-stage { padding:12px 12px 40px; }
 }
 ${SKIN_CSS}
+${LIGHT_CSS}
 `;
 
 		return { CSS, SKINS };

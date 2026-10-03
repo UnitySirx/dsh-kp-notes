@@ -36,7 +36,7 @@ export function createEditor(deps) {
 			.replace(/\n{3,}/g, '\n\n');
 	}
 
-	function Editor({ state, t, onClose, onSave, saving, onDelete, onError, onEditTemplates }) {
+	function Editor({ state, t, onClose, onSave, saving, onDelete, onError, onEditTemplates, theme }) {
 		const opening = splitFront(state.markdown || '');
 		const [value, setValue] = useState(opening.body);
 		const [title, setTitle] = useState(state.title || '');
@@ -229,7 +229,7 @@ export function createEditor(deps) {
 										key: 'rk-md-' + noteKey + ':' + seed,
 										defaultValue: value,
 										onChange: (next) => setValue(cleanMarkdown(next)),
-										theme: 'dark',
+										theme: theme === 'light' ? 'light' : 'dark',
 										locale: mdLocale,
 										className: 'rk-md-zt',
 										placeholder: t('mdPlaceholder'),

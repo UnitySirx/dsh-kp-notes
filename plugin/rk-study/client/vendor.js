@@ -61,13 +61,58 @@ export function createVendor(deps) {
 		return katexLoader.promise;
 	}
 
-	function ensureMermaid() {
-		if (!mermaidLoader.promise) {
-			mermaidLoader.promise = (async () => {
-				await loadVendorScript(VENDOR + '/mermaid.min.js');
-				const mermaid = window.mermaid;
-				if (!mermaid) throw new Error('mermaid-missing');
-				mermaid.initialize({
+	/* 图表配色跟着主题走: 深色用 mermaid 的 dark, 浅色用 default + 一套浅色变量。
+	 * MermaidBlock 订阅这个状态, 主题一换(深 / 浅 / 跟随系统)它就自己重画, 不用刷新页面。 */
+	let mermaidTheme = 'dark';
+	const mermaidListeners = new Set();
+	function setMermaidTheme(next) {
+		const value = next === 'light' ? 'light' : 'dark';
+		if (value === mermaidTheme) return;
+		mermaidTheme = value;
+		mermaidListeners.forEach((fn) => fn(value));
+	}
+	function useMermaidTheme() {
+		const [value, setValue] = useState(mermaidTheme);
+		useEffect(() => {
+			mermaidListeners.add(setValue);
+			setValue(mermaidTheme);
+			return () => {
+				mermaidListeners.delete(setValue);
+			};
+		}, []);
+		return value;
+	}
+	function mermaidConfig() {
+		if (mermaidTheme === 'light') {
+			return {
+				startOnLoad: false,
+				securityLevel: 'strict',
+				suppressErrorRendering: true,
+				theme: 'default',
+				fontFamily: 'inherit',
+				themeVariables: {
+					darkMode: false,
+					background: 'transparent',
+					primaryColor: '#e8f1fb',
+					mainBkg: '#eef4fb',
+					primaryTextColor: '#16202e',
+					primaryBorderColor: '#3f7fb8',
+					nodeBorder: '#3f7fb8',
+					nodeTextColor: '#16202e',
+					textColor: '#16202e',
+					lineColor: '#7b8ea6',
+					secondaryColor: '#f4f7fb',
+					tertiaryColor: '#ffffff',
+					edgeLabelBackground: '#ffffff',
+					labelBackground: '#ffffff',
+					clusterBkg: '#f4f7fb',
+					clusterBorder: '#a9bed6',
+					fontSize: '14px',
+				},
+				flowchart: { useMaxWidth: true, htmlLabels: true },
+			};
+		}
+		return {
 					startOnLoad: false,
 					securityLevel: 'strict',
 					/*
@@ -98,14 +143,27 @@ export function createVendor(deps) {
 						fontSize: '14px',
 					},
 					flowchart: { useMaxWidth: true, htmlLabels: true },
-				});
+				};
+	}
+
+	function ensureMermaid() {
+		if (!mermaidLoader.promise) {
+			mermaidLoader.promise = (async () => {
+				await loadVendorScript(VENDOR + '/mermaid.min.js');
+				const mermaid = window.mermaid;
+				if (!mermaid) throw new Error('mermaid-missing');
+				mermaid.initialize(mermaidConfig());
 				return mermaid;
 			})().catch((error) => {
 				mermaidLoader.promise = null;
 				throw error;
 			});
 		}
-		return mermaidLoader.promise;
+		/* 每次取用都按当前主题重新 initialize: 主题切换后, 图表下一次渲染就是新配色 */
+		return mermaidLoader.promise.then((mermaid) => {
+			mermaid.initialize(mermaidConfig());
+			return mermaid;
+		});
 	}
 
 	const MATH_SIGNAL = /[\\^_{}=+\-*/<>|()\[\]]/;
@@ -172,6 +230,7 @@ export function createVendor(deps) {
 
 	function MermaidBlock({ code }) {
 		const ref = useRef(null);
+		const theme = useMermaidTheme();
 		const [state, setState] = useState({ status: 'loading', message: '' });
 		useEffect(() => {
 			let alive = true;
@@ -202,7 +261,7 @@ export function createVendor(deps) {
 				alive = false;
 				dropStrayMermaid(id);
 			};
-		}, [code]);
+		}, [code, theme]);
 		if (state.status === 'failed') {
 			return h(
 				'div',
@@ -219,5 +278,5 @@ export function createVendor(deps) {
 		);
 	}
 
-		return { VENDOR, katexLoader, mermaidLoader, loadVendorScript, loadVendorStyle, ensureKatex, ensureMermaid, MATH_SIGNAL, looksLikeMath, MathNode, dropStrayMermaid, MermaidBlock };
+		return { VENDOR, katexLoader, mermaidLoader, loadVendorScript, loadVendorStyle, ensureKatex, ensureMermaid, MATH_SIGNAL, looksLikeMath, MathNode, dropStrayMermaid, MermaidBlock, setMermaidTheme };
 }
