@@ -1,18 +1,21 @@
 /* rk-study · host/delete —— 从 host.js 第 1027-1183 行原样切出 */
 /* 这里**不做真正的删除**: 每个「删除」入口都是把目标**移到当前画布根目录下的 .remove/ 里**
  * (deleteFile = renameSync 单个文件, deleteDir = renameSync 整个目录, 内容/题目块 = 另存一份
- * markdown 片段), 保留原来的相对路径结构, 所以误删可以自己捞回来。.remove 以点开头,
- * lib/scan.js 与 lib/util.js 扫描时都会跳过它, 不会出现在画布/思维导图里。
+ * markdown 片段)。**一次删除 = .remove 下新建的一个时间戳桶目录, 桶里保留原来的相对路径结构**:
+ *   .remove/2026-10-03_234342/notes/01-第一章/01-01-甲.md
+ * 桶与桶之间互不相干, 所以既不会覆盖(每删一次都留一份, 捞得回来), 也不会把不同次删除的东西
+ * 混进同一条路径(先删整个章节、之后又删它里面某个知识点, 后者进的是它自己那个桶)。
+ * .remove 以点开头, lib/scan.js 与 lib/util.js 扫描时都会跳过它, 不会出现在画布/思维导图里。
  * ctx.fs 没有 delete/unlink API, 移动只能用 node:fs —— 这是刻意保留的: 每个入口在动手之前
  * 都先过 assertInsideRoot(), 用 ctx.fs 的规范化目标确认「要移走的东西在 root 之内」;
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
-import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=42';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=42';
-import { listDirSafe } from './templates.js?v=42';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=42';
-import { safePath } from './write.js?v=42';
+import { MARKDOWN_RE } from './constants.js?v=43';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=43';
+import { listDirSafe } from './templates.js?v=43';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=43';
+import { safePath } from './write.js?v=43';
 
 /* --------------------------------------------------------------- deleting */
 
@@ -54,74 +57,61 @@ export function removeBoxFor(config) {
 	return `${config.root}/${REMOVE_DIR}`;
 }
 
-/** 时间戳后缀, 给「.remove 里已经有同名东西」时用 */
+/** 桶目录名: 本地时间 2026-10-03_234342(一眼能看出是哪天哪一秒删的) */
 function removeStamp() {
 	const now = new Date();
 	const pad = (value) => String(value).padStart(2, '0');
-	return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
-/** 兜底目标路径: 只有「上次移出的是文件、这次来的是目录」这种类型对不上时才用(加时间戳, 还撞就再加序号) */
-export function removeDestFor(config, relPath, isDir) {
+/**
+ * 为「这一次删除」挑一个桶目录名: <root>/.remove/<时间戳>; 同一秒内连开两个桶就 -2、-3 排下去。
+ * **一次删除只调用一次** —— 这次删除要搬走的多个文件(连带的小节/知识点/题目)都用同一个桶,
+ * 桶内部因此只会有「这一次删除」的东西。这里只挑名字, 不建目录(等第一个文件真的搬进来时再建)。
+ */
+export function removeBucketFor(config, stamp) {
 	const box = removeBoxFor(config);
-	const clean = normalizeRelPath(relPath);
-	const plain = `${box}/${clean}`;
-	if (!existsSync(plain)) return plain;
-	const slash = clean.lastIndexOf('/');
-	const dir = slash < 0 ? '' : `${clean.slice(0, slash)}/`;
-	const base = slash < 0 ? clean : clean.slice(slash + 1);
-	const dot = isDir ? -1 : base.lastIndexOf('.');
-	const stem = dot > 0 ? base.slice(0, dot) : base;
-	const ext = dot > 0 ? base.slice(dot) : '';
-	const stamp = removeStamp();
-	let candidate = `${box}/${dir}${stem}-${stamp}${ext}`;
+	const base = stamp || removeStamp();
+	let candidate = `${box}/${base}`;
 	let index = 1;
 	while (existsSync(candidate)) {
-		candidate = `${box}/${dir}${stem}-${stamp}-${index}${ext}`;
 		index += 1;
+		candidate = `${box}/${base}-${index}`;
 	}
 	return candidate;
 }
 
+/** 桶目录的显示名(= 它在 .remove 下那一层目录名), 给前端提示用 */
+export function removeBucketName(bucket) {
+	const parts = String(bucket ?? '').split('/');
+	return parts[parts.length - 1] || '';
+}
+
 /**
- * 把 abs 移到 <root>/.remove/<relPath>(保留目录结构), 返回相对 .remove 的路径。
- * **同一个路径再删一次 = 占回同一个位置**: 上一次移出的副本被这次替代, 所以 .remove 里
- * 一个路径永远只有一份, 不会堆出 01-66-20261003-234342 这种带时间戳的重名目录。
- * 只有类型对不上(上次是文件、这次是目录, 或反过来)时才退回带时间戳的名字, 免得互相覆盖。
+ * 把 abs 搬进桶里(保留相对路径), 返回相对 .remove 的路径(形如 2026-10-03_234342/notes/01-甲.md)。
+ * bucket 省略时自己新开一个桶; 一次删除里搬多个文件时, 由调用方把同一个 bucket 传进来。
  */
-export function moveIntoRemove(config, relPath, abs, isDir) {
+export function moveIntoRemove(config, relPath, abs, bucket) {
 	const box = removeBoxFor(config);
 	const clean = normalizeRelPath(relPath);
-	const plain = `${box}/${clean}`;
-	let dest = plain;
-	let replace = false;
-	if (existsSync(plain)) {
-		let sameType = false;
-		try {
-			sameType = isDir ? statSync(plain).isDirectory() : statSync(plain).isFile();
-		} catch {
-			sameType = false;
-		}
-		replace = sameType;
-		if (!replace) dest = removeDestFor(config, clean, isDir);
-	}
+	const root = bucket || removeBucketFor(config);
+	const dest = `${root}/${clean}`;
 	const cut = dest.lastIndexOf('/');
 	if (cut > 0) mkdirSync(dest.slice(0, cut), { recursive: true });
-	/* 这里删掉的字节全都在 .remove 里面(上一次「删除」搬进来的旧副本), 不碰画布里的任何笔记 */
-	if (replace) rmSync(dest, { recursive: true, force: true });
 	renameSync(abs, dest);
 	return dest.slice(box.length + 1);
 }
 
 /**
  * 内容级删除(题目 / 知识点块是文件里的一段, 没有文件可移): 把被删掉的这段 markdown
- * 另存成 <root>/.remove/<原相对路径>.removed-<题号>.md, 开头留一行注释说明来处。
- * 文件名不带时间戳: 同一道题再删一次就覆盖上一次的片段, 免得 .remove 越堆越多。
+ * 另存成 <root>/.remove/<桶>/<原相对路径>.removed-<题号>.md, 开头留一行注释说明来处。
+ * 和文件删除一样进时间戳桶: 同一道题删两次就是两个桶里各一份, 谁也不覆盖谁。
  */
-export function saveRemovedText(config, relPath, text, order) {
+export function saveRemovedText(config, relPath, text, order, bucket) {
 	const body = String(text ?? '').trim();
 	if (body === '') return null;
 	const box = removeBoxFor(config);
+	const root = bucket || removeBucketFor(config);
 	const clean = normalizeRelPath(relPath);
 	const slash = clean.lastIndexOf('/');
 	const dir = slash < 0 ? '' : `${clean.slice(0, slash)}/`;
@@ -129,7 +119,7 @@ export function saveRemovedText(config, relPath, text, order) {
 	const dot = base.lastIndexOf('.');
 	const stem = dot > 0 ? base.slice(0, dot) : base;
 	const tag = Number.isFinite(order) && order > 0 ? `-${Math.round(order)}` : '';
-	const dest = `${box}/${dir}${stem}.removed${tag}.md`;
+	const dest = `${root}/${dir}${stem}.removed${tag}.md`;
 	const cut = dest.lastIndexOf('/');
 	if (cut > 0) mkdirSync(dest.slice(0, cut), { recursive: true });
 	const header = `<!-- rk-study: 从 ${clean} 删除的一段内容${tag ? ` #${tag.slice(1)}` : ''}, ${new Date().toISOString()} -->`;
@@ -216,11 +206,13 @@ export async function deleteEntry(ctx, config, relPath) {
 			}
 		}
 	}
+	/* 这次删除要搬走的一切(本体 + 连带的小节/知识点/题目)都进**同一个桶** */
+	const bucket = removeBucketFor(config);
 	let removed = false;
 	const done = [];
 	let movedTo = null;
 	for (const target of [...new Set(targets)]) {
-		const result = await deleteFile(ctx, config, target);
+		const result = await deleteFile(ctx, config, target, bucket);
 		if (!result.removed) continue;
 		removed = true;
 		done.push(target);
@@ -228,44 +220,45 @@ export async function deleteEntry(ctx, config, relPath) {
 		if (target !== clean) related.push(target);
 	}
 	const prunedDirs = pruneEmptyDirs(config, done);
-	return { ok: true, path: clean, removed, related, prunedDirs, movedTo, box: REMOVE_DIR };
+	return { ok: true, path: clean, removed, related, prunedDirs, movedTo, box: REMOVE_DIR, bucket: removeBucketName(bucket) };
 }
 
-/** 删除章节目录, 同时删除题目目录(questions/)下的同名目录 */
+/** 删除章节目录, 同时删除题目目录(questions/)下的同名目录(两份都进同一个桶) */
 export async function deleteDirEntry(ctx, config, relDir) {
 	const clean = String(relDir ?? '').trim();
-	const result = await deleteDir(ctx, config, clean);
+	const bucket = removeBucketFor(config);
+	const result = await deleteDir(ctx, config, clean, bucket);
 	const related = [];
 	const mirror = questionDirFor(config, clean);
 	if (mirror && mirror !== clean) {
 		try {
-			const mirrorResult = await deleteDir(ctx, config, mirror);
+			const mirrorResult = await deleteDir(ctx, config, mirror, bucket);
 			if (mirrorResult.removed) related.push(mirrorResult.dir);
 		} catch {
 			/* 题目目录不存在或不是目录: 忽略 */
 		}
 	}
-	return { ...result, related, box: REMOVE_DIR };
+	return { ...result, related, box: REMOVE_DIR, bucket: removeBucketName(bucket) };
 }
 
-/** 删除一个笔记文件(只允许删除根目录内的 markdown). */
-export async function deleteFile(ctx, config, relPath) {
+/** 删除一个笔记文件(只允许删除根目录内的 markdown); bucket 由调用方决定, 省略则新开一个桶. */
+export async function deleteFile(ctx, config, relPath, bucket) {
 	const abs = safePath(ctx, config, relPath);
 	if (!abs || isExcludedPath(config, relPath)) throw new Error(`invalid path: ${relPath}`);
 	await assertInsideRoot(ctx, config, abs, relPath);
 	if (!existsSync(abs)) return { ok: true, path: relPath, removed: false };
 	if (!statSync(abs).isFile()) throw new Error(`not a file: ${relPath}`);
-	const movedTo = moveIntoRemove(config, relPath, abs, false);
-	return { ok: true, path: relPath, removed: true, movedTo, box: REMOVE_DIR };
+	const movedTo = moveIntoRemove(config, relPath, abs, bucket);
+	return { ok: true, path: relPath, removed: true, movedTo, box: REMOVE_DIR, bucket: removeBucketName(bucket) || String(movedTo ?? '').split('/')[0] };
 }
 
-/** 删除整章目录(含其下所有小节/知识点/题目文件). */
-export async function deleteDir(ctx, config, relDir) {
+/** 删除整章目录(含其下所有小节/知识点/题目文件); bucket 由调用方决定, 省略则新开一个桶. */
+export async function deleteDir(ctx, config, relDir, bucket) {
 	const abs = safeDirPath(config, relDir);
 	if (!abs) throw new Error(`invalid dir: ${relDir}`);
 	await assertInsideRoot(ctx, config, abs, relDir);
 	if (!existsSync(abs)) return { ok: true, dir: relDir, removed: false };
 	if (!statSync(abs).isDirectory()) throw new Error(`not a directory: ${relDir}`);
-	const movedTo = moveIntoRemove(config, relDir, abs, true);
-	return { ok: true, dir: relDir, removed: true, movedTo, box: REMOVE_DIR };
+	const movedTo = moveIntoRemove(config, relDir, abs, bucket);
+	return { ok: true, dir: relDir, removed: true, movedTo, box: REMOVE_DIR, bucket: removeBucketName(bucket) || String(movedTo ?? '').split('/')[0] };
 }

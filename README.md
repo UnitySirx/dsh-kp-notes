@@ -48,7 +48,7 @@ dsh plugin --profile <profile 名> add link:/绝对路径/rk-study/plugin/rk-stu
 dsh plugin --profile <profile 名> add dsh-kp-notes
 ```
 
-**改完代码怎么生效**：改 `plugin/rk-study/client/` 或 `client.js` 后刷新页面（`⌘R`）即可；改 `host.js` / `lib/` 下任何文件要把三个版本号一起 +1（`?v=N`、`client.js` 的 `MODULE_VERSION`、`?entry=N`），见「五、插件实现」开头。任何时候，「把 bundle 在插件面板里关一次再开一次」都能让改动生效。
+**改完代码怎么生效**：改 `plugin/rk-study/client/` 或 `client.js` 后刷新页面（`⌘R`）即可；改 `host.js` / `lib/` 下任何文件要把 `?v=N` 与 `client.js` 的 `MODULE_VERSION` 一起 +1，见「五、插件实现」开头。`cordis.patch.yml` 现在是发布形态的包名 `dsh-kp-notes`（没有 `?entry=N` 缓存戳）⇒ **关开 bundle 不会重新 import 宿主模块，宿主半的改动要重启 DeepSeek Harness 才生效**；客户端那半关开一次 bundle（或改个按钮文案）就生效。
 
 ## 快速开始
 
@@ -284,17 +284,17 @@ D. 非风险点
 
 ### 删除（不真删：一律移到当前画布的 `.remove/`，都有二次确认）
 
-**插件里的每个「删除」都是移动**：目标被 `rename` 到**当前一级画布根目录下的 `.remove/`**，保留原来的相对路径结构。**同一个路径再删一次会占回同一个位置** —— 上一次移出的副本被这次替代，不是两份并排，所以一个路径永远只有一份，不会堆出 `01-66-20261003-234342` 这种带时间戳的重名目录；只有「上次移出的是文件、这次来的是目录」（或反过来）这种类型冲突才退回带时间戳的名字，两份都留着。`.remove` 以点开头，扫描时跳过，所以它不会出现在画布、思维导图或搜索里。要找回：在画布根目录下打开 `.remove/`，把东西移回原位即可；`rm -rf .remove` 就等于真正清空回收站。
+**插件里的每个「删除」都是移动**：目标被 `rename` 到**当前一级画布根目录下的 `.remove/`**，**一次删除 = 在这里新建一个时间戳桶目录**，桶里保留原来的相对路径结构（删掉章节 `notes/01-第一章`，桶里就是 `notes/01-第一章/` 与 `questions/01-第一章/`）。桶与桶互不相干，所以**删两次就留两份，谁也不覆盖谁**（同一个章节删两次，第二次进的是新桶，第一次那份原样还在），也**不会把不同次的删除混进同一条路径**（先删整个章节、之后又删重建章节里的某个知识点 —— 后者进它自己那个新桶，不会落进上次那份章节备份里）。同一秒里连开两个桶，名字往后排成 `…-2`、`…-3`。`.remove` 以点开头，扫描时跳过，所以它不会出现在画布、思维导图或搜索里。要找回：在画布根目录下打开 `.remove/`，挑时间对得上的那个桶，把东西移回原位即可；`rm -rf .remove` 就等于真正清空回收站。
 
-| 位置 | 按钮 | 移到 `.remove/` 里的是什么 |
+| 位置 | 按钮 | 移到 `.remove/<桶>/` 里的是什么 |
 | --- | --- | --- |
 | 章节卡右上角 | **删除整章** | `notes/<章>/` 整个目录 + `questions/<章>/` 同名题目目录（含其下所有小节 / 知识点 / 题目文件），根目录章节不可删 |
 | 小节行 | **删除小节** | 该小节文件 + 该小节下的全部知识点文件（`NN-MM-*.md`）+ 这些知识点在 `questions/` 下的题目文件 |
 | 知识点卡片底部 | **删除知识点** | 该知识点文件 + `questions/<章>/<同名文件>.md`（两侧同步移动） |
-| 题目卡片右上角 | **删除此题** | 题目文件本身不动：被删掉的这一段 markdown 另存成 `.remove/<题目文件路径>.removed-<题号>.md`（首行注释写明从哪个文件、第几题删的；同一题再删一次就覆盖上一次的片段，不堆文件），再重写剩下的题目 |
+| 题目卡片右上角 | **删除此题** | 题目文件本身不动：被删掉的这一段 markdown 另存成 `.remove/<桶>/<题目文件路径>.removed-<题号>.md`（首行注释写明从哪个文件、第几题删的；同一题删两次就是两个桶里各一份，不覆盖），再重写剩下的题目 |
 | 小节页 / 知识点页 / 编辑器 | **删除本文件** | 当前打开的这个文件（笔记文件同样连带移动配对题目文件） |
 
-点一次按钮会在原处浮出「确认删除？ / 取消 / 删除」，再点「删除」才真正执行。确认条是**绝对定位浮层**，不占布局 —— 所以列表里的按钮不会因为多出这行字而换行或位移，**同一个位置连点两下第二次点到的仍然是「删除」**（早先的写法会把按钮挤到下一行、让第二次点空或误点「取消」）。执行后自动回到章节图并刷新，提示条写「已移到 .remove/ · <路径>」，并写明连带处理了几个关联文件。
+点一次按钮会在原处浮出「确认删除？ / 取消 / 删除」，再点「删除」才真正执行。确认条是**绝对定位浮层**，不占布局 —— 所以列表里的按钮不会因为多出这行字而换行或位移，**同一个位置连点两下第二次点到的仍然是「删除」**（早先的写法会把按钮挤到下一行、让第二次点空或误点「取消」）。执行后自动回到章节图并刷新，提示条写「已移到 .remove/<桶>/ · <路径>」，并写明连带处理了几个关联文件。
 
 > 配对规则：`notes/X/Y.md`（知识点）与 `questions/X/Y.md`（该知识点的题目）是同一实体的两侧，动任何一侧都会连带处理另一侧；直接操作题目文件（API 的 `{action:'delete', path:'questions/…'}`）只动题目文件本身，知识点文件保留。
 > 画布自己也有同类操作：一级画布卡上的 **移出列表** 是把这个画布目录移到**它同层**的 `.remove/` 里（见下一章）。
@@ -427,7 +427,7 @@ D. 非风险点
 | --- | --- |
 | `plugin/rk-study/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
 | `plugin/rk-study/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
-| `plugin/rk-study/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（3112 行） |
+| `plugin/rk-study/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（3114 行） |
 | `plugin/rk-study/client/*.js` | Client 半的实现，按职责拆成 11 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
 | `plugin/rk-study/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
 | `plugin/rk-study/package.json` | 包清单（`dsh.bundle.patch`、`dsh.client`、图标） |
@@ -447,22 +447,22 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 | `templates.js` | 547 | 小节 / 知识点 / 题目文件 / 题目的模板与题目计数 + 内置的「公式与结构模板」默认库 |
 | `fsguard.js` | 69 | 路径边界：`insideRoot`（经 `ctx.fs.resolve` 复核，符号链接指向外面也挡得住）、`writePolicyOf`（写操作的沙箱策略）、`denyOutsideRoot`；`mkdir` 的边界由调用方给 —— 新建画布 / 导入学习库 / 移出列表的目标本来就在请求 root 之外（父目录才是这几件事的边界）。取舍见文件头 |
 | `write.js` | 54 | 路径校验与写文件（经 `ctx.fs.writeText`，必要时 `mkdir` 兜底） |
-| `delete.js` | 271 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `removeBoxFor` / `moveIntoRemove`（文件与目录 `renameSync`；同一路径再删一次就占回同一位置，只替换 `.remove` 里的旧副本）/ `removeDestFor`（类型冲突时才用的带时间戳兜底）/ `saveRemovedText`（内容级删除另存片段），以及排除判断 |
+| `delete.js` | 264 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `removeBucketFor`（挑一个时间戳桶 `YYYY-MM-DD_HHmmss`，撞名就排 `-2`、`-3`）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段），以及排除判断 |
 | `scan.js` | 326 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存 |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
-| `routes.js` | 1492 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root |
+| `routes.js` | 1494 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root |
 
-> **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**三个版本号要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
+> **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**两个版本号（`?v=N` 与 `client.js` 的 `MODULE_VERSION`）要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=39）
-> sed -i '' 's/?v=39/?v=40/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=43）
+> sed -i '' 's/?v=42/?v=43/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
 > # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 125）
-> sed -i '' 's/MODULE_VERSION = 125;/MODULE_VERSION = 126;/' plugin/rk-study/client.js
-> # 3) cordis.patch.yml 里的 ?entry=N（当前 119）
+> sed -i '' 's/MODULE_VERSION = 128;/MODULE_VERSION = 129;/' plugin/rk-study/client.js
+> # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
-> 然后才在插件管理里把 bundle 关一次 / 开一次 —— 宿主是按**完整 URL（含 query）**缓存模块的：入口 URL 不变就还是老代码，只改 `lib/` 的 URL 又会继续用旧的兄弟模块。
+> 然后才在插件管理里把 bundle 关一次 / 开一次 —— 宿主是按**完整 URL（含 query）**缓存模块的：入口 URL 不变就还是老代码，只改 `lib/` 的 URL 又会继续用旧的兄弟模块。 **注意：这一步对宿主半已经失效** —— `plugin/rk-study/cordis.patch.yml` 现在是发布形态的 `name: 'dsh-kp-notes'`，源文件里不再有 `?entry=N`，宿主模块的 URL 永远不变 ⇒ 关开 bundle 不会重新 import 宿主代码，**改 `host.js` / `lib/` 之后必须重启 DeepSeek Harness**；客户端那半仍然是 `⌘R` 或关开一次 bundle 就生效。
 
 client 半边（`plugin/rk-study/client/`，按依赖从下往上；每个模块导出的是一个 `createX(deps)` 工厂 —— 模块之间不互相 import，依赖由入口按拓扑顺序注入，`deps` 里包含 `React` 与它需要的兄弟模块成员）：
 

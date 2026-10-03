@@ -14,7 +14,7 @@
  *   removed  : 手动「移出列表」的画布(墓碑, 重新扫描也不会加回来)
  */
 
-import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE } from './constants.js?v=42';
+import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE } from './constants.js?v=43';
 
 const cache = new Map();
 /** 插件卸载时清掉这份模块级缓存(由 routes.js 的 ctx.effect 调用)。 */
