@@ -1,9 +1,9 @@
 {
-  "name": "@local/rk-study",
+  "name": "dsh-kp-notes",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
-  "description": "系统架构设计师 · 学习画布：Markdown 笔记驱动的卡片画布",
+  "description": "基于 DeepSeek Harness 开发的知识点(Knowledge Point)笔记插件",
+  "author": "UnitySir",
   "license": "MIT",
   "repository": {
     "type": "git",
