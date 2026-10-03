@@ -1,14 +1,76 @@
----
-title: 使用说明 · 系统架构设计师学习台
-order: 0
-tags: [说明, 索引]
----
+# 学习画布 · dsh-kp-notes
 
-# 使用说明 · 系统架构设计师学习台
+> 把一整个目录的 Markdown 笔记变成一张可以平移、缩放的卡片画布 —— **一个目录 = 一章，一章 = 一张卡**；知识点是卡片，题目自带答案遮挡，随手自测。
 
-插件本身只放代码（`plugin/` + 本文件）；**笔记放在「学习画布」的根目录里** —— 每个画布 = 磁盘上一个目录，建议放到插件目录之外（例如 `~/Desktop/WorkNotes/<画布>/`），插件把里面的 markdown 变成卡片。
+写给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的插件（宿主半 + 浏览器半）。笔记就是普通的 markdown 文件，留在**你自己的目录**里：插件不建数据库、不改你的文件格式，删掉插件笔记照样能读。渲染引擎与编辑器随插件分发，**不联网、不依赖 CDN、不需要构建**；界面中英双语，跟随宿主语言。
 
-一个目录 = 一个大章节，**目录名就是章节名**（章节不再需要「章节说明」文件）；**小节、知识点、题目各自是独立文件**；题目文件放在 `questions/` 下，按文件路径与知识点一一配对。
+## 界面预览
+
+| 画布：章节卡 → 小节 → 知识点卡片墙 | 知识点详情：真表格 + LaTeX 公式（KaTeX） |
+| --- | --- |
+| ![画布](plugin/rk-study/screenshots/02-canvas.jpg) | ![知识点详情](plugin/rk-study/screenshots/03-point-detail.jpg) |
+| **题目：答案默认折成「▸ 答案已遮挡」** | **点开自测：答案 + 解析** |
+| ![题目与答案遮挡](plugin/rk-study/screenshots/04-questions.jpg) | ![展开答案](plugin/rk-study/screenshots/05-answer-revealed.jpg) |
+| **思维导图：章 → 小节 → 知识点** | **正文里的 mermaid 流程图（本地渲染）** |
+| ![思维导图](plugin/rk-study/screenshots/06-mindmap.jpg) | ![mermaid 流程图](plugin/rk-study/screenshots/07-mermaid.jpg) |
+| **编辑知识点：笔记就是普通 markdown** | **多画布：一个目录 = 一块画布** |
+| ![编辑知识点](plugin/rk-study/screenshots/08-editor.jpg) | ![多画布](plugin/rk-study/screenshots/01-canvases.jpg) |
+
+## 特性一览
+
+| | |
+| --- | --- |
+| **画布** | 章节卡排成一行、不换行，可自由平移 / 缩放（20% ~ 240%）；点小节在右侧展开知识点卡片墙 |
+| **思维导图** | 同一份笔记切换成「章 → 小节 → 知识点 → 正文」的左→右树；正文按小标题拆成小知识点卡片，同一时刻只展开一个（手风琴） |
+| **多画布** | 一级画布上每张卡 = 磁盘上一个笔记根目录（软考、别的考试、工作笔记各放一个，互不干扰）；画布清单 / 移出记录 / 字号配色跨浏览器同步 |
+| **题目与自测** | 一个知识点配一个题目文件，一个文件可放任意多道（每道一个 `## 题目 N`）；答案默认折叠成「▸ 答案已遮挡」，点开自测；选择题 / 案例题两种题型可视化录入 |
+| **富文本编辑** | 编辑器抽屉默认所见即所得（Milkdown：`/` 斜杠菜单、选区工具条），一键切回「markdown 源码 + 实时预览」；文件开头的 YAML 头不会被富文本碰坏 |
+| **公式与流程图** | 正文里直接写 LaTeX 与 mermaid，本地渲染；语法写错只在原地报错，不弹引擎那层关不掉的遮罩 |
+| **输入助手** | 44 条公式模板 + 8 条结构 / 笔记 / 题目模板（模板本身就是两个可编辑的 markdown 文件），工具栏按钮 + 快捷键，外加一套自己实现的编辑键 |
+| **配色** | 15 套皮肤（科技蓝 + 14 套 Material Design），还能让每张卡各用一色；整体字号 85% ~ 160%；全屏专注模式 |
+| **Git** | `⎇ Git 提交` 一次提交整个学习库（提交前自动 `git pull --no-rebase`），可 `✦ AI 生成` 提交信息；绝不 `reset` / `checkout` / `rebase`，冲突了就停下来交给你 |
+
+## 安装
+
+需要 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（桌面版或 Web 版；开发环境为 0.2.0-rc.2）。插件**没有 npm 依赖、也不需要构建** —— KaTeX / mermaid / zt-react-milkdown 都在 `plugin/rk-study/vendor/` 里随包分发。
+
+**从本仓库安装（现在就能用）**：先把仓库克隆到本地，然后
+
+```sh
+dsh plugin --profile <profile 名> add link:/绝对路径/dsh-kp-notes/plugin/rk-study
+```
+
+装好后在「插件」面板里把 `rk-study` 打开 —— `plugin/rk-study/package.json` 里声明了 `dsh.bundle.patch`（Node 半）与 `dsh.client`（浏览器半），宿主会把两半一起挂上；入口是**左侧边栏面板列表里的「学习笔记」**（英文界面下是 `Architect Notes`，图标 `plugin/rk-study/icon.svg`）。
+
+**从 npm 安装**（包尚未发布；发布后把 `link:` 那段换成包名即可）：
+
+```sh
+dsh plugin --profile <profile 名> add dsh-kp-notes
+```
+
+**改完代码怎么生效**：改 `plugin/rk-study/client/` 或 `client.js` 后刷新页面（`⌘R`）即可；改 `host.js` / `lib/` 下任何文件要把三个版本号一起 +1（`?v=N`、`client.js` 的 `MODULE_VERSION`、`?entry=N`），见「五、插件实现」开头。任何时候，「把 bundle 在插件面板里关一次再开一次」都能让改动生效。
+
+## 快速开始
+
+1. **准备一个目录当画布**（放插件目录外面，例如 `~/Notes/系统架构师/`）。面板右上角的 `＋ 新建学习画布` 会帮你建好 `notes/` 与 `questions/` 两个子目录，也可以自己手工建。
+   - 想一次管多张画布：先建一个空目录（比如 `~/Notes/`），用面板右上角的 `⇪ 导入目录` 把它当成**学习库**，之后新建的画布都挂在它下面。
+2. **写笔记**：在 `notes/` 下按约定建目录与 markdown 文件（见下一节），或者直接在面板里点 `＋ 新建章节` / `＋ 新建小节` / `＋ 新建知识点` / `＋ 添加题目`。
+3. **看画布**：章节卡 → 点小节 → 右侧知识点卡片墙 → 点知识点看说明与题目；答案默认遮挡，点一下展开。
+
+> 笔记目录里**不写任何配置文件**（只有学习库那一级会有一份 `.config/rk-study.json` 和共用的 `.templates/`）：字号、配色、视野这类状态只存在浏览器与学习库里，进 git 的永远是纯粹的 markdown。
+
+## 目录
+
+- [一、目录结构与命名约定](#一目录结构与命名约定)
+- [二、三类文件长什么样](#二三类文件长什么样)
+- [三、直接在插件里写](#三直接在插件里写)
+- [四、画布操作](#四画布操作)
+- [五、插件实现](#五插件实现)
+- [六、主题与配色](#六主题与配色)
+- [七、Git 提交](#七git-提交)
+- [第三方资源与许可](#第三方资源与许可)
+
+下面开始，就是把「磁盘上的文件」和「画布上的卡片」一一对应起来的最完整说明。
 
 ## 一、目录结构与命名约定
 
@@ -20,7 +82,7 @@ tags: [说明, 索引]
 | `questions/<章>/<同名文件>.md` | 上面那个知识点的题目（一个文件可放多道，每道题一个 `## 题目 N`） |
 
 ```
-<画布根目录>/           ← 例如 ~/Desktop/WorkNotes/系统架构师/
+<画布根目录>/           ← 例如 ~/Notes/系统架构师/
 ├─ notes/
 │  ├─ 01-架构设计基础/
 │  │  ├─ 01-架构风格与架构视图.md                ← 小节 01（标题 + 导读）
@@ -34,7 +96,7 @@ tags: [说明, 索引]
       └─ 02-04-敏感点-权衡点-风险点.md            ← 知识点 02-04 的题目
 ```
 
-> 挂在**学习库**下的画布（父目录里还有别的画布，例如 `~/Desktop/WorkNotes/系统架构师/`）自己**不会**有 `.templates/`、也**不会**有 `.config/`：模板统一放学习库根目录那一份，设置在库级的 `.config/rk-study.json` 里（见下面「学习库」与「设置存在哪」）。只有**自带根目录的画布**（不挂在任何学习库下）才会在它自己目录下建 `.templates/`。
+> 挂在**学习库**下的画布（父目录里还有别的画布，例如 `~/Notes/系统架构师/`）自己**不会**有 `.templates/`、也**不会**有 `.config/`：模板统一放学习库根目录那一份，设置在库级的 `.config/rk-study.json` 里（见下面「学习库」与「设置存在哪」）。只有**自带根目录的画布**（不挂在任何学习库下）才会在它自己目录下建 `.templates/`。
 
 `notes/`、`questions/` 是**相对画布根目录**的路径（不是相对插件仓库）。插件仓库里没有这两个目录：一个画布一个根目录，各自独立、也各自独立 `git`。
 
@@ -46,7 +108,7 @@ tags: [说明, 索引]
 - 兼容旧写法：文件名里出现 `例题` / `题目` / `案例` / `错题` / `真题` / `习题` / `已做` 等片段也判为**题目文件**，所以历史文件不用改名。
 - 都不是、且没有第二个数字 → 判为**小节文件**（自己一行）。
 - 想在 frontmatter 里显式指定，可写 `type: point`（知识点）/ `type: question`（题目）/ `type: section`（小节）；不写就按文件名推断。
-- **章节名 = 目录名去掉 `01-` 这类序号前缀**；章节序号也来自目录名，所以「第 2 章 · 质量属性与战术」= 目录 `notes/02-质量属性与战术/`。工作区根目录那一章用其中第一个小节的标题当名字（本 `README.md` 就是根目录下的一节）。
+- **章节名 = 目录名去掉 `01-` 这类序号前缀**；章节序号也来自目录名，所以「第 2 章 · 质量属性与战术」= 目录 `notes/02-质量属性与战术/`。像本仓库 `README.md` 这样直接放在画布根目录下的文件，属于「根目录」那一章，章名取其中第一个小节的标题。
 - 没有对应小节文件的独立知识点不会消失：会作为一个小节单独列出来。
 
 ## 二、三类文件长什么样
@@ -144,6 +206,8 @@ D. 非风险点
 
 正文（知识点说明、答案、导读……）里可以直接写 LaTeX 公式和 mermaid 流程图，插件会渲染出来：
 
+![正文里的 mermaid 流程图，本地渲染](plugin/rk-study/screenshots/07-mermaid.jpg)
+
 | 写法 | 渲染成 |
 | --- | --- |
 | `$A = \frac{MTBF}{MTBF + MTTR}$` | 行内公式 |
@@ -152,7 +216,7 @@ D. 非风险点
 | ` ```math ` / ` ```latex ` 围栏 | 块级公式 |
 | ` ```mermaid ` 围栏 | 流程图 / 时序图 / 状态图等 mermaid 图 |
 
-- 渲染引擎（KaTeX 0.16.47 + mermaid 11.17.2）作为**静态资源随插件分发**（`plugin/rk-study/vendor/`，约 4.6 MB），由插件自己的路由 `/rk-study/vendor/*` 直出；页面**第一次**遇到公式/图时才去取，之后走浏览器缓存 —— 不联网、不依赖 CDN、不需要构建。
+- 渲染引擎（KaTeX 0.16.47 + mermaid 11.17.2）作为**静态资源随插件分发**（`plugin/rk-study/vendor/`，约 7.1 MB：KaTeX 292 KB + mermaid 3.4 MB + zt-milkdown 3.1 MB），由插件自己的路由 `/rk-study/vendor/*` 直出；页面**第一次**遇到公式/图时才去取，之后走浏览器缓存 —— 不联网、不依赖 CDN、不需要构建。
 - 只认识「像公式的」`$…$`：`价格 $100, 折扣 $20`、`$5 到 $10` 这类货币写法会**原样显示**，不会被当成公式吃掉。
 - 引擎取不到时**不会白屏**：公式退回显示原始 `$…$`，流程图显示红框提示 + 原始代码，正文照常可读。
 - 语法写错时**不弹 mermaid 自带的那个红框**（它是引擎直接挂到页面 `body` 上的，React 管不到，会一直挡着关不掉）：只在原地显示「流程图渲染失败：Parse error on line N」加出错的源码，改好语法自动重画。做法是 `mermaid.initialize({ suppressErrorRendering: true })` 让引擎先自己清理再抛错，再加一层按 id 兜底删临时节点的保险。
@@ -161,6 +225,8 @@ D. 非风险点
 - **编辑器也是随插件分发的静态资源**：`plugin/rk-study/vendor/zt-milkdown/` 里放的是 `zt-react-milkdown@0.1.32`（MIT，Milkdown 内核；`zt-milkdown.js` 1.6 MB + `zt-milkdown.css` 1.6 MB，含内联字体）。加载方式是自己写的小加载器 `client/milkdown.js`：注入样式 → `fetch` 回 CJS 文本 → 用 `new Function('require','module','exports', code)` 执行，`require` 只映射 `react` / `react-dom` / `react-dom/client` / `react/jsx-runtime`（都用宿主那一份，`react-dom/server` 给个空壳）—— 所以**不需要 npm 安装、不联网、不打包**。编辑器脚本取不到（文件缺失、浏览器拦截）时自动停在源码模式，不会白屏。
 
 ## 三、直接在插件里写
+
+![编辑知识点：标题 / 标签 / 内容，笔记就是普通 markdown](plugin/rk-study/screenshots/08-editor.jpg)
 
 | 位置 | 操作 | 结果 |
 | --- | --- | --- |
@@ -268,6 +334,8 @@ D. 非风险点
 
 左上角的 `思维导图` 把同一份笔记画成一棵**从左往右**的树，五层：
 
+![思维导图：学习画布 → 章节 → 小节 → 知识点](plugin/rk-study/screenshots/06-mindmap.jpg)
+
 | 层 | 节点 | 角标 |
 | --- | --- | --- |
 | 0 | 根：学习画布 | `N 章节` |
@@ -299,7 +367,7 @@ D. 非风险点
 - 右上 `重新扫描`：按磁盘**实际状态**刷新列表 —— 你已经手动删掉的画布目录会自动从列表里移出（提示「已移出 N 个磁盘上已经不存在的画布」），其余卡片重新统计；没有任何变化时提示「已重新扫描」。探测请求失败的目录不会误删。
 - 右上 `⇪ 导入目录`：**一个输入框 + 一个 `📁 选择…` 按钮** —— 点按钮弹宿主的目录选择窗体（桌面版 = 系统「选择文件夹」框，网页版 = 宿主内置的目录浏览器）选好目录，路径自动填进输入框（也可以手打/粘贴绝对路径，按 Enter 或点 `导入`）。这个目录就成了**学习库**：例如 `/Users/你/Desktop/RootNotes` 下面有 `xxx学习笔记/`、`软考学习笔记/`（各自带 `notes/`、`questions/`），导入后这两张卡就进了一级画布列表，同时在该库里建好共用的 `.templates/`（以及库级的 `.config/rk-study.json`）。空目录也能导入（只是暂时没有画布）；目录本身已经是一张画布时（有 `notes/` 或 `questions/`）只把这一张登记进列表，**磁盘上什么都不写**，也不会把它的子目录（`notes/`）当成画布。
 - **模板共用规则**（一个画布的模板目录按顺序找）：① 父目录是**学习库**就用库根目录的 `.templates`（判据：那一层已经有 `.templates`，或者父目录下还有别的画布）—— 库里所有画布共用这一份，**画布自己不再各建一份**；库里那份被删掉后，再从画布改模板也只会重建在库根目录，不会在画布里冒出来；② 自带根目录的画布才用**画布根目录的 `.templates`**；③ 老画布原来放在 `<画布>/notes/.templates` 的继续认（那里有文件就用那里）。所以现在新建的画布，`notes/` 里不会再出现 `.templates`。
-- **没有「内置画布」**：一级画布列表以 `localStorage` 为即时来源、同时和学习库的 `<库>/.config/rk-study.json` 双向同步 —— 插件配置（`cordis.patch.yml`）里的 `root` 只是「没带 `?root=` 时的兜底根」，不会自动变成一张卡片（那张带「内置」标签的卡已取消）。所以插件仓库里的 `notes/`、`questions/` 也不再需要：本仓库的笔记已经迁到 `~/Desktop/WorkNotes/系统架构师/`。
+- **没有「内置画布」**：一级画布列表以 `localStorage` 为即时来源、同时和学习库的 `<库>/.config/rk-study.json` 双向同步 —— 插件配置（`cordis.patch.yml`）里的 `root` 只是「没带 `?root=` 时的兜底根」，不会自动变成一张卡片（那张带「内置」标签的卡已取消）。所以插件仓库里不需要 `notes/`、`questions/`：笔记放在你自己的目录里（例如 `~/Notes/系统架构师/`），仓库只管插件代码。
 - 卡片上还能**改名**与**移出列表**。改名 = **直接重命名磁盘上的那个目录**（目录名就是画布名，笔记与题目跟着目录一起走）；改成同层已有的名字会被拦下（`name-taken`），弹窗不关、磁盘不动。移出列表会把画布目录**移到同一层的 `.remove/` 里**（同层已有同名备份就往后排成 `名字-2`、`名字-3`…，从不覆盖；想恢复就把目录移回上一层）。移出还会记一个**墓碑**：之后再 `重新扫描`、刷新、重新导入同一个库都不会把它加回来 —— 只有在**同一个路径** `＋ 新建学习画布`、或重新 `⇪ 导入目录` 这个库时才解除。
 - 画布卡片是**穿透**的：卡片空白处按住鼠标 = 直接拖动画布（`pointer-events:none`，指针事件落到 canvas 上），卡片上的文字也不可选中（`user-select:none`）；只有真正要执行事件的部件（`进入画布 ›` 与 `改名` / `移出列表` 按钮）照旧接收鼠标（`pointer-events:auto`）。`＋ 新建学习画布` 那张虚线卡本身就是按钮，仍然整块可点。
 - 列表、手动移出的墓碑、以及一级画布上的字号 / 配色，都记在 `localStorage`（`rk-study:roots` / `rk-study:removed-roots` / `rk-study:font-scale` / `rk-study:skin`）；「当前在哪张画布」只活在这一个页面会话里，打开 / 刷新都从**一级画布**（全部画布总览）开始；**学习库那一级**的这些状态还会写进 `<库>/.config/rk-study.json`（`canvases` / `removed` / `ui` / `zoom`），所以换浏览器、换机器、重装插件，导入同一个库就能把画布列表与移出记录读回来；每个画布的统计与 Git 范围都只算当前这个根目录。
@@ -323,7 +391,7 @@ D. 非风险点
 | `rk-study:mode` / `rk-study:map-fold` / `rk-study:map-open` | 画布还是导图 / 导图折叠 / 知识点展开 | 同样全局一套 |
 | `rk-study:focus` | 是否全屏专注（`1` / `0`） | —— |
 
-**学习库那一级**（`⇪ 导入目录` 导入的那个目录，例如 `~/Desktop/WorkNotes`）还有一个插件维护的配置文件：
+**学习库那一级**（`⇪ 导入目录` 导入的那个目录，例如 `~/Notes`）还有一个插件维护的配置文件：
 
 ```
 <学习库>/
@@ -355,7 +423,7 @@ D. 非风险点
 | 文件 | 作用 |
 | --- | --- |
 | `plugin/rk-study/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
-| `plugin/rk-study/lib/*.js` | Host 半的实现，按职责拆成 13 个 ESM 模块（见下表） |
+| `plugin/rk-study/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
 | `plugin/rk-study/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（2977 行） |
 | `plugin/rk-study/client/*.js` | Client 半的实现，按职责拆成 11 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
 | `plugin/rk-study/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
@@ -381,7 +449,17 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
 | `routes.js` | 1488 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root |
 
-> **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮/文案这类东西没变，就把 bundle 关一次开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）；改 `host.js` 或 `lib/` 下任何文件要走两步，而且**两步缺一不可**：(1) 把 `lib/` 里所有跨模块 import 的 `?v=N` 统一加一（当前是 `?v=39`：`sed -i '' 's/?v=38/?v=39/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js`）；(2) 把 `cordis.patch.yml` 里的 `?entry=N` 加一。然后才在插件管理里把 bundle 关一次 / 开一次 —— 宿主是按完整 URL（含 query）缓存模块的，入口 URL 不变就还是老代码，只改 `lib/` 的 URL 又会继续用旧的兄弟模块。
+> **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**三个版本号要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
+>
+> ```sh
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=39）
+> sed -i '' 's/?v=39/?v=40/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 125）
+> sed -i '' 's/MODULE_VERSION = 125;/MODULE_VERSION = 126;/' plugin/rk-study/client.js
+> # 3) cordis.patch.yml 里的 ?entry=N（当前 119）
+> ```
+>
+> 然后才在插件管理里把 bundle 关一次 / 开一次 —— 宿主是按**完整 URL（含 query）**缓存模块的：入口 URL 不变就还是老代码，只改 `lib/` 的 URL 又会继续用旧的兄弟模块。
 
 client 半边（`plugin/rk-study/client/`，按依赖从下往上；每个模块导出的是一个 `createX(deps)` 工厂 —— 模块之间不互相 import，依赖由入口按拓扑顺序注入，`deps` 里包含 `React` 与它需要的兄弟模块成员）：
 
@@ -448,7 +526,7 @@ client 半边（`plugin/rk-study/client/`，按依赖从下往上；每个模块
 
 改主题只动 `plugin/rk-study/client/css.js` 里的 CSS 字符串（`const CSS`，末尾「黑蓝科技主题」皮肤段落）—— 改完 `⌘R` 即可。
 
-> 开发者提示：改完 `host.js` / `lib/` 后，先改 `lib/` 里跨模块 import 的 `?v=N`、再改 `cordis.patch.yml` 里的 `?entry=N`，最后在插件管理里把 bundle 关一次 / 开一次，否则宿主不会重新加载模块。
+> 开发者提示：改完 `host.js` / `lib/` / `client/` 后怎么让插件重新加载（三个版本号一起 +1，再关一次开一次 bundle），见「五、插件实现」开头那段。
 
 ## 七、Git 提交
 
@@ -474,3 +552,19 @@ client 半边（`plugin/rk-study/client/`，按依赖从下往上；每个模块
 - 超时：状态/提交 30~60 秒，推送 180 秒。`dryRun` 参数可以让 `push` 走 `--dry-run`（只打印 refspec，不写远程）。
 - AI 生成走宿主自己的模型服务（`@deepseek-ai/dsh-llm`，插件侧唯一的模型调用路径）：**故意不把 `llm` 写进 `inject`** —— 没配模型的 profile 也要能正常打开笔记面板；取而代之的是 `lib/git.js` 里的 `serviceOf(ctx, 'llm')`，按 `ctx.llm`（声明过才可用）→ `ctx.get(name)` → `ctx.reflect.get(name, false)` 依次尝试，拿不到就回 `llm-unavailable`（面板上是一句正常提示，不再是 500）。拿到之后用 `llm.stream({ provider, model, system, messages, maxTokens, signal })` 逐块收 `text-delta`，不引任何 npm 依赖，超时用内置的 `AbortSignal.timeout(60000)`。
 - 路由兜底：`resolveRoutes` 按「显式指定 > 插件配置 `gitProvider`/`gitModel` > 注册顺序里每个 provider 的第一个模型（最多 4 个）」排队，**前一个失败就试下一个**（例如 `deepseek-official` 没有 `DEEPSEEK_API_KEY` 时会立刻失败，自动落到可用的 `deepseek-account`），返回值里带 `tried` 说明试过谁、为什么失败。
+
+## 第三方资源与许可
+
+`plugin/rk-study/vendor/` 里放的都是第三方 MIT 项目，随插件原样分发（未改源码）：
+
+| 资源 | 版本 | 许可 | 用途 |
+| --- | --- | --- | --- |
+| [KaTeX](https://katex.org/) | 0.16.47 | MIT | LaTeX 公式渲染（`katex.min.js` / `katex.min.css` / `fonts/*.woff2`） |
+| [mermaid](https://mermaid.js.org/) | 11.17.2 | MIT | 流程图 / 时序图 / 状态图（`mermaid.min.js`） |
+| [zt-react-milkdown](https://www.npmjs.com/package/zt-react-milkdown) | 0.1.32 | MIT | 所见即所得编辑器（`zt-milkdown/zt-milkdown.js` + `.css`，Milkdown 内核） |
+
+插件自身的开源许可**尚未选定**（仓库里还没有 `LICENSE` 文件），定下来会补在这里。
+
+## 反馈
+
+用着有问题、或者想要什么功能，在 GitHub 上开 [Issue](https://github.com/UnitySirx/dsh-kp-notes/issues) 就行。
