@@ -6,20 +6,20 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=50';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=50';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=50';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=50';
-import { buildNodes, scanHeadings } from './headings.js?v=50';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=50';
-import { parseDocument } from './parse.js?v=50';
-import { pointRegion, rebuildPoint } from './points.js?v=50';
-import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=50';
-import { buildCatalog } from './scan.js?v=50';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=50';
-import { dropUids, ensureUids, moveUid } from './uid.js?v=50';
-import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=50';
-import { readBody, safePath, writeMarkdown } from './write.js?v=50';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=51';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=51';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=51';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=51';
+import { buildNodes, scanHeadings } from './headings.js?v=51';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=51';
+import { parseDocument } from './parse.js?v=51';
+import { pointRegion, rebuildPoint } from './points.js?v=51';
+import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=51';
+import { buildCatalog } from './scan.js?v=51';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=51';
+import { dropUids, ensureUids, moveUid } from './uid.js?v=51';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=51';
+import { readBody, safePath, writeMarkdown } from './write.js?v=51';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -210,12 +210,54 @@ export function apply(ctx, rawConfig) {
 		return data;
 	}
 
+	/* 老笔记补号(不动笔记文件): 小节 / 知识点文件还没有 frontmatter uid 的, 先在号池里按路径登记一个
+	 * (只写学习库配置), 打开画布立刻就有号可用; 该文件下次被插件保存时号会搬进 frontmatter,
+	 * 号池里那条按路径记的账同时摘掉(见 write.js 的 entityTextWithUid)。 */
+	async function withNoteUids(data, signal) {
+		const wanted = { section: [], point: [] };
+		const chapters = (data && data.chapters) || [];
+		for (const chapter of chapters) {
+			for (const section of chapter.sections || []) {
+				if (!section.uid && section.path && safePath(ctx, config, section.path)) {
+					wanted.section.push(section.path);
+				}
+				for (const point of section.points || []) {
+					if (point.uid || !point.path) continue;
+					const base = String(point.path).split('/').pop() || '';
+					/* 一个文件里的行内知识点也带着 path, 只有名字像知识点文件的才发号 */
+					if (classifyFile(base, {}).kind !== 'point') continue;
+					if (safePath(ctx, config, point.path)) wanted.point.push(point.path);
+				}
+			}
+		}
+		const kinds = [['section', wanted.section], ['point', wanted.point]]
+			.filter((item) => item[1].length > 0)
+			.map((item) => [item[0], Array.from(new Set(item[1]))]);
+		if (kinds.length === 0) return data;
+		const lib = await uidLibOf(config, signal);
+		const maps = {};
+		for (const [kind, list] of kinds) maps[kind] = await ensureUids(ctx, lib, kind, list.map((rel) => safePath(ctx, config, rel)));
+		for (const chapter of chapters) {
+			for (const section of chapter.sections || []) {
+				const sabs = section.path ? safePath(ctx, config, section.path) : null;
+				if (!section.uid && maps.section && sabs && maps.section[sabs]) section.uid = maps.section[sabs];
+				for (const point of section.points || []) {
+					if (point.uid || !point.path || !maps.point) continue;
+					const pabs = safePath(ctx, config, point.path);
+					if (pabs && maps.point[pabs]) point.uid = maps.point[pabs];
+				}
+			}
+		}
+		return data;
+	}
+
 	async function loadCatalog(force, signal) {
 		const fresh = cache.data !== null && (force !== true ? Date.now() - cache.at < CACHE_TTL_MS : false);
 		if (fresh) return cache.data;
 		if (cache.pending && force !== true) return cache.pending;
 		const pending = buildCatalog(ctx, config, signal)
 			.then((data) => withChapterUids(data, signal))
+			.then((data) => withNoteUids(data, signal))
 			.then((data) => {
 				cache.data = data;
 				cache.at = Date.now();

@@ -1,8 +1,8 @@
 /* rk-study · host/parse —— 从 host.js 第 403-638 行原样切出 */
-import { FENCE_RE, MAX_POINT_CHARS, QUESTION_PATH_RE } from './constants.js?v=50';
-import { buildNodes, isAnswerTitle, nodeMarkdown, scanHeadings, splitAnswer, splitAnswerBlock, summarize, subtreeEnd, takeOptions } from './headings.js?v=50';
-import { questionBlockNodes, removeQuestionBlock } from './questions.js?v=50';
-import { baseName, classifyFile, collectTags, countWords, numericPrefix, parseFrontmatter, stripInline, stripNumericPrefix } from './util.js?v=50';
+import { FENCE_RE, MAX_POINT_CHARS, QUESTION_PATH_RE } from './constants.js?v=51';
+import { buildNodes, isAnswerTitle, nodeMarkdown, scanHeadings, splitAnswer, splitAnswerBlock, summarize, subtreeEnd, takeOptions } from './headings.js?v=51';
+import { questionBlockNodes, removeQuestionBlock } from './questions.js?v=51';
+import { baseName, classifyFile, collectTags, countWords, numericPrefix, parseFrontmatter, stripInline, stripNumericPrefix } from './util.js?v=51';
 
 /* --------------------------------------------------------------- parsing */
 

@@ -1,8 +1,8 @@
 /* rk-study · host/write —— 从 host.js 第 969-1025 行原样切出 */
-import { MARKDOWN_RE } from './constants.js?v=50';
-import { absPathOf, denyOutsideRoot, insideRoot, writePolicyOf } from './fsguard.js?v=50';
-import { classifyFile, isQuestionStorePath, libraryDirOf, normalizeRelPath, parseFrontmatter } from './util.js?v=50';
-import { adoptUid, takeUid, uidFromText, withUidText } from './uid.js?v=50';
+import { MARKDOWN_RE } from './constants.js?v=51';
+import { absPathOf, denyOutsideRoot, insideRoot, writePolicyOf } from './fsguard.js?v=51';
+import { classifyFile, isQuestionStorePath, libraryDirOf, normalizeRelPath, parseFrontmatter } from './util.js?v=51';
+import { adoptUid, dropUids, takeUid, uidsFor, uidFromText, withUidText } from './uid.js?v=51';
 
 /* ----------------------------------------------------------------- write */
 
@@ -42,7 +42,9 @@ export function readBody(req, limit) {
 
 /**
  * 小节/知识点的身份号写在文件 frontmatter 的 `uid:` 里（0 迁移：号跟着内容走，改标题、挪目录都不丢）。
- * 写盘前保证它有号：文本里没有就看盘上旧文件有没有（前端重建头部时会把它丢掉），都没有才发新号。
+ * 写盘前保证它有号：文本里没有就看盘上旧文件有没有（前端重建头部时会把它丢掉），
+ * 再看扫描时是不是已经按路径在号池里登记过（老笔记不动文件也有号），都没有才发新号；
+ * 号从号池搬进 frontmatter 之后，号池里按路径记的那条账就摘掉（号已经跟着内容走了）。
  * 任何一步失败都只是「这次没补号」，绝不挡住写盘本身。
  */
 async function entityTextWithUid(ctx, config, relPath, abs, content) {
@@ -72,6 +74,11 @@ async function entityTextWithUid(ctx, config, relPath, abs, content) {
 		if (fromDisk !== '') {
 			await adoptUid(ctx, lib, info.kind, fromDisk);
 			return { text: withUidText(text, fromDisk), uid: fromDisk };
+		}
+		const pooled = (await uidsFor(ctx, lib, [abs]))[abs] || '';
+		if (pooled !== '') {
+			await dropUids(ctx, lib, [abs]);
+			return { text: withUidText(text, pooled), uid: pooled };
 		}
 		const fresh = await takeUid(ctx, lib, info.kind);
 		return { text: withUidText(text, fresh), uid: fresh };
