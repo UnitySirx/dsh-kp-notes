@@ -66,6 +66,26 @@ description:
 - 到点后在 PR 页面点 **Ready for review** 即算正式提交；也可以直接让助手调 API 把 draft 转正式（`PATCH /pulls/6525` 传 `draft: false` 需走 GraphQL `markPullRequestReadyForReview`）。
 - PR 正文里 6 项 checkbox 已按实际勾选，只有「仓库满 1 天」留空并注明会自动恢复。
 
+### CI 首轮结果（2026-10-04）
+
+这个仓库的检查是**两段式**，只看第一个绿勾会误判：
+
+| 工作流 | 触发 | 作用 | 我们的结果 |
+| --- | --- | --- | --- |
+| `pr-check.yml` | `pull_request`（fork 安全，**没有 token**） | 格式 / lint / 测试 / 构建 | ✅ 16 步全绿（含 `awesome-lint`、`READMEs match data/plugins`、`Build`） |
+| `pr-gate.yml` | 等 `pr-check` 完成后由 `workflow_run` 触发（有 token） | 跑 `scripts/check-submission.mjs`，**年龄闸门在这里** | ❌ 唯一红项 = 年龄 |
+
+`Submission gate` 的 check-run 原文（标题 `1 entry/entries need changes`）：
+
+```
+https://github.com/UnitySirx/dsh-kp-notes/tree/main/plugin/dsh-kp-notes
+  - repository is 0.6 days old (needs 1) — nothing to do: this check re-runs by itself and
+    should clear in about 9h. No need to resubmit, push, or close and reopen; the age bar
+    is the only thing failing here.
+```
+
+→ 条目内容、`dsh.bundle`、`url`、`category`、描述全部已通过，只差仓库年龄。另外 `pr-guard.yml` / `regate.yml` 里都有 `if (pr.isDraft) continue`，所以草稿状态不会被定时巡检盯上。
+
 ## 三、已经满足的检查项（对照 awesome 的 `scripts/check-submission.mjs`）
 
 | 检查项 | 状态 |
