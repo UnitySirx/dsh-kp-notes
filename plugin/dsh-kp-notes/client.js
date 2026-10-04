@@ -102,6 +102,7 @@ window.__ModuleLoader__.load({
 				useTheme,
 				useGitPanel,
 				useRoots,
+				useEditing,
 				setMermaidTheme,
 				/* 数据层(client/api.js): 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook */
 				baseNameOf,
@@ -1117,376 +1118,19 @@ window.__ModuleLoader__.load({
 				[toggleFold, toggleOpen],
 			);
 
-			const openEditorForSection = useCallback(
-				async (path) => {
-					try {
-						const file = await fetchFile(path);
-						setEditor({ mode: 'edit', path, markdown: file.markdown, title: file.title });
-					} catch (problem) {
-						flash('读取失败：' + ((problem && problem.message) || problem));
-					}
-				},
-				[flash],
-			);
-
-			/* 编辑某道题: 打开可视化表单(选择题 / 案例题), 需要时再跳到原始 markdown */
-			const editQuestion = useCallback(
-				(item, point) => {
-					if (!item) return;
-					const options = (item.options || []).map((option) => ({ text: option.text }));
-					setQuestionDialog({
-						mode: 'edit',
-						pointPath: (point && point.path) || item.path || '',
-						pointTitle: (point && point.title) || '',
-						path: item.path || null,
-						order: item.order || null,
-						kind: options.length >= 2 ? 'choice' : 'case',
-						stem: item.stem || '',
-						options,
-						answerKey: item.answerKey || '',
-						answerText: item.answerText || '',
-						explanation: item.explanation || '',
-					});
-				},
-				[],
-			);
-
-			/* 编辑知识点: 先向宿主取这个知识点的准确标题/标签/正文, 再开弹窗 */
-			const editPoint = useCallback(
-				async (point) => {
-					if (!point) return;
-					const path = String(point.path || '').trim();
-					if (path === '') {
-						flash(t('loadFailed') + '：' + t('pointMissing'));
-						return;
-					}
-					try {
-						const data = await fetchPoint(path, point.title || '');
-						setPointDialog({
-							path: data.path || path,
-							mode: data.mode || 'file',
-							key: point.title || data.title || '',
-							title: data.title || point.title || '',
-							tags: (data.tags || []).join(', '),
-							body: data.body || '',
-						});
-					} catch (problem) {
-						flash(t('loadFailed') + '：' + pointError((problem && problem.message) || problem, t));
-					}
-				},
-				[flash, t],
-			);
-
-			/* 弹窗 -> 宿主: savePoint 只换这一个知识点的标题/标签/正文 */
-			const submitPoint = useCallback(
-				async (form) => {
-					try {
-						const saved = await postAction({
-							action: 'savePoint',
-							path: form.path,
-							key: form.key,
-							title: form.title,
-							body: form.body,
-							tags: form.mode === 'file' ? form.tags : undefined,
-						});
-						flash(t('pointSaved') + ' · ' + pathLabel(saved.path));
-						setPointDialog(null);
-						await reload(true);
-						return { ok: true, path: saved.path };
-					} catch (problem) {
-						return { error: pointError((problem && problem.message) || problem, t) };
-					}
-				},
-				[flash, reload, t],
-			);
-
-			/* 逃生入口: 先存下弹窗里的改动, 再打开原始 markdown 抽屉, 不丢输入 */
-			const rawPoint = useCallback(
-				async (form) => {
-					const target = (pointDialog && pointDialog.path) || form.path;
-					const result = await submitPoint(form);
-					if (result && result.error) return result;
-					await openEditorForSection(target);
-					return { ok: true };
-				},
-				[openEditorForSection, pointDialog, submitPoint],
-			);
-
-			const startNewSection = useCallback((dir) => setEditor({ mode: 'newSection', dir, title: '', markdown: '' }), []);
-			/* 新建章节 = 只输入一个名称, 目录由宿主创建; 改名同理 */
-			const startNewChapter = useCallback(() => setNameDialog({ mode: 'newChapter', dir: 'notes', value: '' }), []);
-			const startRenameChapter = useCallback(
-				(chapter) => setNameDialog({ mode: 'rename', dir: chapter.dir, value: chapter.name || chapter.title }),
-				[],
-			);
-
-			const submitChapterName = useCallback(
-				async (raw) => {
-					const clean = String(raw || '').trim();
-					if (clean === '') {
-						flash('章节名不能为空');
-						return;
-					}
-					const target = nameDialog;
-					if (!target) return;
-					try {
-						if (target.mode === 'newChapter') {
-							const created = await postAction({ action: 'newChapter', parent: target.dir, title: clean });
-							flash('已新建章节 · ' + created.dir);
-						} else {
-							const renamed = await postAction({ action: 'renameChapter', dir: target.dir, title: clean });
-							flash(
-								renamed.unchanged
-									? '章节名没有变化'
-									: '已重命名 · ' + renamed.path + ((renamed.related || []).length > 0 ? '（题目目录同步改名）' : ''),
-							);
-						}
-						setNameDialog(null);
-						await reload(true);
-					} catch (problem) {
-						flash('操作失败：' + ((problem && problem.message) || problem));
-					}
-				},
-				[flash, nameDialog, reload],
-			);
-
-			/* 在知识点下新增一道题: 打开可视化表单 */
-			const addQuestion = useCallback((point) => {
-				if (!point || !point.path) return;
-				setQuestionDialog({
-					mode: 'new',
-					pointPath: point.path,
-					pointTitle: point.title || '',
-					path: null,
-					order: null,
-					kind: 'choice',
-					stem: '',
-					options: [],
-					answerKey: 'A',
-					answerText: '',
-					explanation: '',
-				});
-			}, []);
-
-			/* 表单 -> 宿主: saveQuestion 会重排整份文件的「## 题目 N」 */
-			const submitQuestion = useCallback(
-				async (fields, keepOpen) => {
-					const target = questionDialog;
-					if (!target) return { error: '' };
-					try {
-						const saved = await postAction({
-							action: 'saveQuestion',
-							path: target.path || target.pointPath,
-							order: target.mode === 'edit' ? target.order : undefined,
-							fields,
-						});
-						flash(
-							(saved.created ? '已新建题目文件 · ' : '已保存题目 · ') +
-								pathLabel(saved.path) +
-								'（共 ' +
-								saved.total +
-								' 题）' +
-								(keepOpen ? ' · ' + t('savedNext') : ''),
-						);
-						if (!keepOpen) setQuestionDialog(null);
-						await reload(true);
-						return { path: saved.path, ok: true };
-					} catch (problem) {
-						return { error: questionError((problem && problem.message) || problem, t) };
-					}
-				},
-				[flash, questionDialog, reload, t],
-			);
-
-			/* 逃生入口: 直接编辑这道题所在的 markdown 文件(新题会先存一次再打开) */
-			const rawQuestion = useCallback(
-				async (fields) => {
-					const target = questionDialog;
-					if (!target) return {};
-					if (target.mode === 'edit' && target.path) {
-						setQuestionDialog(null);
-						await openEditorForSection(target.path);
-						return { ok: true };
-					}
-					const result = await submitQuestion(fields, false);
-					if (result && result.error) return result;
-					if (result && result.path) await openEditorForSection(result.path);
-					return result || {};
-				},
-				[openEditorForSection, questionDialog, submitQuestion],
-			);
-
-			const flashError = useCallback(
-				(problem) => flash('操作失败：' + ((problem && problem.message) || problem)),
-				[flash],
-			);
-
-			/* 删除一个笔记文件(小节 / 知识点 / 题目 / 章节说明) */
-			const removeEntry = useCallback(
-				async (relPath) => {
-					try {
-						const removed = await postAction({ action: 'delete', path: relPath });
-						const cascaded = (removed && removed.related) || [];
-						flash(
-							t('movedToBox') +
-								(removed && removed.bucket ? removed.bucket + '/' : '') +
-								' · ' +
-								pathLabel(relPath) +
-								(cascaded.length ? '（' + t('cascade') + ' ×' + cascaded.length + '）' : ''),
-						);
-						setEditor(null);
-						setRoute((prev) => (prev.path === relPath ? { view: 'map' } : prev));
-						await reload(true);
-					} catch (problem) {
-						flash('删除失败：' + ((problem && problem.message) || problem));
-					}
-				},
-				[flash, reload, t],
-			);
-
-			/* 删除整章(目录及其下全部文件) */
-			const removeChapter = useCallback(
-				async (chapter) => {
-					try {
-						const removed = await postAction({ action: 'deleteDir', dir: chapter.dir });
-						const cascaded = (removed && removed.related) || [];
-						flash(
-							t('movedToBox') +
-								(removed && removed.bucket ? removed.bucket + '/' : '') +
-								' · ' +
-								chapter.rel +
-								(cascaded.length ? '（' + t('cascade') + ' ×' + cascaded.length + '）' : ''),
-						);
-						setRoute({ view: 'map' });
-						await reload(true);
-					} catch (problem) {
-						flash('删除失败：' + ((problem && problem.message) || problem));
-					}
-				},
-				[flash, reload, t],
-			);
-
-			/* 从题目/知识点文件里删掉某一道题 */
-			const removeQuestion = useCallback(
-				async (item) => {
-					try {
-						const questionRemoved = await postAction({ action: 'deleteQuestion', path: item.path, order: item.order });
-						flash(t('movedToBox') + (questionRemoved && questionRemoved.bucket ? questionRemoved.bucket + '/' : '') + ' · ' + (item.label || item.title));
-						await reload(true);
-					} catch (problem) {
-						flash('删除失败：' + ((problem && problem.message) || problem));
-					}
-				},
-				[flash, reload, t],
-			);
-			const startNewUnit = useCallback(
-				(mode, chapter, section) =>
-					setEditor({ mode, dir: (chapter && chapter.dir) || '', section: (section && section.order) || 1, title: '', markdown: '' }),
-				[],
-			);
-
-			const submitEditor = useCallback(
-				async ({ value, title }) => {
-					if (!editor) return;
-					const clean = String(title || '').trim();
-					setSaving(true);
-					try {
-						if (editor.mode === 'edit') {
-							await postAction({ action: 'save', path: editor.path, markdown: value });
-							flash(t('saved') + ' · ' + pathLabel(editor.path));
-							setEditor(null);
-						} else if (clean === '') {
-							flash('请先填写标题');
-							setSaving(false);
-							return;
-						} else if (editor.mode === 'newSection') {
-							const created = await postAction({ action: 'newSection', dir: editor.dir, title: clean });
-							flash(t('saved') + ' · ' + created.path);
-							setEditor(null);
-						} else if (editor.mode === 'newPoint') {
-							const created = await postAction({
-								action: 'newPoint',
-								dir: editor.dir,
-								section: editor.section,
-								title: clean,
-							});
-							flash(t('saved') + ' · ' + created.path);
-							setEditor(null);
-						}
-						await reload(true);
-					} catch (problem) {
-						flash('保存失败：' + ((problem && problem.message) || problem));
-					}
-					setSaving(false);
-				},
-				[editor, flash, reload, t],
-			);
-
-			/* 右键菜单的条目: 空白 / 章节卡 / 小节行 三套 */
-			const onBlankContextMenu = useCallback(
-				(event) => {
-					if (!mapReady) return;
-					if (mind) {
-						/* 导图是只读视图: 不给右键菜单(也不弹浏览器菜单) */
-						event.preventDefault();
-						return;
-					}
-					if (level1) {
-						/* 一级画布: 右键只给「新建学习画布」 */
-						event.preventDefault();
-						openMenu(event, [{ id: 'newRoot', label: '＋ ' + t('rootNew'), run: () => openNewRoot() }]);
-						return;
-					}
-					const target = event.target;
-					if (target.closest && (target.closest('.rk-chapter') || target.closest('.rk-rootcard'))) return;
-					if (target.closest && target.closest('.rk-btn, .rk-input, input, textarea')) return;
-					event.preventDefault();
-					openMenu(event, [
-						{ id: 'newChapter', label: '＋ ' + t('newChapter'), run: () => startNewChapter() },
-						{ id: 'refresh', label: t('refresh'), run: () => reload(true) },
-						{ id: 'fit', label: t('fit'), run: () => fitView() },
-					]);
-				},
-				[mapReady, openMenu, t, startNewChapter, reload, fitView],
-			);
-			const onCardContextMenu = useCallback(
-				(event, chapter, section) => {
-					if (!chapter) return;
-					const target = event.target;
-					if (target.closest && target.closest('.rk-btn, .rk-input, input, textarea')) return;
-					event.preventDefault();
-					event.stopPropagation();
-					if (section) {
-						openMenu(event, [
-							{ id: 'openSection', label: t('openSection'), run: () => openSection(section.path) },
-							{ id: 'editSection', label: t('editSection'), run: () => openEditorForSection(section.path) },
-							{ sep: true },
-							{
-								id: 'delSection',
-								label: t('delSection'),
-								danger: true,
-								confirm: t('delConfirm') + ' ' + section.title,
-								run: () => removeEntry(section.path),
-							},
-						]);
-						return;
-					}
-					const items = [{ id: 'newSection', label: '＋ ' + t('newSection'), run: () => startNewSection(chapter.dir) }];
-					if (chapter.dir !== '') {
-						items.push({ id: 'rename', label: t('rename'), run: () => startRenameChapter(chapter) });
-						items.push({ sep: true });
-						items.push({
-							id: 'delChapter',
-							label: t('delChapter'),
-							danger: true,
-							confirm: t('delConfirm') + ' ' + chapter.title,
-							run: () => removeChapter(chapter),
-						});
-					}
-					openMenu(event, items);
-				},
-				[openMenu, t, openSection, openEditorForSection, removeEntry, startNewSection, startRenameChapter, removeChapter],
-			);
+			/* 打开 / 编辑 / 新建 / 删除 那一层都在 client/editing.js 里 */
+			const {
+				openEditorForSection, editQuestion, editPoint, submitPoint, rawPoint,
+				startNewSection, startNewChapter, startRenameChapter, submitChapterName,
+				addQuestion, submitQuestion, rawQuestion, flashError,
+				removeEntry, removeChapter, removeQuestion, startNewUnit, submitEditor,
+				onBlankContextMenu, onCardContextMenu,
+			} = useEditing({
+				t, flash, reload, pathLabel, pointError, questionError,
+				openMenu, openNewRoot, fitView, openSection, mapReady, mind, level1,
+				setRoute, setSaving, editor, setEditor,
+				nameDialog, setNameDialog, pointDialog, setPointDialog, questionDialog, setQuestionDialog,
+			});
 			const renderMenu = () => {
 				if (!menu) return null;
 				const confirming = menu.confirming;
@@ -2415,12 +2059,12 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 151;
-		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
+		const MODULE_VERSION = 152;
+		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
 		async function apply(ctx) {
-			const [api, store, theme, gitPanel, rootsMod, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
+			const [api, store, theme, gitPanel, rootsMod, editingMod, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
 			/* api: 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook(见 client/api.js) */
 			const apiMods = api.createApi({ React });
 			/* store: 本机 localStorage + 学习库配置文件(<库>/.config/rk-study.json)的读写(见 client/store.js) */
@@ -2438,6 +2082,8 @@ window.__ModuleLoader__.load({
 			const gitPanelMods = gitPanel.createGitPanel({ React, api: apiMods });
 			/* roots: 学习画布目录(新建/改名/移出列表)与导入学习库(见 client/roots.js) */
 			const rootsMods = rootsMod.createRoots({ React, api: apiMods });
+			/* editing: 打开/编辑/新建/删除(见 client/editing.js) */
+			const editingMods = editingMod.createEditing({ React, api: apiMods });
 			const utilMods = util.createUtil();
 			const vendorMods = vendor.createVendor({ React });
 			/* milkdown: 把 vendor 里的 zt-react-milkdown 包跑起来(编辑界面用); 加载失败由调用方回退 textarea */
@@ -2458,7 +2104,7 @@ window.__ModuleLoader__.load({
 			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods });
 			/* mindmap: 思维导图模式(左→右的章节 / 小节 / 知识点树), 知识点节点里渲染整篇 markdown 正文 */
 			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody });
-			const mods = Object.assign({}, apiMods, storeMods, themeMods, gitPanelMods, rootsMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
+			const mods = Object.assign({}, apiMods, storeMods, themeMods, gitPanelMods, rootsMods, editingMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
 
 			ensureStyles(ctx, cssMods.CSS);
 			ctx.effect(() => ctx.locale.register(NS, { zh: dictMods.zh, en: dictMods.en }), 'rk-study: dictionaries');
