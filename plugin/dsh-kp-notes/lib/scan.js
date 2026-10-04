@@ -1,8 +1,8 @@
 /* rk-study · host/scan —— 从 host.js 第 640-967 行原样切出 */
-import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES } from './constants.js?v=61';
-import { parseDocument } from './parse.js?v=61';
-import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=61';
-import { uidFromText } from './uid.js?v=61';
+import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES } from './constants.js?v=62';
+import { parseDocument } from './parse.js?v=62';
+import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=62';
+import { uidFromText } from './uid.js?v=62';
 
 /* ------------------------------------------------------------------ scan */
 

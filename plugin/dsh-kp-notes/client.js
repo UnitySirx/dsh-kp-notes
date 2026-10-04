@@ -98,6 +98,7 @@ window.__ModuleLoader__.load({
 				MindMap,
 				buildMindmapTree,
 				layoutMindmap,
+				useStore,
 				/* 数据层(client/api.js): 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook */
 				baseNameOf,
 				defaultGitMessage,
@@ -127,8 +128,39 @@ window.__ModuleLoader__.load({
 				writeRoots,
 			} = props.mods;
 			const { data, error, loading, reload } = useCatalog();
+			/* 本机 localStorage 与学习库配置的持久化都在 client/store.js 里 */
+			const {
+				roots,
+				setRoots,
+				rootStats,
+				setRootStats,
+				rootTick,
+				setRootTick,
+				isRemoved,
+				markRemoved,
+				unmarkRemoved,
+				libRev,
+				setLibRev,
+				libTick,
+				setLibTick,
+				libZoomRef,
+				libReadyRef,
+				libPatchesRef,
+				libLoadRef,
+				hadLocalUiRef,
+				saveLib,
+				saveRoots,
+				flushLib,
+				fontScale,
+				setFontScale,
+				zoomRef,
+				stepFont,
+				toast,
+				setToast,
+				flash,
+				loadRootStats,
+			} = useStore();
 			/* 一级画布: 多个「学习画布」(各自一个根目录); rootPath 为空 = 停在全部画布 */
-			const [roots, setRoots] = useState(() => readRoots());
 			const [rootPath, setRootPath] = useState(() => getActiveRoot());
 			/* 一级画布上 git 查的是整个学习库(库目录 + scope=all), 画布上查的是这张画布自己的 notes/ */
 			const libPath = readDefaultRoot();
@@ -138,8 +170,6 @@ window.__ModuleLoader__.load({
 			const gitScope = level1 ? 'all' : 'notes';
 			const { data: gitData, error: gitError, reload: gitReload } = useGit(gitRoot !== '', gitRoot, gitScope);
 			const [rootInfo, setRootInfo] = useState(null);
-			const [rootStats, setRootStats] = useState({});
-			const [rootTick, setRootTick] = useState(0);
 			const [rootDialog, setRootDialog] = useState(null);
 			const [libraryDialog, setLibraryDialog] = useState(null);
 			const [binDialog, setBinDialog] = useState(null); /* 回收站面板: { busy, data, error } */
@@ -258,94 +288,6 @@ window.__ModuleLoader__.load({
 				}
 			}
 
-			/* 设置一律只留在浏览器 localStorage 里(画布目录里不写配置文件):
-			 * 画布列表 / 上次停在哪张画布 / 移出列表的墓碑 / 字号 / 配色 / 画布还是导图 / 逐项配色 / 导图折叠。
-			 * 视野位置与弹窗位置属于临时状态, 不落盘。 */
-
-			/* 「移出列表」的画布 = 墓碑: 扫盘 / 重新扫描 / 导入都不会再加回来; 磁盘一个文件都不动。
-			 * 在同一个路径重新建画布、或重新导入这个库时解除。 */
-			const removedRef = useRef(null);
-			if (removedRef.current === null) removedRef.current = readRemoved();
-			const isRemoved = (path) => removedRef.current.indexOf(path) >= 0;
-			const markRemoved = (path) => {
-				if (isRemoved(path)) return;
-				removedRef.current = removedRef.current.concat([path]);
-				writeRemoved(removedRef.current);
-				saveLib({ removed: removedRef.current });
-			};
-			const unmarkRemoved = (path) => {
-				if (!isRemoved(path)) return;
-				removedRef.current = removedRef.current.filter((item) => item !== path);
-				writeRemoved(removedRef.current);
-				saveLib({ removed: removedRef.current });
-			};
-			/* 学习库的配置(<库>/.config/rk-study.json): 存视野缩放 / 字号 / 配色 / 画布列表 / 移出列表。
-			 * localStorage 照写一份(打开就能立刻看到), 这个文件负责「换浏览器 / 换机器 / 换人接手时还在」。
-			 * 写是 500ms 合并一次的补丁(一次操作只落一次盘); 还没读到这个文件时先不写, 免得用默认值把它盖掉。 */
-			const [libRev, setLibRev] = useState(0);
-			const [libTick, setLibTick] = useState(0);
-			const libZoomRef = useRef(null);
-			const libReadyRef = useRef(false);
-			const libPatchesRef = useRef({});
-			const libTimerRef = useRef(0);
-			const toastTimerRef = useRef(0);
-			const libLoadRef = useRef(null);
-			/* 本机已经存过哪些外观设置: 存过就以本机为准(同一个人的即时状态), 没存过(换台机器)才用文件里的 */
-			const hadLocalUiRef = useRef(null);
-			if (hadLocalUiRef.current === null) {
-				let font = null;
-				let look = null;
-				let item = null;
-				let mode = null;
-				try {
-					font = window.localStorage.getItem(FONT_KEY);
-					look = window.localStorage.getItem(SKIN_KEY);
-					item = window.localStorage.getItem(ITEM_KEY);
-					mode = window.localStorage.getItem(THEME_KEY);
-				} catch (problem) {
-					/* 存储不可用 ⇒ 当成本地没有 */
-				}
-				hadLocalUiRef.current = { fontScale: font !== null, skin: look !== null, cardColors: item !== null, theme: mode !== null };
-			}
-			const flushLib = useCallback(() => {
-				libTimerRef.current = 0;
-				const lib = readDefaultRoot();
-				const patch = libPatchesRef.current;
-				libPatchesRef.current = {};
-				if (!lib || !libReadyRef.current || Object.keys(patch).length === 0) return;
-				postLibConfig(lib, patch).catch(() => {
-					/* 写不动就算了, 本机 localStorage 照样能用 */
-				});
-			}, []);
-			/* 卸载时把还没发的库配置写入取消掉, 免得插件停用后还发一个 POST /rk-study/config */
-			useEffect(
-				() => () => {
-					if (libTimerRef.current) {
-						window.clearTimeout(libTimerRef.current);
-						libTimerRef.current = 0;
-					}
-				},
-				[],
-			);
-			const saveLib = useCallback((patch) => {
-				if (!libReadyRef.current) return; /* 还没读到库配置: 先别用默认值把它盖掉 */
-				const acc = libPatchesRef.current;
-				const incoming = patch || {};
-				for (const key of Object.keys(incoming)) {
-					const value = incoming[key];
-					const plain = value && typeof value === 'object' && !Array.isArray(value);
-					const base = plain && acc[key] && typeof acc[key] === 'object' && !Array.isArray(acc[key]);
-					acc[key] = base ? { ...acc[key], ...value } : value;
-				}
-				if (Object.keys(acc).length === 0) return;
-				if (libTimerRef.current) return;
-				libTimerRef.current = window.setTimeout(flushLib, 500);
-			}, [flushLib]);
-			/* 画布列表变了: localStorage 与学习库的配置一起写(canvases) */
-			const saveRoots = useCallback((list) => {
-				writeRoots(list);
-				saveLib({ canvases: list });
-			}, [saveLib]);
 
 			const [gitOpen, setGitOpen] = useState(false);
 			const [gitBusy, setGitBusy] = useState(null);
@@ -370,33 +312,6 @@ window.__ModuleLoader__.load({
 			const [pointDialog, setPointDialog] = useState(null);
 			const [questionDialog, setQuestionDialog] = useState(null);
 			const [saving, setSaving] = useState(false);
-			const [toast, setToast] = useState(null);
-			/* 字号: 根节点用 zoom 等比放大/缩小, 布局与画布一起变, 不需要改上百条 px 样式 */
-			const [fontScale, setFontScale] = useState(() => {
-				try {
-					const saved = Number(window.localStorage.getItem(FONT_KEY));
-					return FONT_STEPS.indexOf(saved) >= 0 ? saved : 100;
-				} catch (problem) {
-					return 100;
-				}
-			});
-			const zoomRef = useRef(1);
-			zoomRef.current = fontScale / 100;
-			useEffect(() => {
-				try {
-					window.localStorage.setItem(FONT_KEY, String(fontScale));
-				} catch (problem) {
-					/* 存不上就算了, 不影响使用 */
-				}
-				saveLib({ ui: { fontScale } });
-			}, [fontScale, libTick, saveLib]);
-			const stepFont = useCallback((direction) => {
-				setFontScale((value) => {
-					const at = FONT_STEPS.indexOf(value);
-					if (at < 0) return 100;
-					return FONT_STEPS[Math.max(0, Math.min(FONT_STEPS.length - 1, at + direction))];
-				});
-			}, []);
 			/* 配色: 参考 Material Design 色板, 点色块即换(整套变量换掉, 布局不动) */
 			const [skin, setSkin] = useState(() => {
 				try {
@@ -770,21 +685,6 @@ window.__ModuleLoader__.load({
 				return () => window.removeEventListener('keydown', onKey, true);
 			}, [focused]);
 
-			const flash = useCallback((message) => {
-				setToast(message);
-				if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-				toastTimerRef.current = window.setTimeout(() => {
-					toastTimerRef.current = 0;
-					setToast(null);
-				}, 2400);
-			}, []);
-			useEffect(
-				() => () => {
-					if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-					toastTimerRef.current = 0;
-				},
-				[],
-			);
 			/* ---- 一级画布(多学习画布) ---- */
 
 			/* 换画布: 记住当前根目录(只给本次会话的请求用), 回到画布视图, 并让目录立刻重拉一次。
@@ -802,24 +702,6 @@ window.__ModuleLoader__.load({
 			}, [rootPath, reload]);
 
 			/* 每个画布卡片的统计: 各带自己的 root 读一次目录(host 的缓存是按 root 分桶的) */
-			const loadRootStats = useCallback((list) => {
-				Promise.all(
-					list.map(async (entry) => {
-						try {
-							const data = await fetchCatalogOf(entry.path);
-							return { path: entry.path, stats: (data && data.stats) || null };
-						} catch {
-							return { path: entry.path, stats: null };
-						}
-					}),
-				).then((rows) => {
-					const next = {};
-					rows.forEach((row) => {
-						if (row) next[row.path] = row.stats;
-					});
-					setRootStats(next);
-				});
-			}, []);
 
 			/* 停在全部画布时: 问 host 要默认根目录 / 建议父目录, 把默认画布并进列表, 再逐个读统计 */
 			useEffect(() => {
@@ -2971,14 +2853,21 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 147;
-		const CLIENT_MODULES = ['api', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
+		const MODULE_VERSION = 148;
+		const CLIENT_MODULES = ['api', 'store', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
 		async function apply(ctx) {
-			const [api, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
+			const [api, store, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
 			/* api: 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook(见 client/api.js) */
 			const apiMods = api.createApi({ React });
+			/* store: 本机 localStorage + 学习库配置文件(<库>/.config/rk-study.json)的读写(见 client/store.js) */
+			const storeMods = store.createStore({
+				React,
+				api: apiMods,
+				FONT_STEPS,
+				KEYS: { FONT_KEY, SKIN_KEY, ITEM_KEY, THEME_KEY },
+			});
 			const dictMods = dict.createDict();
 			const cssMods = css.createCss();
 			const utilMods = util.createUtil();
@@ -3001,7 +2890,7 @@ window.__ModuleLoader__.load({
 			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods });
 			/* mindmap: 思维导图模式(左→右的章节 / 小节 / 知识点树), 知识点节点里渲染整篇 markdown 正文 */
 			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody });
-			const mods = Object.assign({}, apiMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
+			const mods = Object.assign({}, apiMods, storeMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
 
 			ensureStyles(ctx, cssMods.CSS);
 			ctx.effect(() => ctx.locale.register(NS, { zh: dictMods.zh, en: dictMods.en }), 'rk-study: dictionaries');
