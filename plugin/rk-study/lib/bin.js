@@ -14,8 +14,8 @@
  * 恢复时按 box 找回它属于哪个目录。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs';
-import { removeBoxFor } from './delete.js?v=55';
-import { adoptUids } from './uid.js?v=55';
+import { removeBoxFor } from './delete.js?v=56';
+import { adoptUids } from './uid.js?v=56';
 
 const REMOVE_DIR = '.remove';
 const MAX_BUCKETS = 200;
