@@ -457,8 +457,8 @@ D. 非风险点
 | --- | --- |
 | `plugin/dsh-kp-notes/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
 | `plugin/dsh-kp-notes/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
-| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（2777 行，含回收站面板）；数据层 / 持久化 / 配色主题分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` |
-| `plugin/dsh-kp-notes/client/*.js` | Client 半的实现，按职责拆成 14 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
+| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（2701 行，含回收站面板）；数据层 / 持久化 / 配色主题 / Git 面板分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` |
+| `plugin/dsh-kp-notes/client/*.js` | Client 半的实现，按职责拆成 15 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
 | `plugin/dsh-kp-notes/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
 | `plugin/dsh-kp-notes/package.json` | 包清单（`dsh.bundle.patch`、`dsh.client`、图标） |
 | `plugin/dsh-kp-notes/cordis.patch.yml` | 安装补丁与配置：`root`（扫描根目录）、`exclude`（忽略目录） |
@@ -487,10 +487,10 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**两个版本号（`?v=N` 与 `client.js` 的 `MODULE_VERSION`）要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=63）
-> sed -i '' 's/?v=62/?v=63/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=64）
+> sed -i '' 's/?v=63/?v=64/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
 > # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 147）
-> sed -i '' 's/MODULE_VERSION = 148;/MODULE_VERSION = 149;/' plugin/dsh-kp-notes/client.js
+> sed -i '' 's/MODULE_VERSION = 149;/MODULE_VERSION = 150;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
@@ -506,6 +506,7 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 | `client/api.js` | 397 | 数据层：宿主路由的 fetch/post 包装（画布目录、roots、库配置、`state`、git）+ `useCatalog` / `useGit` 两个轮询 hook + `activeRoot`（只活在本页面会话的当前根目录，面板通过 `getActiveRoot()` / `setActiveRoot()` 读写） | React |
 | `client/store.js` | 211 | 持久化 + 本机状态：画布列表与统计（`roots` / `rootStats`）、「移出列表」墓碑（`isRemoved` / `markRemoved` / `unmarkRemoved`）、学习库配置的 500ms 合并写盘（`saveLib` / `saveRoots` / `flushLib`）、字号（`fontScale` / `stepFont` / `zoomRef`）、闪信（`flash`）；`useStore()` 把这一整包一次性返回给面板，函数名与原来一致 | React、api |
 | `client/theme.js` | 176 | 配色与主题：配色皮肤（`skin` / `skinList` / `skinHex`）、主题（`theme`：插件配色 / 跟随宿主明暗，`follow` / `hostDark` / `mdTheme`）、卡片各一色（`cardColors`）；跟随主题时把宿主 brand 色搬进 `--rk-a1..a3`，主题变化用 `MutationObserver` 跟住，三样都同时写 localStorage 与库配置 | React、store |
+| `client/git.js` | 109 | Git 提交面板的状态与动作：未提交改动的角标数字（`gitPending` / `gitOutside`）、提交（可选顺手推送）/ 仅推送 / 拉取、让模型写候选 commit message（`gitAi`） | React、api |
 | `client/vendor.js` | 282 | KaTeX / mermaid 按需加载、公式与流程图组件（流程图配色跟着主题走，换主题自动重画） | React |
 | `client/md.js` | 285 | markdown 渲染器（表格 / 引用 / 代码 / 公式 / 流程图）+ 实时预览 | React、vendor |
 | `client/cards.js` | 450 | 章节卡 / 知识点卡 / 答案遮挡 / 删除按钮 / 侧栏图标；**`renderPointBody`**（引子 + 小知识点分组，详情面板与思维导图共用） | React、md、util |

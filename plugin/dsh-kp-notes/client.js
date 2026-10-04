@@ -100,6 +100,7 @@ window.__ModuleLoader__.load({
 				layoutMindmap,
 				useStore,
 				useTheme,
+				useGitPanel,
 				setMermaidTheme,
 				/* 数据层(client/api.js): 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook */
 				baseNameOf,
@@ -176,7 +177,12 @@ window.__ModuleLoader__.load({
 			/* Git 提交统一挂在根节点画布(一级画布)上: 目标根 = 学习库目录, 范围 = 全部 ⇒ 一次提交整个库 */
 			const gitRoot = level1 ? libPath : rootPath;
 			const gitScope = level1 ? 'all' : 'notes';
-			const { data: gitData, error: gitError, reload: gitReload } = useGit(gitRoot !== '', gitRoot, gitScope);
+			/* Git 提交面板的状态与动作都在 client/git.js 里 */
+			const {
+				gitData, gitError, gitReload, gitCounts, gitPending, gitOutside,
+				gitOpen, setGitOpen, gitBusy, gitResult, gitForm, setGitForm, gitAi, setGitAi,
+				openGit, generateGitMessage, submitGit, pullGit, pushOnlyGit,
+			} = useGitPanel({ t, gitRoot, gitScope, level1, reload, flash, setRootTick });
 			const [rootInfo, setRootInfo] = useState(null);
 			const [rootDialog, setRootDialog] = useState(null);
 			const [libraryDialog, setLibraryDialog] = useState(null);
@@ -297,11 +303,6 @@ window.__ModuleLoader__.load({
 			}
 
 
-			const [gitOpen, setGitOpen] = useState(false);
-			const [gitBusy, setGitBusy] = useState(null);
-			const [gitResult, setGitResult] = useState(null);
-			const [gitForm, setGitForm] = useState({ scope: 'notes', message: '' });
-			const [gitAi, setGitAi] = useState({ busy: false, candidates: [], error: null });
 			const [route, setRoute] = useState({ view: 'map' });
 			const [query, setQuery] = useState('');
 			const [view, setView] = useState({ x: 26, y: 22, scale: 1 });
@@ -844,88 +845,9 @@ window.__ModuleLoader__.load({
 
 			const catalog = data;
 			const stats = (catalog && catalog.stats) || { chapters: 0, sections: 0, points: 0, examples: 0, words: 0 };
-			const gitCounts = (gitData && gitData.counts) || { plugin: 0, notes: 0, other: 0, total: 0 };
-			/* 角标: 一级画布 = 整个学习库的未提交改动; 画布 = 这张画布 notes/ 范围内的改动 */
-			const gitPending = (gitData && (typeof gitData.scopeTotal === 'number' ? gitData.scopeTotal : (level1 ? gitCounts.total : gitCounts.notes))) || 0;
-			const gitOutside = Math.max(0, gitCounts.total - gitPending);
 			/* 画布挂在本学习库下时, Git 提交只出现在一级画布(一次提交整个库); 自带根目录的画布保留自己的入口 */
 			const gitInLibrary = !!(libPath && rootPath && (rootPath === libPath || rootPath.indexOf(libPath + '/') === 0));
 			const showGit = !!gitData && (level1 || !gitInLibrary);
-			const openGit = useCallback(() => {
-				setGitResult(null);
-				setGitAi({ busy: false, candidates: [], error: null });
-				setGitForm({ scope: gitScope, message: defaultGitMessage(t, gitData, gitScope) });
-				setGitOpen(true);
-				gitReload(true);
-			}, [gitData, gitReload, t, gitScope]);
-			/* 让模型读一遍改动清单, 给几条候选 commit message(第 1 条自动填进去) */
-			const generateGitMessage = useCallback(async () => {
-				setGitAi({ busy: true, candidates: [], error: null });
-				try {
-					const data = await postGit({ action: 'message', scope: gitScope }, gitRoot);
-					const candidates = (data && data.candidates) || [];
-					setGitAi({ busy: false, candidates, error: data && data.ok === false ? data.message || data.error || 'ai-failed' : null });
-					if (candidates.length > 0) setGitForm((form) => Object.assign({}, form, { message: candidates[0] }));
-				} catch (error) {
-					setGitAi({ busy: false, candidates: [], error: (error && error.message) || String(error) });
-				}
-			}, [gitScope]);
-			const submitGit = useCallback(
-				async (push) => {
-					setGitBusy(push === true ? 'push' : 'commit');
-					setGitResult(null);
-					try {
-						const data = await postGit({ action: 'commit', message: gitForm.message.trim(), scope: gitScope, push: push === true }, gitRoot);
-						setGitResult({ ok: data.ok === true, data });
-						if (data.ok === true) flash(data.committed === 0 && data.pushed ? t('gitPushed') : t('gitCommitted') + (data.hash ? ' · ' + data.hash : '') + (data.pushed ? ' · ' + t('gitPushed') : ''));
-						/* 提交时顺手合并过远程更新: 磁盘上的笔记变了, 让列表重扫一遍 */
-						if (data.ok === true && data.pull && data.pull.skipped !== true && data.pull.upToDate !== true) {
-							setRootTick((value) => value + 1);
-							if (!level1) reload(true);
-						}
-					} catch (error) {
-						setGitResult({ ok: false, error: (error && error.message) || String(error) });
-					} finally {
-						setGitBusy(null);
-						gitReload(true);
-					}
-				},
-				[flash, gitForm.message, gitReload, level1, reload, t, gitScope],
-			);
-			/* 拉取: 不提交, 只把远程更新 fetch+merge 下来(冲突保留给用户解决), 拉完重扫画布 */
-			const pullGit = useCallback(async () => {
-				setGitBusy('pull');
-				setGitResult(null);
-				try {
-					const data = await postGit({ action: 'pull' }, gitRoot);
-					setGitResult({ ok: data.ok === true, data });
-					if (data.ok === true) {
-						flash(data.upToDate === true ? t('gitUpToDate') : t('gitPulled'));
-						setRootTick((value) => value + 1);
-						if (!level1) await reload(true);
-					}
-				} catch (error) {
-					setGitResult({ ok: false, error: (error && error.message) || String(error) });
-				} finally {
-					setGitBusy(null);
-					gitReload(true);
-				}
-			}, [flash, gitReload, level1, reload, t]);
-			/* 仅推送: 不提交, 直接把本地已有的提交推到远程 */
-			const pushOnlyGit = useCallback(async () => {
-				setGitBusy('pushonly');
-				setGitResult(null);
-				try {
-					const data = await postGit({ action: 'push' }, gitRoot);
-					setGitResult({ ok: data.ok === true, data });
-					if (data.ok === true) flash(t('gitPushed'));
-				} catch (error) {
-					setGitResult({ ok: false, error: (error && error.message) || String(error) });
-				} finally {
-					setGitBusy(null);
-					gitReload(true);
-				}
-			}, [flash, gitReload, t]);
 			const current = route.view === 'section' || route.view === 'point' ? findSection(catalog, route.path) : null;
 			const currentPoint = current && route.pointId ? findPoint(current.section.points, route.pointId) : null;
 			const detailOpen = route.view === 'section' || route.view === 'point';
@@ -2709,12 +2631,12 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 149;
-		const CLIENT_MODULES = ['api', 'store', 'theme', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
+		const MODULE_VERSION = 150;
+		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
 		async function apply(ctx) {
-			const [api, store, theme, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
+			const [api, store, theme, gitPanel, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
 			/* api: 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook(见 client/api.js) */
 			const apiMods = api.createApi({ React });
 			/* store: 本机 localStorage + 学习库配置文件(<库>/.config/rk-study.json)的读写(见 client/store.js) */
@@ -2728,6 +2650,8 @@ window.__ModuleLoader__.load({
 			const cssMods = css.createCss();
 			/* theme: 配色 / 主题 / 跟随宿主明暗 / 卡片各一色(见 client/theme.js) */
 			const themeMods = theme.createTheme({ React, KEYS: { FONT_KEY, SKIN_KEY, ITEM_KEY, THEME_KEY }, SKINS: cssMods.SKINS });
+			/* git: 提交 / 仅推送 / 拉取 / 模型写 commit message(见 client/git.js) */
+			const gitPanelMods = gitPanel.createGitPanel({ React, api: apiMods });
 			const utilMods = util.createUtil();
 			const vendorMods = vendor.createVendor({ React });
 			/* milkdown: 把 vendor 里的 zt-react-milkdown 包跑起来(编辑界面用); 加载失败由调用方回退 textarea */
@@ -2748,7 +2672,7 @@ window.__ModuleLoader__.load({
 			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods });
 			/* mindmap: 思维导图模式(左→右的章节 / 小节 / 知识点树), 知识点节点里渲染整篇 markdown 正文 */
 			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody });
-			const mods = Object.assign({}, apiMods, storeMods, themeMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
+			const mods = Object.assign({}, apiMods, storeMods, themeMods, gitPanelMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
 
 			ensureStyles(ctx, cssMods.CSS);
 			ctx.effect(() => ctx.locale.register(NS, { zh: dictMods.zh, en: dictMods.en }), 'rk-study: dictionaries');
