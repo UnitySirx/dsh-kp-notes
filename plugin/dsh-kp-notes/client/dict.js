@@ -322,7 +322,7 @@ export function createDict(deps) {
 
 	const en = {
 		panel: 'Architect Notes',
-		title: 'System Architect · Study Canvas',
+		title: 'Knowledge Point Notes · Study Canvas',
 		subtitle: 'folder = chapter · file = section · knowledge points + questions',
 		search: 'Search knowledge points, sections, tags…',
 		all: 'All',
