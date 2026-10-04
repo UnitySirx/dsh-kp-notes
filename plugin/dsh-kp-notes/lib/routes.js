@@ -6,21 +6,21 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=64';
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=64';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=64';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=64';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=64';
-import { buildNodes, scanHeadings } from './headings.js?v=64';
-import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=64';
-import { parseDocument } from './parse.js?v=64';
-import { pointRegion, rebuildPoint } from './points.js?v=64';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=64';
-import { buildCatalog } from './scan.js?v=64';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=64';
-import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=64';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=64';
-import { readBody, safePath, writeMarkdown } from './write.js?v=64';
+import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=65';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=65';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=65';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=65';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=65';
+import { buildNodes, scanHeadings } from './headings.js?v=65';
+import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=65';
+import { parseDocument } from './parse.js?v=65';
+import { pointRegion, rebuildPoint } from './points.js?v=65';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=65';
+import { buildCatalog } from './scan.js?v=65';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=65';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=65';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=65';
+import { readBody, safePath, writeMarkdown } from './write.js?v=65';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
