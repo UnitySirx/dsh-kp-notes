@@ -303,15 +303,16 @@ D. 非风险点
 
 ### 回收站（工具条上的 `♻ 回收站`：把删掉的东西搬回来）
 
-上面那些「删除」都不真删，东西都在当前根目录的 `.remove/<日期桶>/` 里 —— 工具条上的 **`♻ 回收站`** 就是它的界面：一级画布（多个学习画布）那一层的回收站列的是**被「移出列表」的画布**，走进某张画布之后的回收站列的是**这张画布删掉的章节 / 小节 / 知识点 / 题目**（题目是内容级删除，存的是 `.removed-<题号>.md` 片段）。
+上面那些「删除」都不真删，东西都在 `.remove/<日期桶>/` 里 —— 工具条上的 **`♻ 回收站`** 就是它的界面，而且**只有两层有它**：
 
-学习画布可以散在不同目录里（每张画布的 `.remove` 就在它自己父目录下），所以一级画布那一层的回收站不是一个目录一只，而是**把当前根、它上一层、以及画布列表里每张画布的目录各自上一层都算上**，把这些 `.remove` 里的桶合起来按日期排（`listAllBins`）；当来源不止一只目录时，桶头会多一行 **`来自 <目录>`**，免得两个目录下的同名桶看混。恢复时按这条记录**自己那只桶**所属的目录落回原位（号也认那只目录的号池），所以从一级画布那层恢复被移出的画布，落点就是它原来待的那个父目录。
+- **根画布（还没进任何画布）**：列的是**被「移出列表」的整只画布**。画布目录躺在它**上一层目录**的 `.remove` 里（学习画布可以散在不同目录），所以这层不是一个目录一只，而是**把当前根、它上一层、以及画布列表里每张画布的目录各自上一层都算上**（`listRootBins`），把这些 `.remove` 里的桶合起来按日期排；当来源不止一只目录时，桶头会多一行 **`来自 <目录>`**，免得两个目录下的同名桶看混。恢复时按这条记录**自己那只桶**所属的目录落回原位（号也认那只目录的号池）；恢复好的画布还会自动从「移出列表」的墓碑里放出来、重新登记进画布列表。
+- **一级画布（走进某张画布之后）**：只看这张画布自己的 `.remove`，并把里面的记录**按章并成一条**（`listChapterBin`）—— `01-第一章` 一条，点 **`↩ 恢复整章`** 就把这一章（含里面被删过的小节 / 知识点 / 题目片段）整段合并回去（`restoreChapter`）。理由是你删东西时想找回来的通常是「那一章」本身，而不是散在几个日期桶里的同几个文件；同一章在不同日期删过几次，也都并到这一条上。
 
-面板里每个桶一行，桶名就是删除那天的日期（同一天删多次会看到 `20261004`、`20261004-2`…，新的排在上面），每条记录显示**它原来的路径**和**它自己的编号**（`h0007` / `s0012` / `p0031`…），右边一个 **`↩ 恢复`**。恢复就是把它 `rename` 回原位，**编号跟着回去**（恢复的是原身份，不是新号）；被移出的画布恢复后还会自动从「移出列表」的墓碑里放出来，重新出现在画布列表里。
+面板里每一条显示**它原来的路径**（按章聚合时就是章名）和**它自己的编号**（`h0007` / `s0012` / `p0031`…），右边一个 **`↩ 恢复`**。恢复就是把它 `rename` 回原位，**编号跟着回去**（恢复的是原身份，不是新号）。
 
-题目是内容级删除，桶里存的是**一段片段**（`01-01-知识点.md.removed-2.md`，带一行注释记着它从哪个文件、什么时候删的）；恢复它就是把这个片段文件搬回**原位旁边**（原文件不动），要回到题库里还得自己把内容贴回知识点文件 —— 插件不替你把题目插回去，免得序号 / 编号对不上。片段也带着它那道题的号，面板上看得见 `q0007`。
+题目是内容级删除，桶里存的是**一段片段**（`questions/01-第一章/01-01-知识点.md.removed-2.md`，带一行注释记着它从哪个文件、什么时候删的）。题目仓库 `questions/<章>/` 与笔记目录 `notes/<章>/` 是平行结构，所以在面板上它们**并进同一章**，点「恢复整章」时一起搬回来；搬回来只是把这个片段文件放回**原位旁边**（原文件不动），要回到题库里还得自己把内容贴回知识点文件 —— 插件不替你把题目插回去，免得序号 / 编号对不上。片段也带着它那道题的号，面板上看得见 `q0007`。
 
-**原位已经有同名的东西时一律拒绝，绝不覆盖**（提示「原位已经有同名的东西，先给它改名或删掉再恢复」），桶里的东西原样不动。整桶可以一次 **`↩ 整桶恢复`**：原位缺什么就搬回什么，原位已经有的目录往下钻着补，只有原位存在**同名文件**时才跳过（跳过几条会写在提示里）。恢复干净之后空掉的桶会自己从回收站里消失（`.remove` 里就剩一个 `.rk-uids.json` 的话，桶也一并清掉）。要彻底不要了，`rm -rf .remove` 就是清空回收站。
+**原位已经有同名的文件时一律拒绝，绝不覆盖**（提示「原位已经有同名的东西，先给它改名或删掉再恢复」），桶里的东西原样不动。按章恢复（以及根画布那层恢复整只画布）走的是**合并**：原位缺什么就搬回什么，原位已经有的目录往下钻着补，只有原位存在**同名文件**时才跳过（跳过几条会写在提示里）。恢复干净之后空掉的桶会自己从回收站里消失（`.remove` 里就剩一个 `.rk-uids.json` 的话，连空掉的 `.remove` 一并收掉）。要彻底不要了，`rm -rf .remove` 就是清空回收站。
 
 ## 四、画布操作
 
@@ -444,7 +445,7 @@ D. 非风险点
 | --- | --- |
 | `plugin/rk-study/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
 | `plugin/rk-study/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
-| `plugin/rk-study/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（3266 行，含回收站面板） |
+| `plugin/rk-study/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（3316 行，含回收站面板） |
 | `plugin/rk-study/client/*.js` | Client 半的实现，按职责拆成 11 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
 | `plugin/rk-study/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
 | `plugin/rk-study/package.json` | 包清单（`dsh.bundle.patch`、`dsh.client`、图标） |
@@ -467,17 +468,17 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 | `write.js` | 103 | 路径校验与写文件（经 `ctx.fs.writeText`，必要时 `mkdir` 兜底）；写盘前给小节 / 知识点补 frontmatter 里的 `uid`：先认文件里 / 盘上已有的号，再认扫描时在号池里按路径登记的号（认到就把它摘出号池、写进 frontmatter），都没有才发新号；失败只当这次没补，不挡写盘 |
 | `delete.js` | 314 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `bucketNameIn` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`；「移出列表」用同一个 `bucketNameIn` 在**同层** `.remove/` 下开桶）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段）/ `stashUids` 与 `readStashedUids`（把这次删掉的目录带走了哪个编号记进桶里的 `.rk-uids.json`；`readAllStashedUids` 把一个 `.remove/` 下所有桶记着的号合并读出来，恢复时按路径认回，名字（= 时间）晚的桶覆盖早的），以及排除判断 |
 | `scan.js` | 331 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存；顺带把号带出来 —— 文件记录读 frontmatter 里的 `uid`（小节 / 知识点），知识点文件自己的号挂到它那条知识点上 |
-| `bin.js` | 309 | 回收站：`listBin`（读一个 `.remove/` 下的所有桶，只列「影子树的根」—— 原位已经没有、但父目录还在的那一层，所以恢复它就是把整棵子树搬回去；每条带原来的路径与编号）与 `listAllBins`（把当前根、它上一层、画布列表里每张画布的目录各自上一层，这些位置的 `.remove` 合起来列，桶按日期排，桶上带 `box` / `root`）与 `restoreItem` / `restoreBucket`（按记录所在的 `box` 落回对应目录、原位已有同名一律拒绝、号按那只桶里记的认回、空桶与空掉的 `.remove` 一起收掉） |
+| `bin.js` | 437 | 回收站（只有两层有它）：根画布那层 `listRootBins`（把当前根、它上一层、画布列表里每张画布父目录的 `.remove` 合起来列，只留「顶层整条」= 整只画布，`notes` / `questions` 这类画布内部结构不算），一级画布那层 `listChapterBin`（只看这张画布自己的 `.remove`，按章把 `notes/<章>/…` 与平行的 `questions/<章>/…` 聚成一条）；恢复是 `restoreItem` / `restoreBucket` / `restoreChapter`（按记录所在的 `box` 落回对应目录、原位已有同名**文件**时跳过或拒绝、章级恢复是「原位缺什么补什么」的合并、号按那只桶里记的认回、空桶与空掉的 `.remove` 一起收掉）；`listBin` 是底座 —— 只列「影子树的根」（原位已经没有、父目录还在的那一层，所以恢复它就是把整棵子树搬回去） |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
-| `routes.js` | 1680 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1` 与 `restore` / `restoreBucket`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
+| `routes.js` | 1699 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
 
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**两个版本号（`?v=N` 与 `client.js` 的 `MODULE_VERSION`）要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=56）
-> sed -i '' 's/?v=55/?v=56/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 142）
-> sed -i '' 's/MODULE_VERSION = 141;/MODULE_VERSION = 142;/' plugin/rk-study/client.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=57）
+> sed -i '' 's/?v=56/?v=57/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 143）
+> sed -i '' 's/MODULE_VERSION = 142;/MODULE_VERSION = 143;/' plugin/rk-study/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
@@ -487,7 +488,7 @@ client 半边（`plugin/rk-study/client/`，按依赖从下往上；每个模块
 
 | 模块 | 行数 | 职责 | 依赖 |
 | --- | --- | --- | --- |
-| `client/dict.js` | 634 | 中英文词典（`zh` / `en`） | — |
+| `client/dict.js` | 638 | 中英文词典（`zh` / `en`） | — |
 | `client/css.js` | 753 | 全部样式（`const CSS` + 末尾的 `HOST_CSS` 宿主主题映射层：`.rk-root.rk-follow` 把 `--rk-*` 指到宿主 `--dsw-alias-*`） | — |
 | `client/util.js` | 94 | 缩放取整、字数、路径标签、小节 / 知识点查找、编辑器状态 | — |
 | `client/vendor.js` | 282 | KaTeX / mermaid 按需加载、公式与流程图组件（流程图配色跟着主题走，换主题自动重画） | React |

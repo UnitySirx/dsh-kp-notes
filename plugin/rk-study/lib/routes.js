@@ -6,21 +6,21 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { listAllBins, restoreBucket, restoreItem } from './bin.js?v=56';
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=56';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=56';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=56';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=56';
-import { buildNodes, scanHeadings } from './headings.js?v=56';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=56';
-import { parseDocument } from './parse.js?v=56';
-import { pointRegion, rebuildPoint } from './points.js?v=56';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=56';
-import { buildCatalog } from './scan.js?v=56';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=56';
-import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=56';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=56';
-import { readBody, safePath, writeMarkdown } from './write.js?v=56';
+import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=57';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=57';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=57';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=57';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=57';
+import { buildNodes, scanHeadings } from './headings.js?v=57';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=57';
+import { parseDocument } from './parse.js?v=57';
+import { pointRegion, rebuildPoint } from './points.js?v=57';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=57';
+import { buildCatalog } from './scan.js?v=57';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=57';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=57';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=57';
+import { readBody, safePath, writeMarkdown } from './write.js?v=57';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -833,10 +833,15 @@ export function apply(ctx, rawConfig) {
 
 		try {
 			if (method === 'GET' || method === 'HEAD') {
-				/* 回收站: 这个根目录的 .remove 里有什么（删除的章节/小节/知识点 + 被移出列表的画布） */
+				/* 回收站只有两层看它:
+				 *   · 一级画布（进了某张画布）—— 只看这张画布自己的 .remove, 记录按章聚合成「整章」;
+				 *   · 根画布（还没进任何画布）—— 只列被移出列表的**整只画布**（它们躺在各自父目录的 .remove 里,
+				 *     宿主这儿的画布列表就是 STATE_FILE 里的 roots）。 */
 				if (url.searchParams.get('bin') === '1') {
-					/* 一级画布那一层要看的不止这个目录: 被「移出列表」的画布躺在各自父目录的 .remove 里,
-					 * 客户端镜像在宿主这儿的画布列表就是它们的位置, 一并算上。 */
+					if (url.searchParams.get('mode') !== 'roots') {
+						sendJson(res, 200, listChapterBin(config, url.searchParams.get('box')));
+						return;
+					}
 					let known = [];
 					try {
 						const text = await readFileText(STATE_FILE, undefined, TEMPLATE_MAX_BYTES);
@@ -844,9 +849,9 @@ export function apply(ctx, rawConfig) {
 						if (parsed && Array.isArray(parsed.roots)) known = parsed.roots.slice();
 						if (parsed && typeof parsed.defaultRoot === 'string' && parsed.defaultRoot !== '') known.push({ path: parsed.defaultRoot });
 					} catch {
-						/* 状态读不到就只列当前这个目录 */
+						/* 状态读不到就只按当前这个目录算 */
 					}
-					sendJson(res, 200, listAllBins(config, known));
+					sendJson(res, 200, listRootBins(config, known));
 					return;
 				}
 				if (url.searchParams.has('file')) {
@@ -916,6 +921,15 @@ export function apply(ctx, rawConfig) {
 					cache.data = null;
 					caches.delete(config.root);
 					sendJson(res, 200, result);
+					return;
+				}
+				if (action === 'restoreChapter') {
+					/* 一级画布那层的动作: 把这一章在所有桶里的东西整段合并回去 */
+					const source = binSource(config, payload.box);
+					const result = await restoreChapter(ctx, config, await uidLibOf(source), payload.box, payload.chapter);
+					cache.data = null;
+					caches.delete(config.root);
+					sendJson(res, result.ok ? 200 : 400, result);
 					return;
 				}
 				if (action === 'save') {

@@ -1,21 +1,17 @@
 /* rk-study · lib/bin.js —— 回收站
  *
  * 删除章节/小节/知识点、以及把画布「移出列表」，都只是把东西搬进 .remove/<桶>/ 里（见 delete.js）。
- * 这里做两件事：
- *   1. 把桶读出来给界面看（listBin / listAllBins）—— 一条记录 = 桶里的一个顶层条目，
- *      原位置 = <桶所属目录>/<桶内相对路径>；
- *   2. 把它搬回去（restoreItem / restoreBucket）—— 原位已经有东西就**拒绝**（绝不覆盖），
- *      搬回去以后按桶里的 .rk-uids.json 认回原来的号，桶空了就把桶目录清掉。
- *
- * 桶有两只来源，界面上要一起看：
- *   · <画布根>/.remove    画布里删掉的章节 / 小节 / 知识点 / 题目片段
- *   · <上一层>/.remove    被「移出列表」的画布（画布目录被挪到了同层的 .remove 里）
- * 所以一级画布那一层会把自己和每张画布的父目录都算上（listAllBins），每条记录带着自己的 box，
- * 恢复时按 box 找回它属于哪个目录。
+ * 界面只在两层看它，粒度也各只到一层：
+ *   · 根画布（还没进任何画布）—— listRootBins：只列**被移出列表的整只画布**（它们躺在各自父目录的 .remove 里），
+ *     恢复一条 = 把一整只画布搬回它的上一层；
+ *   · 一级画布（进了某张画布）—— listChapterBin：只看这张画布自己的 .remove，并把记录**按章聚合成一条**
+ *     （`01-第一章`），恢复一条 = restoreChapter = 把这一章在**所有桶**里的东西整段合并回去。
+ * 一条记录的原位置 = <桶所属目录>/<桶内相对路径>；恢复一律**绝不覆盖**原位已有的东西，
+ * 搬回去以后按桶里的 .rk-uids.json 认回原来的号，桶空了就把桶目录（连空掉的 .remove）清掉。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs';
-import { removeBoxFor } from './delete.js?v=56';
-import { adoptUids } from './uid.js?v=56';
+import { removeBoxFor } from './delete.js?v=57';
+import { adoptUids } from './uid.js?v=57';
 
 const REMOVE_DIR = '.remove';
 const MAX_BUCKETS = 200;
@@ -148,20 +144,71 @@ export function listBin(config, box) {
 	return { box: useBox, root, boxes: [useBox], buckets };
 }
 
+/** 章节都在 notes/ 下面 */
+const CHAPTER_ROOT = 'notes';
+const QUESTION_ROOT = 'questions';
+
 /**
- * 一级画布那一层看回收站：把「当前这个目录」以及每一张已知画布的父目录都算上
- * —— 画布里删掉的东西躺在 <画布>/.remove，被移出列表的画布躺在 <上一层>/.remove。
- * 同一个名字的桶可能出现在不同目录里，所以每条记录都带着自己的 box。
+ * 一条记录属于哪一章：
+ *   · notes/<章目录>/…   ⇒ notes/<章目录>（section / point / 题目片段都并到那一章）
+ *   · notes/<章目录>（整章目录被删，kind=dir）⇒ notes/<章目录>
+ *   · notes/<文件>（直接躺在 notes/ 下的小节文件）⇒ notes
+ *   · questions/<章目录>/…（题目仓库与 notes 平行）⇒ notes/<章目录>，好跟那一章并成一条
+ *   · 画布根下的散文件 ⇒ 它自己
  */
-export function listAllBins(config, extraRoots) {
+function chapterOf(item, kind) {
+	const rel = String(item ?? '');
+	const first = (value) => {
+		const cut = value.indexOf('/');
+		return cut < 0 ? value : value.slice(0, cut);
+	};
+	if (rel === CHAPTER_ROOT) return CHAPTER_ROOT;
+	if (rel.startsWith(CHAPTER_ROOT + '/')) {
+		const rest = rel.slice(CHAPTER_ROOT.length + 1);
+		if (rest.indexOf('/') >= 0) return `${CHAPTER_ROOT}/${first(rest)}`;
+		return kind === 'dir' ? `${CHAPTER_ROOT}/${rest}` : CHAPTER_ROOT;
+	}
+	if (rel.startsWith(QUESTION_ROOT + '/')) {
+		const rest = rel.slice(QUESTION_ROOT.length + 1);
+		return rest.indexOf('/') >= 0 ? `${CHAPTER_ROOT}/${first(rest)}` : CHAPTER_ROOT;
+	}
+	return first(rel);
+}
+
+/** 这一章在桶里可能有两处：notes/<章> 与平行的 questions/<章> */
+function chapterPrefixes(chapter) {
+	const rel = String(chapter ?? '');
+	if (rel === CHAPTER_ROOT) return [CHAPTER_ROOT, QUESTION_ROOT];
+	if (rel.startsWith(CHAPTER_ROOT + '/')) return [`${QUESTION_ROOT}/${rel.slice(CHAPTER_ROOT.length + 1)}`, rel];
+	return [rel];
+}
+
+/** 章名（去掉 notes/ 前缀，给人看） */
+function chapterName(chapter) {
+	const rel = String(chapter ?? '');
+	if (rel === CHAPTER_ROOT) return CHAPTER_ROOT;
+	return rel.startsWith(CHAPTER_ROOT + '/') ? rel.slice(CHAPTER_ROOT.length + 1) : rel;
+}
+
+/** 桶名倒序：新的在前；同名桶再按目录排 */
+function byBucketDesc(a, b) {
+	if (a.name === b.name) return a.root < b.root ? -1 : 1;
+	return a.name < b.name ? 1 : -1;
+}
+
+/**
+ * 根画布那一层看回收站：只列**被移出列表的整只画布**。
+ * 画布目录在它**上一层**的 .remove 里，所以这里只翻每张已知画布父目录的那只桶；
+ * 画布里删掉的章节躺在 <画布>/.remove（路径里带 notes/），一律不算 —— 那属于一级画布那层。
+ */
+export function listRootBins(config, extraRoots) {
 	const dirs = [];
 	const add = (value) => {
 		const base = String(value ?? '').replace(/\/+$/, '');
 		if (base === '' || base.charAt(0) !== '/') return;
-		for (const one of [base, parentOfDir(base)]) {
-			if (one === '' || one === '/' || dirs.includes(one)) continue;
-			dirs.push(one);
-		}
+		const parent = parentOfDir(base);
+		if (parent === '' || parent === '/' || dirs.includes(parent)) return;
+		dirs.push(parent);
 	};
 	add(config.root);
 	for (const item of Array.isArray(extraRoots) ? extraRoots : []) add(item && typeof item === 'object' ? item.path : item);
@@ -171,11 +218,51 @@ export function listAllBins(config, extraRoots) {
 		const box = boxOf(base);
 		if (box === '' || !existsSync(box)) continue;
 		boxes.push(box);
-		for (const bucket of listBin({ root: base }, box).buckets) buckets.push(bucket);
+		for (const bucket of listBin({ root: base }, box).buckets) {
+			/* 只认「顶层整条」= 整只画布：带斜杠的是画布里的东西，notes / questions 是画布内部结构
+			 * （画布里删东西也会在被删画布的父目录留桶），这两样都不在这一层出现 */
+			const innerRoots = [String(config.noteDir || CHAPTER_ROOT), String(config.questionDir || QUESTION_ROOT)];
+			const items = bucket.items.filter((entry) => entry.item.indexOf('/') < 0 && !innerRoots.includes(entry.item));
+			if (items.length === 0) continue;
+			buckets.push(Object.assign({}, bucket, { count: items.length, items }));
+		}
 	}
-	buckets.sort((a, b) => (a.name === b.name ? (a.root < b.root ? -1 : 1) : a.name < b.name ? 1 : -1));
+	buckets.sort(byBucketDesc);
 	const root = String(config.root ?? '').replace(/\/+$/, '');
-	return { box: boxOf(root), root, boxes, buckets: buckets.slice(0, MAX_BUCKETS) };
+	return { mode: 'roots', box: '', root, boxes, buckets: buckets.slice(0, MAX_BUCKETS) };
+}
+
+/**
+ * 一级画布那一层看回收站：只看这张画布自己的 .remove，并把记录**按章聚合成一条**。
+ * 一章一条（同一天删的旧章、后来又删过里面几个小节/知识点/题目片段，都并到这一章上）。
+ */
+export function listChapterBin(config, box) {
+	const useBox = cleanBoxPath(box) || boxOf(config.root);
+	const root = rootOfBox(useBox);
+	if (useBox === '' || root === '') return { mode: 'chapters', box: '', root: '', chapters: [] };
+	const listed = listBin({ root }, useBox);
+	const groups = new Map();
+	for (const bucket of listed.buckets) {
+		const stashed = readBoxUids(useBox, bucket.name);
+		for (const entry of bucket.items) {
+			const chapter = chapterOf(entry.item, entry.kind);
+			if (chapter === '') continue;
+			let group = groups.get(chapter);
+			if (!group) {
+				/* 桶已经是新的在前，所以第一次见到的桶名就是这一章最近一次被动的日期 */
+				group = { chapter, name: chapterName(chapter), box: useBox, root, at: bucket.at, atName: bucket.name, count: 0, uid: '', buckets: [], items: [] };
+				groups.set(chapter, group);
+			}
+			group.count += 1;
+			if (!group.buckets.includes(bucket.name)) group.buckets.push(bucket.name);
+			const uid = entry.uid || stashed[entry.target] || '';
+			if (group.uid === '' && uid !== '') group.uid = uid;
+			group.items.push(Object.assign({}, entry, { bucket: bucket.name }));
+		}
+	}
+	const chapters = Array.from(groups.values());
+	chapters.sort((a, b) => (a.atName === b.atName ? (a.chapter < b.chapter ? -1 : 1) : a.atName < b.atName ? 1 : -1));
+	return { mode: 'chapters', box: useBox, root, chapters: chapters.slice(0, MAX_BUCKETS) };
 }
 
 /**
@@ -268,20 +355,19 @@ export async function restoreItem(ctx, config, lib, bucket, item, box) {
 }
 
 /**
- * 恢复一整个桶：把桶当成一棵「被删掉的东西的影子树」，从上往下**合并**回去 ——
+ * 把一只桶里 prefix 这一支合并回去（prefix === '' 就是整桶）：从上往下合并 ——
  * 原位没有的条目整棵搬回去（子树跟着走），原位已经有的目录就往下钻处理它里面的条目，
  * 原位有同名**文件**才算冲突（记进 skipped，绝不覆盖）。
  */
-export async function restoreBucket(ctx, config, lib, bucket, box) {
-	const useBox = cleanBoxPath(box) || boxOf(config.root);
-	const cleanBox = cleanBucket(bucket);
-	const root = rootOfBox(useBox);
-	if (cleanBox === '' || useBox === '' || root === '') return { ok: false, error: 'bad-path', message: '这个回收站桶不存在' };
-	const dir = `${useBox}/${cleanBox}`;
-	if (!existsSync(dir)) return { ok: false, error: 'not-found', message: '这个回收站桶已经不在了' };
+async function mergeTree(ctx, config, lib, useBox, bucket, root, prefixes) {
+	const dir = `${useBox}/${bucket}`;
 	const restored = [];
 	const skipped = [];
-	const merge = async (rel) => {
+	const list = (Array.isArray(prefixes) ? prefixes : [prefixes]).filter((one) => one !== '' && one !== undefined && one !== null);
+	/* 在某一处 prefix 里面，或者仍然是某处 prefix 的祖先目录（那要先走到那一层去） */
+	const inside = (item) => list.length === 0 || list.some((prefix) => item === prefix || item.startsWith(prefix + '/'));
+	const ancestor = (item) => list.some((prefix) => prefix.startsWith(item + '/') && item !== '');
+	const walk = async (rel) => {
 		let entries = [];
 		try {
 			entries = readdirSync(rel === '' ? dir : `${dir}/${rel}`, { withFileTypes: true }).filter((entry) => !entry.name.startsWith('.'));
@@ -290,20 +376,61 @@ export async function restoreBucket(ctx, config, lib, bucket, box) {
 		}
 		for (const entry of entries) {
 			const item = rel === '' ? entry.name : `${rel}/${entry.name}`;
+			const mine = inside(item);
+			if (!mine && !ancestor(item)) continue;
 			const target = `${root}/${item}`;
 			if (!existsSync(target)) {
-				const result = await restoreItem(ctx, config, lib, cleanBox, item, useBox);
+				const result = await restoreItem(ctx, config, lib, bucket, item, useBox);
 				if (result.ok) restored.push(result);
 				else skipped.push({ item, error: result.error, message: result.message });
 				continue;
 			}
 			/* 原位这个目录还在：钻进去合并它里面的条目 */
-			if (entry.isDirectory()) await merge(item);
-			else skipped.push({ item, error: 'target-exists', message: '原位已经有同名文件' });
+			if (entry.isDirectory()) await walk(item);
+			else if (mine) skipped.push({ item, error: 'target-exists', message: '原位已经有同名文件' });
 		}
 	};
-	await merge('');
+	await walk('');
+	return { restored, skipped };
+}
+
+/** 恢复一整个桶（一级画布那层的「整桶」入口） */
+export async function restoreBucket(ctx, config, lib, bucket, box) {
+	const useBox = cleanBoxPath(box) || boxOf(config.root);
+	const cleanBox = cleanBucket(bucket);
+	const root = rootOfBox(useBox);
+	if (cleanBox === '' || useBox === '' || root === '') return { ok: false, error: 'bad-path', message: '这个回收站桶不存在' };
+	if (!existsSync(`${useBox}/${cleanBox}`)) return { ok: false, error: 'not-found', message: '这个回收站桶已经不在了' };
+	const { restored, skipped } = await mergeTree(ctx, config, lib, useBox, cleanBox, root, []);
 	pruneTree(useBox, cleanBox);
 	tidyBox(useBox);
 	return { ok: true, bucket: cleanBox, box: useBox, restored, skipped };
+}
+
+/**
+ * 恢复一整章：把这一章在**所有桶**里的东西合并回去（新桶先来，绝不覆盖原位已有的东西）。
+ * 章还在原位时就往里合并（补回删掉的小节/知识点/题目片段）；整章都没了就把整棵搬回来。
+ */
+export async function restoreChapter(ctx, config, lib, box, chapter) {
+	const useBox = cleanBoxPath(box) || boxOf(config.root);
+	const rel = cleanRel(chapter);
+	const root = rootOfBox(useBox);
+	if (useBox === '' || root === '' || rel === '') return { ok: false, error: 'bad-path', message: '这一章不合法' };
+	let names = [];
+	try {
+		names = readdirSync(useBox).filter((name) => !name.startsWith('.')).sort().reverse();
+	} catch {
+		names = [];
+	}
+	const restored = [];
+	const skipped = [];
+	for (const name of names) {
+		if (cleanBucket(name) === '') continue;
+		const result = await mergeTree(ctx, config, lib, useBox, name, root, chapterPrefixes(rel));
+		restored.push(...result.restored);
+		skipped.push(...result.skipped);
+		pruneTree(useBox, name);
+	}
+	tidyBox(useBox);
+	return { ok: true, chapter: rel, box: useBox, root, restored, skipped };
 }

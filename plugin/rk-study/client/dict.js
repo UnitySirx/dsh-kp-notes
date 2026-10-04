@@ -313,6 +313,8 @@ export function createDict(deps) {
 		binRestored: '已恢复',
 		binSkipped: '项被跳过（原位已有同名文件）',
 		binFrom: '来自',
+		binChapterHint: '按章列在这儿 —— 点「恢复整章」把这一章（含里面被删过的小节 / 知识点 / 题目片段）整段合并回去',
+		binRestoreChapter: '恢复整章',
 		binEmpty: '回收站是空的',
 		deleteHint: '',
 	};
@@ -626,6 +628,8 @@ export function createDict(deps) {
 		binRestored: 'Restored',
 		binSkipped: 'skipped (same name already there)',
 		binFrom: 'in',
+		binChapterHint: 'Grouped by chapter — Restore chapter merges the whole chapter back (including sections / points / question pieces removed from it)',
+		binRestoreChapter: 'Restore chapter',
 		binEmpty: 'The bin is empty',
 		deleteHint: '',
 	};

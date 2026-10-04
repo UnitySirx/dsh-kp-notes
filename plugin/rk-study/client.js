@@ -315,8 +315,8 @@ window.__ModuleLoader__.load({
 
 		/* 回收站: 这个根目录的 .remove 里收着什么 —— 删掉的章节/小节/知识点, 或者「移出列表」的画布。
 		 * 宿主已经把「原位还在不在」「原来的号是多少」算好了, 前端只负责显示和点按钮。 */
-		async function readBin(root) {
-			const response = await fetch(routeUrl({ bin: 1 }, root), { headers: { accept: 'application/json' } });
+		async function readBin(root, mode) {
+			const response = await fetch(routeUrl({ bin: 1, mode: mode || 'chapters' }, root), { headers: { accept: 'application/json' } });
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok || data.ok === false) throw new Error(data.message || data.error || 'HTTP ' + response.status);
 			return data;
@@ -451,14 +451,17 @@ window.__ModuleLoader__.load({
 			const [libraryDialog, setLibraryDialog] = useState(null);
 			const [binDialog, setBinDialog] = useState(null); /* 回收站面板: { busy, data, error } */
 
-			/* 回收站看哪只 .remove: 画布里看这张画布自己的, 一级画布那层看学习库那一层
-			 * (宿主还会把每张画布的父目录一并算上 —— 被移出列表的画布躺在各自父目录里) */
+			/* 回收站只有两层看它:
+			 *   · 根画布（还没进任何画布）—— 宿主去翻每张画布父目录的 .remove, 只列「被移出列表的整只画布」;
+			 *   · 一级画布（进了某张画布）—— 只看这张画布自己的 .remove, 记录按章聚合成「整章」。 */
+			const binMode = () => (level1 ? 'roots' : 'chapters');
 			const binRoot = () => (level1 ? libPath : rootPath || libPath);
+			const binRows = (data) => (data && data.mode === 'chapters' ? data.chapters || [] : (data && data.buckets) || []);
 
 			async function openBin() {
 				setBinDialog({ busy: true, data: null, error: '' });
 				try {
-					setBinDialog({ busy: false, data: await readBin(binRoot()), error: '' });
+					setBinDialog({ busy: false, data: await readBin(binRoot(), binMode()), error: '' });
 				} catch (problem) {
 					setBinDialog({ busy: false, data: null, error: String((problem && problem.message) || problem) });
 				}
@@ -466,7 +469,7 @@ window.__ModuleLoader__.load({
 
 			async function reloadBin() {
 				try {
-					const data = await readBin(binRoot());
+					const data = await readBin(binRoot(), binMode());
 					setBinDialog((current) => (current ? { busy: false, data, error: '' } : current));
 				} catch (problem) {
 					setBinDialog((current) => (current ? { busy: false, data: current.data, error: String((problem && problem.message) || problem) } : current));
@@ -520,6 +523,23 @@ window.__ModuleLoader__.load({
 					});
 					if (!level1) reload(true);
 					flash(t('binRestored') + ' · ' + done + (skipped > 0 ? ' · ' + skipped + ' ' + t('binSkipped') : ''));
+					await reloadBin();
+				} catch (problem) {
+					const message = String((problem && problem.message) || problem);
+					setBinDialog((current) => (current ? { ...current, busy: false, error: message } : current));
+				}
+			}
+
+			/* 一级画布那层只有这一个动作: 把这一章在所有桶里的东西整段合并回去。 */
+			async function restoreBinChapter(chapter) {
+				setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
+				try {
+					const result = await postAction({ action: 'restoreChapter', chapter: chapter.chapter, box: chapter.box || '' });
+					const done = (result.restored || []).length;
+					const skipped = (result.skipped || []).length;
+					(result.restored || []).forEach((row) => unmarkRemoved(String(row.target || '')));
+					reload(true);
+					flash(t('binRestored') + ' · ' + (chapter.name || chapter.chapter) + ' · ' + done + (skipped > 0 ? ' · ' + skipped + ' ' + t('binSkipped') : ''));
 					await reloadBin();
 				} catch (problem) {
 					const message = String((problem && problem.message) || problem);
@@ -3057,59 +3077,89 @@ window.__ModuleLoader__.load({
 									'div',
 									{ className: 'rk-modal-card rk-bin', onClick: (event) => event.stopPropagation() },
 									h('div', { className: 'rk-modal-title' }, '♻ ' + t('binTrash')),
-									h('div', { className: 'rk-bin-hint' }, binDialog.data && binDialog.data.root ? t('binAt') + ' ' + binDialog.data.root : t('binHint')),
+									h(
+										'div',
+										{ className: 'rk-bin-hint' },
+										(binDialog.data && binDialog.data.root ? t('binAt') + ' ' + binDialog.data.root + '　' : '') +
+											t(binDialog.data && binDialog.data.mode === 'chapters' ? 'binChapterHint' : 'binHint'),
+									),
 									binDialog.error ? h('div', { className: 'rk-bin-error' }, binDialog.error) : null,
 									binDialog.busy && !binDialog.data
 										? h('div', { className: 'rk-bin-empty' }, t('loading'))
-										: !binDialog.data || (binDialog.data.buckets || []).length === 0
+										: !binDialog.data || binRows(binDialog.data).length === 0
 											? h('div', { className: 'rk-bin-empty' }, t('binEmpty'))
-											: (binDialog.data.buckets || []).map((bucket) =>
-													h(
-														'div',
-														{ key: (bucket.box || '') + '|' + bucket.name, className: 'rk-bin-bucket' },
+											: binDialog.data.mode === 'chapters'
+												? (binDialog.data.chapters || []).map((chapter) =>
 														h(
 															'div',
-															{ className: 'rk-bin-head' },
-															h('span', { className: 'rk-bin-when' }, bucket.at || bucket.name),
-															h('span', { className: 'rk-bin-count' }, String(bucket.count || 0) + ' ' + t('binItems')),
-															(binDialog.data.boxes || []).length > 1 && bucket.root
-																? h('span', { className: 'rk-bin-src', title: bucket.root }, t('binFrom') + ' ' + bucket.root)
-																: null,
+															{ key: chapter.chapter, className: 'rk-bin-bucket' },
 															h(
-																'button',
-																{
-																	className: 'rk-btn rk-bin-btn',
-																	type: 'button',
-																	disabled: binDialog.busy,
-																	onClick: () => restoreWholeBin(bucket),
-																},
-																'↩ ' + t('binRestoreAll'),
+																'div',
+																{ className: 'rk-bin-head' },
+																h('span', { className: 'rk-bin-when' }, chapter.name || chapter.chapter),
+																h('span', { className: 'rk-bin-count' }, String(chapter.count || 0) + ' ' + t('binItems')),
+																chapter.uid ? h('span', { className: 'rk-bin-uid' }, chapter.uid) : null,
+																h(
+																	'button',
+																	{
+																		className: 'rk-btn rk-bin-btn',
+																		type: 'button',
+																		title: (chapter.items || []).map((one) => one.item).join('\n') || chapter.chapter,
+																		disabled: binDialog.busy,
+																		onClick: () => restoreBinChapter(chapter),
+																	},
+																	'↩ ' + t('binRestoreChapter'),
+																),
 															),
 														),
+													)
+												: (binDialog.data.buckets || []).map((bucket) =>
 														h(
-															'ul',
-															{ className: 'rk-bin-list' },
-															(bucket.items || []).map((item) =>
+															'div',
+															{ key: (bucket.box || '') + '|' + bucket.name, className: 'rk-bin-bucket' },
+															h(
+																'div',
+																{ className: 'rk-bin-head' },
+																h('span', { className: 'rk-bin-when' }, bucket.at || bucket.name),
+																h('span', { className: 'rk-bin-count' }, String(bucket.count || 0) + ' ' + t('binItems')),
+																(binDialog.data.boxes || []).length > 1 && bucket.root
+																	? h('span', { className: 'rk-bin-src', title: bucket.root }, t('binFrom') + ' ' + bucket.root)
+																	: null,
 																h(
-																	'li',
-																	{ key: item.item, className: 'rk-bin-item' },
-																	h('span', { className: 'rk-bin-path', title: item.target || item.item }, (item.kind === 'dir' ? '▸ ' : '· ') + item.item),
-																	item.uid ? h('span', { className: 'rk-bin-uid' }, item.uid) : null,
+																	'button',
+																	{
+																		className: 'rk-btn rk-bin-btn',
+																		type: 'button',
+																		disabled: binDialog.busy,
+																		onClick: () => restoreWholeBin(bucket),
+																	},
+																	'↩ ' + t('binRestoreAll'),
+																),
+															),
+															h(
+																'ul',
+																{ className: 'rk-bin-list' },
+																(bucket.items || []).map((item) =>
 																	h(
-																		'button',
-																		{
-																			className: 'rk-btn rk-bin-btn',
-																			type: 'button',
-																			disabled: binDialog.busy,
-																			onClick: () => restoreBinItem(bucket, item),
-																		},
-																		'↩ ' + t('binRestore'),
+																		'li',
+																		{ key: item.item, className: 'rk-bin-item' },
+																		h('span', { className: 'rk-bin-path', title: item.target || item.item }, (item.kind === 'dir' ? '▸ ' : '· ') + item.item),
+																		item.uid ? h('span', { className: 'rk-bin-uid' }, item.uid) : null,
+																		h(
+																			'button',
+																			{
+																				className: 'rk-btn rk-bin-btn',
+																				type: 'button',
+																				disabled: binDialog.busy,
+																				onClick: () => restoreBinItem(bucket, item),
+																			},
+																			'↩ ' + t('binRestore'),
+																		),
 																	),
 																),
 															),
 														),
 													),
-												),
 									h('div', { className: 'rk-bin-foot' }, h('button', { className: 'rk-btn', type: 'button', onClick: () => setBinDialog(null) }, t('cancel'))),
 								),
 							)
@@ -3209,7 +3259,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 142;
+		const MODULE_VERSION = 143;
 		const CLIENT_MODULES = ['dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
