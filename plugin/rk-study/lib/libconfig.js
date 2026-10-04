@@ -11,25 +11,31 @@
  *   ui       : 字号 / 配色(整套皮肤) / 卡片逐项配色
  *   zoom     : 每张画布的视野(缩放 + 平移), 键是 "roots"(一级画布) 或画布绝对路径
  *   canvases : 列表里的画布 [{ path, name }](「＋ 新建学习画布」建过的)
- *   removed  : 手动「移出列表」的画布(墓碑, 重新扫描也不会加回来)
+ *   removed  : —— 也搬走了, 见下面那一段
  *   uid      : 这个学习库自己的编号(形如 c0001, 见 uid.js)
  *   seq      : 每类实体「已经发到几号」{ canvas, chapter, section, point, question } —— 只增不减, 号永不复用
  *
- * `uids`(绝对路径 -> 编号)不在这里, 单独放 <库>/.config/rk-study-uids.json:
- * 那份是按实体条数长大的机器账本(几百上千条), 混在界面配置里又长又难读。读号时老版本
- * 混在这份文件里的 `uids` 会被自动读出来(向后兼容), 第一次写号时把老键摘掉, 从此只有号池那份。
- * `uids` 里值写 null 表示「这个路径的号没了(删了/改名了)」。
+ * 两份「机器账本」搬到了同目录下各自的文件, 这份配置只留界面设置:
+ *   - `uids`(绝对路径 -> 编号) ⇒ rk-study-uids.json, 见下面 readUidStore / writeUidStore
+ *   - `removed`(移出列表的墓碑, 绝对路径数组) ⇒ rk-study-removed.json, 见 readRemovedStore / writeRemovedStore
+ * 它们都是按实体条数长大的账本(几百上千条), 混在界面配置里又长又难读。
+ * 老版本混在这份文件里的同名老键**照读**(向后兼容), 第一次写它们时把老键摘掉 ——
+ * 迁移是一次性、无损的, 号一个都不变、墓碑一条都不丢。
+ * `uids` 里值写 null 表示「这个路径的号没了(删了/改名了)」; removed 是整份名单, 写就是替换。
  */
 
-import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE, UIDS_FILE } from './constants.js?v=59';
+import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE, REMOVED_FILE, UIDS_FILE } from './constants.js?v=60';
 
 const cache = new Map();
 /* 号池单独缓存: 键是 <库>/.config/rk-study-uids.json 的绝对路径 */
 const uidCache = new Map();
+/* 移出列表单独缓存: 键是 <库>/.config/rk-study-removed.json 的绝对路径 */
+const removedCache = new Map();
 /** 插件卸载时清掉这份模块级缓存(由 routes.js 的 ctx.effect 调用)。 */
 export function clearLibConfigCache() {
 	cache.clear();
 	uidCache.clear();
+	removedCache.clear();
 }
 /* 上限只是防手滑: 一个库几百张画布绰绰有余, 也不会让文件无限膨胀 */
 const MAX_ZOOM_KEYS = 400;
@@ -58,6 +64,12 @@ export function configPathOf(lib) {
 export function uidConfigPathOf(lib) {
 	const dir = configDirOf(lib);
 	return dir === '' ? '' : `${dir}/${UIDS_FILE}`;
+}
+
+/** 移出列表文件: <库>/.config/rk-study-removed.json */
+export function removedConfigPathOf(lib) {
+	const dir = configDirOf(lib);
+	return dir === '' ? '' : `${dir}/${REMOVED_FILE}`;
 }
 
 function isObject(value) {
@@ -192,8 +204,12 @@ function cleanTop(patch) {
 	if (isObject(patch.zoom)) out.zoom = cleanZoom(patch.zoom);
 	const canvases = cleanCanvases(patch.canvases);
 	if (canvases) out.canvases = canvases;
-	const removed = cleanRemoved(patch.removed);
-	if (removed) out.removed = removed;
+	/* removed 也住在自己那份文件里; 这里只认「显式 null = 把老键从这份配置里摘掉」(迁移用) */
+	if (patch.removed === null) out.removed = null;
+	else {
+		const removed = cleanRemoved(patch.removed);
+		if (removed) out.removed = removed;
+	}
 	if (isObject(patch.seq)) out.seq = cleanSeq(patch.seq);
 	/* uids 现在住在号池那个文件里; 这里只认「显式 null = 把老键从这份配置里摘掉」(迁移用) */
 	if (patch.uids === null) out.uids = null;
@@ -282,6 +298,42 @@ export async function writeUidStore(ctx, lib, patch) {
 	uidCache.set(path, { at: Date.now(), data: merged });
 	if ('uids' in (await readLibConfig(ctx, lib, true))) await writeLibConfig(ctx, lib, { uids: null });
 	return merged;
+}
+
+/* 读移出列表(绝对路径数组, 墓碑)。这个独立文件一旦建出来它就是权威 ——
+ * 哪怕内容是空数组, 也不再并老键: 不然「取消墓碑」会被 rk-study.json 里那条老记录加回来。
+ * 文件还没建(老版本)时认老键, 第一次写就迁移过去。 */
+export async function readRemovedStore(ctx, lib, fresh) {
+	const path = removedConfigPathOf(lib);
+	if (path === '') return [];
+	const hit = removedCache.get(path);
+	if (fresh !== true && hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.data;
+	let data = null;
+	try {
+		const target = await ctx.fs.resolve(path);
+		if (await ctx.fs.stat(target)) {
+			const parsed = JSON.parse(await ctx.fs.readText(target));
+			data = cleanRemoved(isObject(parsed) ? parsed.removed : null);
+		}
+	} catch {
+		data = null;
+	}
+	if (data === null) data = cleanRemoved((await readLibConfig(ctx, lib, fresh)).removed) || [];
+	removedCache.set(path, { at: Date.now(), data });
+	return data;
+}
+
+/* 写移出列表: 客户端送来的是完整名单 ⇒ 整份替换(null / 非数组 = 清空);
+   第一次写就把老版本混在 rk-study.json 里的 removed 摘掉。 */
+export async function writeRemovedStore(ctx, lib, list) {
+	const path = removedConfigPathOf(lib);
+	if (path === '') throw new Error('bad-config-root');
+	const next = cleanRemoved(list) || [];
+	const target = await ctx.fs.resolve(path);
+	await ctx.fs.writeText(target, `${JSON.stringify({ version: 1, removed: next }, null, '\t')}\n`, undefined, undefined, { mode: 'workspace-write', workspaceRoot: lib });
+	removedCache.set(path, { at: Date.now(), data: next });
+	if ('removed' in (await readLibConfig(ctx, lib, true))) await writeLibConfig(ctx, lib, { removed: null });
+	return next;
 }
 
 export async function configBytesOf(ctx, lib) {

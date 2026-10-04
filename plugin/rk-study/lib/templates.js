@@ -1,7 +1,7 @@
 /* rk-study · host/templates —— 从 host.js 第 1368-1537 行原样切出 */
-import { insideRoot } from './fsguard.js?v=59';
-import { questionBlockNodes } from './questions.js?v=59';
-import { numericPrefix, stripNumericPrefix } from './util.js?v=59';
+import { insideRoot } from './fsguard.js?v=60';
+import { questionBlockNodes } from './questions.js?v=60';
+import { numericPrefix, stripNumericPrefix } from './util.js?v=60';
 
 export function noteTemplate(title, order) {
 	return [

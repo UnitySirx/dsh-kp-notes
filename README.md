@@ -286,7 +286,7 @@ D. 非风险点
 
 **插件里的每个「删除」都是移动**：目标被 `rename` 到**当前一级画布根目录下的 `.remove/`**，**一次删除 = 在这里新建一个日期桶目录**（名字就是当天的 `YYYYMMDD`，例如 `20261004`），桶里保留原来的相对路径结构（删掉章节 `notes/01-第一章`，桶里就是 `notes/01-第一章/` 与 `questions/01-第一章/`）。桶与桶互不相干，所以**删两次就留两份，谁也不覆盖谁**（同一个章节删两次，第二次进的是新桶，第一次那份原样还在），也**不会把不同次的删除混进同一条路径**（先删整个章节、之后又删重建章节里的某个知识点 —— 后者进它自己那个新桶，不会落进上次那份章节备份里）。同一天里再删一次，名字往后排成 `20261004-2`、`20261004-3`（桶名只到「天」，一天里删几次就有几个桶；文件本身的修改时间由 `rename` 原样保留，想知道具体几点几分看它就行）。`.remove` 以点开头，扫描时跳过，所以它不会出现在画布、思维导图或搜索里。要找回：在画布根目录下打开 `.remove/`，挑日期对得上的那个桶，把东西移回原位即可；`rm -rf .remove` 就等于真正清空回收站。
 
-**编号（uid）：每个一级画布与章节都有一个自己的、永不复用的编号**，形如 `c0001`（画布）/ `h0007`（章节）/ `s0012`（小节）/ `p0031`（知识点）。编号**不写进文件名或目录名**（文件怎么排、卡片长什么样一个字都没变），只当身份用：目录类实体（画布 / 章节）的号记在**学习库**的 `.config/rk-study-uids.json` 里（号池，就一张表 `{ "version": 1, "uids": { 绝对路径: 编号 } }`），发号计数器 `seq` 仍跟界面设置一起放在 `.config/rk-study.json`，跟画布放在哪个目录、叫什么名字无关。删掉之后号**不回收**：把同名的章节/画布在原地重建，拿到的是**新号**（旧号只留在它自己的备份里），所以「先删 02 再建一个」不会让两个不同时期的东西共用一个身份。号会跟着实体走 —— 章节改名、画布改名（重命名目录）都是**搬号**，身份不变；章节被删除或画布被「移出列表」时，被带走的号会连同文件一起写进那个桶里的 `.rk-uids.json`（`{"at": …, "uids": {绝对路径: 编号}}`），想恢复时认得回来：把目录搬回原位（被移出的画布还要在插件里重新导入一次），下次扫描就会**按路径把原来那个号认回来** —— 恢复的是原身份，不是新号；同一个路径在多个桶里都留过号时，以最近一次删除留下的为准。老笔记不用迁移：第一次扫描到没有号的章节就会自动补上；小节与知识点另走一条更省事的路 —— 号就写在 markdown 的 frontmatter 里（`uid: s0012`），跟着文件内容走，所以改标题、挪位置、连文件名一起改都不丢。**没有号的老笔记也不会被改文件**：扫描时先把号按路径登记进号池（界面上立刻就有号可用），等这个文件下次被插件保存，号才写进它的 frontmatter，号池里那条按路径记的账同时摘掉（号从此跟着内容走，路径再变也不丢）。插件保存时取号的顺序是：文件里已有的 → 盘上旧文件里的（前端重建头部把 `uid` 弄丢也能认回来）→ 扫描时登记的号池 → 都没有才发新号；题目文件本身不发号，但**每一道题**有自己的号 —— 挂在它那个块的标题**下一行**（`<!-- rk-uid: q0001 -->`，渲染出来的笔记里看不见；单独一行是必须的，因为重排 `## 题目 N` 会重写标题行）；改题干、换选项、整段重排都不动它，删掉一道题时标记跟着那段原文一起进 `.remove`，号同时记进计数器（不再发放）。扫盘结果和接口里也带着号：`/rk-study/notes` 返回的 `chapters` / `sections` / `points` 每一项都有 `uid` 字段（章节的号在扫描时补上，小节 / 知识点直接读它文件里的），所以客户端想显示编号可以直接用。**号池为什么单独一个文件**：`rk-study.json` 从此只留界面设置（字号、配色、画布清单、墓碑），这张随时在长、只有插件自己用得到的号表放旁边 `rk-study-uids.json`；老版本把 `uids` 混在 `rk-study.json` 里的那些库**不用手动改** —— 插件照读老键，并在下一次发号 / 认号时把整张表写进号池文件、再把老键从 `rk-study.json` 里摘掉（一次自动迁移，号一个都不变）。
+**编号（uid）：每个一级画布与章节都有一个自己的、永不复用的编号**，形如 `c0001`（画布）/ `h0007`（章节）/ `s0012`（小节）/ `p0031`（知识点）。编号**不写进文件名或目录名**（文件怎么排、卡片长什么样一个字都没变），只当身份用：目录类实体（画布 / 章节）的号记在**学习库**的 `.config/rk-study-uids.json` 里（号池，就一张表 `{ "version": 1, "uids": { 绝对路径: 编号 } }`），发号计数器 `seq` 仍跟界面设置一起放在 `.config/rk-study.json`，跟画布放在哪个目录、叫什么名字无关。删掉之后号**不回收**：把同名的章节/画布在原地重建，拿到的是**新号**（旧号只留在它自己的备份里），所以「先删 02 再建一个」不会让两个不同时期的东西共用一个身份。号会跟着实体走 —— 章节改名、画布改名（重命名目录）都是**搬号**，身份不变；章节被删除或画布被「移出列表」时，被带走的号会连同文件一起写进那个桶里的 `.rk-uids.json`（`{"at": …, "uids": {绝对路径: 编号}}`），想恢复时认得回来：把目录搬回原位（被移出的画布还要在插件里重新导入一次），下次扫描就会**按路径把原来那个号认回来** —— 恢复的是原身份，不是新号；同一个路径在多个桶里都留过号时，以最近一次删除留下的为准。老笔记不用迁移：第一次扫描到没有号的章节就会自动补上；小节与知识点另走一条更省事的路 —— 号就写在 markdown 的 frontmatter 里（`uid: s0012`），跟着文件内容走，所以改标题、挪位置、连文件名一起改都不丢。**没有号的老笔记也不会被改文件**：扫描时先把号按路径登记进号池（界面上立刻就有号可用），等这个文件下次被插件保存，号才写进它的 frontmatter，号池里那条按路径记的账同时摘掉（号从此跟着内容走，路径再变也不丢）。插件保存时取号的顺序是：文件里已有的 → 盘上旧文件里的（前端重建头部把 `uid` 弄丢也能认回来）→ 扫描时登记的号池 → 都没有才发新号；题目文件本身不发号，但**每一道题**有自己的号 —— 挂在它那个块的标题**下一行**（`<!-- rk-uid: q0001 -->`，渲染出来的笔记里看不见；单独一行是必须的，因为重排 `## 题目 N` 会重写标题行）；改题干、换选项、整段重排都不动它，删掉一道题时标记跟着那段原文一起进 `.remove`，号同时记进计数器（不再发放）。扫盘结果和接口里也带着号：`/rk-study/notes` 返回的 `chapters` / `sections` / `points` 每一项都有 `uid` 字段（章节的号在扫描时补上，小节 / 知识点直接读它文件里的），所以客户端想显示编号可以直接用。**号池为什么单独一个文件**：`rk-study.json` 从此只留界面设置（字号、配色、画布清单）与发号计数器 `seq`，这张随时在长、只有插件自己用得到的号表放旁边 `rk-study-uids.json`；老版本把 `uids` 混在 `rk-study.json` 里的那些库**不用手动改** —— 插件照读老键，并在下一次发号 / 认号时把整张表写进号池文件、再把老键从 `rk-study.json` 里摘掉（一次自动迁移，号一个都不变）。**移出列表的墓碑同样待遇**：它按库里移出过的画布条数长，也住在同目录自己的文件 `rk-study-removed.json` 里（`{ "version": 1, "removed": [绝对路径] }`），老版本混在 `rk-study.json` 里的 `removed` 照读、第一次写时自动搬过去并把老键摘掉。
 
 | 位置 | 按钮 | 移到 `.remove/<桶>/` 里的是什么 |
 | --- | --- | --- |
@@ -390,9 +390,9 @@ D. 非风险点
 - **没有「内置画布」**：一级画布列表以 `localStorage` 为即时来源、同时和学习库的 `<库>/.config/rk-study.json` 双向同步 —— 插件配置（`cordis.patch.yml`）里的 `root` 只是「没带 `?root=` 时的兜底根」，不会自动变成一张卡片（那张带「内置」标签的卡已取消）。所以插件仓库里不需要 `notes/`、`questions/`：笔记放在你自己的目录里（例如 `~/Notes/系统架构师/`），仓库只管插件代码。
 - 卡片上还能**改名**与**移出列表**。改名 = **直接重命名磁盘上的那个目录**（目录名就是画布名，笔记与题目跟着目录一起走）；改成同层已有的名字会被拦下（`name-taken`），弹窗不关、磁盘不动。移出列表会把画布目录**移到同一层的 `.remove/` 里**（排布跟画布内删除章节 / 知识点是同一套：**同一层的 `.remove/` 下按天开桶** —— `<同层>/.remove/20261004/<画布名>`，同一天里移出多个就往后排 `20261004-2`、`20261004-3`，从不覆盖；想恢复就把目录从桶里移回上一层）。移出还会记一个**墓碑**：之后再 `重新扫描`、刷新、重新导入同一个库都不会把它加回来 —— 只有在**同一个路径** `＋ 新建学习画布`、或重新 `⇪ 导入目录` 这个库时才解除。
 - 画布卡片是**穿透**的：卡片空白处按住鼠标 = 直接拖动画布（`pointer-events:none`，指针事件落到 canvas 上），卡片上的文字也不可选中（`user-select:none`）；只有真正要执行事件的部件（`进入画布 ›` 与 `改名` / `移出列表` 按钮）照旧接收鼠标（`pointer-events:auto`）。`＋ 新建学习画布` 那张虚线卡本身就是按钮，仍然整块可点。
-- 列表、手动移出的墓碑、以及一级画布上的字号 / 配色，都记在 `localStorage`（`rk-study:roots` / `rk-study:removed-roots` / `rk-study:font-scale` / `rk-study:skin`）；「当前在哪张画布」只活在这一个页面会话里，打开 / 刷新都从**一级画布**（全部画布总览）开始；**学习库那一级**的这些状态还会写进 `<库>/.config/rk-study.json`（`canvases` / `removed` / `ui` / `zoom`），所以换浏览器、换机器、重装插件，导入同一个库就能把画布列表与移出记录读回来；每个画布的统计与 Git 范围都只算当前这个根目录。
+- 列表、手动移出的墓碑、以及一级画布上的字号 / 配色，都记在 `localStorage`（`rk-study:roots` / `rk-study:removed-roots` / `rk-study:font-scale` / `rk-study:skin`）；「当前在哪张画布」只活在这一个页面会话里，打开 / 刷新都从**一级画布**（全部画布总览）开始；**学习库那一级**的这些状态还会写进 `<库>/.config/rk-study.json`（`canvases` / `ui` / `zoom`；移出记录单独放同目录的 `.config/rk-study-removed.json`），所以换浏览器、换机器、重装插件，导入同一个库就能把画布列表与移出记录读回来；每个画布的统计与 Git 范围都只算当前这个根目录。
 
-实现上，客户端把当前根目录加在所有请求上（`?root=<绝对路径>`），Host 半只在**学习库那一级**落一个配置文件 `<库>/.config/rk-study.json`（单张画布的笔记目录一个字节都不写，见「设置存在哪」一节）：`plugin/rk-study/lib/routes.js` 用 `node:async_hooks` 的 `AsyncLocalStorage` 做**请求级 root** —— 每个请求进来先算出它自己的 `{...基础配置, root}`，配置对象与 1 秒缓存都按 root 分桶（同一秒里读两个画布不会串），其余逻辑一行没改。新增四个接口：`GET /rk-study/roots`（默认根、建议父目录 `suggestParent`、宿主常用的 `home` / `desktop`、某个目录自己是不是画布 `isCanvas`，以及 `notes`/`questions`/模板目录约定）与 `POST /rk-study/roots`（建目录骨架 / 导入 / 改名，返回 `created` / `templates`），以及 `GET` / `POST /rk-study/config`（读写**学习库那一级**的 `.config/rk-study.json`，`POST` 发现目标根自己有 `notes/` 就回 400 `not-a-library`），还有 `GET` / `POST /rk-study/state`（插件级状态的镜像文件 `<DSH_HOME>/rk-study/state.json`：`GET` 读回 `roots` / `defaultRoot` / `removed`，`POST` 清洗这三项后与旧文件**合并**再落盘（老版本存过的 `activeRoot` 一律忽略，并在写盘时删掉），返回写进去的 `keys`）。路径会校验：必须是绝对路径、不含 `..`、长度受限，不合法的 `root` 参数回退到默认根。
+实现上，客户端把当前根目录加在所有请求上（`?root=<绝对路径>`），Host 半只在**学习库那一级**落一个配置文件 `<库>/.config/rk-study.json`（单张画布的笔记目录一个字节都不写，见「设置存在哪」一节）：`plugin/rk-study/lib/routes.js` 用 `node:async_hooks` 的 `AsyncLocalStorage` 做**请求级 root** —— 每个请求进来先算出它自己的 `{...基础配置, root}`，配置对象与 1 秒缓存都按 root 分桶（同一秒里读两个画布不会串），其余逻辑一行没改。新增四个接口：`GET /rk-study/roots`（默认根、建议父目录 `suggestParent`、宿主常用的 `home` / `desktop`、某个目录自己是不是画布 `isCanvas`，以及 `notes`/`questions`/模板目录约定）与 `POST /rk-study/roots`（建目录骨架 / 导入 / 改名，返回 `created` / `templates`），以及 `GET` / `POST /rk-study/config`（读写**学习库那一级**的 `.config/rk-study.json`，`POST` 发现目标根自己有 `notes/` 就回 400 `not-a-library`；`removed` 移出列表另存同目录的 `rk-study-removed.json`，读写仍走这个接口），还有 `GET` / `POST /rk-study/state`（插件级状态的镜像文件 `<DSH_HOME>/rk-study/state.json`：`GET` 读回 `roots` / `defaultRoot` / `removed`，`POST` 清洗这三项后与旧文件**合并**再落盘（老版本存过的 `activeRoot` 一律忽略，并在写盘时删掉），返回写进去的 `keys`）。路径会校验：必须是绝对路径、不含 `..`、长度受限，不合法的 `root` 参数回退到默认根。
 
 ### 设置存在哪
 
@@ -428,17 +428,18 @@ D. 非风险点
 | `ui.fontScale` / `ui.skin` / `ui.cardColors` / `ui.theme` | 字号 / 配色 / 卡片各用一色 / 主题（`plugin` / `follow`） | 在一级画布上改就写这里；进某张画布后改的仍只记本机 |
 | `zoom.roots` | 一级画布的视野 | `{ "x": …, "y": …, "scale": … }`；每张画布各自的视野记 `localStorage`（工作区路径因机器而异，不适合写进库里那份） |
 | `canvases` | 画布清单 | `[{ "path": "…", "name": "…" }]`，`name` 只是副本，真正的名字仍是磁盘目录名 |
-| `removed` | 移出列表的墓碑 | 绝对路径数组（目录本体已经被移到同层 `.remove/` 里），导入 / 扫描都不会把里面的路径再加回来 |
 | `uid` | 这个库自己的编号 | 给「一张画布自成一库」时记下这张画布的号 |
 | `seq` | 发号计数器 | `{ "canvas": …, "chapter": …, "section": …, "point": …, "question": … }`，只增不减（号不复用的根据） |
 
 号池是**单独一个文件**（跟 `rk-study.json` 同一个 `.config/`）：`rk-study-uids.json`，内容 `{ "version": 1, "uids": { 绝对路径: 编号 } }` —— 画布与章节的号都在这儿；小节 / 知识点的号平时写在 markdown 的 frontmatter 里，只有「老笔记还没被保存过」时先在号池里按路径挂一个（保存后就摘掉）。老版本混在 `rk-study.json` 里的 `uids` 会被自动搬到这个文件（见上面「编号」一段），`rk-study.json` 里的老键随之摘掉。
 
+移出列表（墓碑）同样是**单独一个文件**（同一个 `.config/`）：`rk-study-removed.json`，内容 `{ "version": 1, "removed": [绝对路径] }` —— 客户端每次送的是**完整名单**，所以写就是整份替换（空数组 = 全部解除）。这个文件一旦建出来它就是权威：即使 `rk-study.json` 里还留着老键也不再并进来（不然「取消墓碑」会被那条老记录重新加回来）；老版本混在 `rk-study.json` 里的 `removed` 照读，第一次写时自动搬过去并把老键摘掉。
+
 写入是**深合并**：`POST /rk-study/config` 只带要改的键（例如 `{"ui":{"fontScale":130}}`），值给 `null` 就删掉那个键；文件不存在会自动连 `.config/` 一起建。**单张画布一个字节都不写**：目标根自己有 `notes/` 时直接回 400 `not-a-library`。
 
 - **为什么只写在「学习库」这一级**：库目录是**你自己选的项目根**，「这个库有哪些画布 / 移出过哪些 / 看的时候习惯多大多小」记在它下面最自然 —— 换浏览器、换机器、重装插件，导入同一个库就全都回来了。而**每张画布的笔记目录**（`notes/` 那一层）一个字节都不写：笔记进 git 时不会因为字号、视野这类状态变化而互相冲突。
 - **画布名就是目录名，不写进配置**：名字只有一个来源，就是磁盘上的目录名。卡片上「改名」走的是 `POST /rk-study/roots {action:"rename"}`：Host 半直接把目录 `rename` 掉再返回新路径，客户端把列表里的路径换成新的。所以换浏览器 / 换机器 / 重新 `⇪ 导入目录`，显示的都是目录名；直接改目录名也一样有效。名字会校验（不能为空、不能含 `/`、不能以 `.` 开头）与查重（同一层已有同名目录就报 `name-taken`，弹窗不关、磁盘不动）。
-- **画布目录里只剩下 `notes/` 与 `questions/`**（老画布可能还有 `notes/.templates/`）：模板是给人编辑的 markdown（见上面「模板共用规则」），统一放**学习库根目录**的 `.templates/`；库根目录下还会有 `.config/rk-study.json`（上面那份 json，界面设置）与它旁边的 `.config/rk-study-uids.json`（号池）。点开头的目录扫描会跳过、也不会被当成一章。`⎇ Git 提交` 现在只在一级画布上、范围是整个学习库，所以这两样（以及库根目录下别的改动）都会在「仅提交」时一起进版本库 —— 除非 `.gitignore` 排除。
+- **画布目录里只剩下 `notes/` 与 `questions/`**（老画布可能还有 `notes/.templates/`）：模板是给人编辑的 markdown（见上面「模板共用规则」），统一放**学习库根目录**的 `.templates/`；库根目录下还会有 `.config/rk-study.json`（上面那份 json，界面设置）与它旁边的 `.config/rk-study-uids.json`（号池）、`.config/rk-study-removed.json`（移出列表的墓碑）。点开头的目录扫描会跳过、也不会被当成一章。`⎇ Git 提交` 现在只在一级画布上、范围是整个学习库，所以这两样（以及库根目录下别的改动）都会在「仅提交」时一起进版本库 —— 除非 `.gitignore` 排除。
 - **想覆盖插件配置**（目录名 / 排除 / 扫描深度 / AI 模型）：改插件自己的 `plugin/rk-study/cordis.patch.yml`，不再支持「按画布覆盖」。
 - **一级画布的视野（平移 / 缩放）**写进库的 `.config`（跨浏览器保持）；**单张画布内的视野**与**全屏开关**只在浏览器里，不落盘。
 
@@ -458,9 +459,9 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 
 | 模块 | 行数 | 职责 |
 | --- | --- | --- |
-| `constants.js` | 105 | 路由/资源路径、默认值与上限、路径与标题的正则 |
+| `constants.js` | 107 | 路由/资源路径、默认值与上限、路径与标题的正则 |
 | `util.js` | 283 | 目录名归一化、路径换算、标题与标签清洗、frontmatter、摘要、模板/库路径（`templateDirOf` / `sharedTemplateDirOf` / `libraryDirOf`）、`validateRoot` |
-| `libconfig.js` | 294 | 学习库级 `.config/rk-study.json` 的读写：键清洗（`ui` / `zoom` / `canvases` / `removed` / `uid` / `seq`）、深合并（`null` 删键）、1 秒缓存，`/rk-study/config` 与 uid 发号器共用；号池另立一份 —— `uidConfigPathOf`（`<库>/.config/rk-study-uids.json`）/ `readUidStore`（号池优先，老配置里的 `uids` 只用来补缺、并被照读）/ `writeUidStore`（只写号池，写完顺手把老配置里那份 `uids` 摘掉，完成迁移），各有自己的 1 秒缓存 |
+| `libconfig.js` | 346 | 学习库级 `.config/rk-study.json` 的读写：键清洗（`ui` / `zoom` / `canvases` / `uid` / `seq`）、深合并（`null` 删键）、1 秒缓存，`/rk-study/config` 与 uid 发号器共用；两份「机器账本」各自另立文件 —— 号池 `uidConfigPathOf`（`<库>/.config/rk-study-uids.json`）/ `readUidStore`（号池优先，老配置里的 `uids` 只用来补缺、并被照读）/ `writeUidStore`（只写号池，写完顺手把老配置里那份 `uids` 摘掉，完成迁移），移出列表 `removedConfigPathOf`（`<库>/.config/rk-study-removed.json`）/ `readRemovedStore`（独立文件是权威，老键只在文件还没建出来时才认）/ `writeRemovedStore`（整份替换，写完把老配置里的 `removed` 摘掉），各有自己的 1 秒缓存 |
 | `uid.js` | 262 | 编号发号器：`ensureUids`（按路径批量发号，一次调用只写一次配置）/ `uidsFor`（只读）/ `moveUid`（改名搬号）/ `dropUids`（摘号，计数器不回退）/ `adoptUids`（恢复时认回）/ `takeUid`（只发号不记路径，给小节 / 知识点写进 frontmatter）/ `adoptUid`（认下文件里已有的号并把计数器抬上去）/ `uidFromText` 与 `withUidText`（从 markdown 里读号 / 把号写进 frontmatter）/ `formatUid` / `isUid`；号表读写的都是号池文件（`readUidStore` / `writeUidStore`），只有 `seq` 计数器还留在 `.config/rk-study.json` 里 |
 | `headings.js` | 156 | 扫标题（跳过代码围栏）、建标题树、子树范围、节点正文 |
 | `parse.js` | 224 | 一个 markdown 文件 → 小节/知识点/题目 的结构 |
@@ -473,15 +474,15 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 | `scan.js` | 331 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存；顺带把号带出来 —— 文件记录读 frontmatter 里的 `uid`（小节 / 知识点），知识点文件自己的号挂到它那条知识点上 |
 | `bin.js` | 507 | 回收站（只有两层有它）：根画布那层 `listRootBins`（把当前根、它上一层、画布列表里每张画布父目录的 `.remove` 合起来列，只留「顶层整条」= 整只画布，`notes` / `questions` 这类画布内部结构不算），一级画布那层 `listChapterBin`（只看这张画布自己的 `.remove`，按章把 `notes/<章>/…` 与平行的 `questions/<章>/…` 聚成一条）；恢复是 `restoreItem` / `restoreBucket` / `restoreChapter`（按记录所在的 `box` 落回对应目录、原位已有同名**文件**时跳过或拒绝、章级恢复是「原位缺什么补什么」的合并、号按那只桶里记的认回、空桶与空掉的 `.remove` 一起收掉）；`listBin` 是底座 —— 只列「影子树的根」（原位已经没有、父目录还在的那一层，所以恢复它就是把整棵子树搬回去），并且按 `isBucketName`（`YYYYMMDD` / `YYYYMMDD-2` / `YYYY-MM-DD_HHmmss`）区分新旧：不是日期桶的目录是**老格式**（`.remove/<相对路径>` 就是那条记录本身），交给 `collectLegacy` 收进一只 `at=旧格式`、桶名为空字符串的分组，`restoreItem` 也支持空的 `bucket`（记录直接躺在 `.remove` 下） |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
-| `routes.js` | 1699 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
+| `routes.js` | 1706 | `apply`：注册 7 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
 
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**两个版本号（`?v=N` 与 `client.js` 的 `MODULE_VERSION`）要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=59）
-> sed -i '' 's/?v=58/?v=59/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=60）
+> sed -i '' 's/?v=59/?v=60/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
 > # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 145）
-> sed -i '' 's/MODULE_VERSION = 144;/MODULE_VERSION = 145;/' plugin/rk-study/client.js
+> sed -i '' 's/MODULE_VERSION = 145;/MODULE_VERSION = 146;/' plugin/rk-study/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
