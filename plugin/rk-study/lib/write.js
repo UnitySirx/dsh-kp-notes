@@ -1,8 +1,8 @@
 /* rk-study · host/write —— 从 host.js 第 969-1025 行原样切出 */
-import { MARKDOWN_RE } from './constants.js?v=51';
-import { absPathOf, denyOutsideRoot, insideRoot, writePolicyOf } from './fsguard.js?v=51';
-import { classifyFile, isQuestionStorePath, libraryDirOf, normalizeRelPath, parseFrontmatter } from './util.js?v=51';
-import { adoptUid, dropUids, takeUid, uidsFor, uidFromText, withUidText } from './uid.js?v=51';
+import { MARKDOWN_RE } from './constants.js?v=52';
+import { absPathOf, denyOutsideRoot, insideRoot, writePolicyOf } from './fsguard.js?v=52';
+import { classifyFile, isQuestionStorePath, libraryDirOf, normalizeRelPath, parseFrontmatter } from './util.js?v=52';
+import { adoptUid, dropUids, takeUid, uidsFor, uidFromText, withUidText } from './uid.js?v=52';
 
 /* ----------------------------------------------------------------- write */
 

@@ -6,20 +6,20 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=51';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=51';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=51';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=51';
-import { buildNodes, scanHeadings } from './headings.js?v=51';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=51';
-import { parseDocument } from './parse.js?v=51';
-import { pointRegion, rebuildPoint } from './points.js?v=51';
-import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=51';
-import { buildCatalog } from './scan.js?v=51';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=51';
-import { dropUids, ensureUids, moveUid } from './uid.js?v=51';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=51';
-import { readBody, safePath, writeMarkdown } from './write.js?v=51';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=52';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=52';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=52';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=52';
+import { buildNodes, scanHeadings } from './headings.js?v=52';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=52';
+import { parseDocument } from './parse.js?v=52';
+import { pointRegion, rebuildPoint } from './points.js?v=52';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=52';
+import { buildCatalog } from './scan.js?v=52';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=52';
+import { adoptUid, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=52';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=52';
+import { readBody, safePath, writeMarkdown } from './write.js?v=52';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -492,10 +492,12 @@ export function apply(ctx, rawConfig) {
 		}
 		const counts = countQuestionItems(markdown);
 		const order = counts.total + 1;
-		const next = `${String(markdown).replace(/\s*$/, '')}\n\n${questionBlock(order)}`;
+		/* 每道题一个自己的号(写进块里的注释标记): 题目被删掉、重排、换位置, 号都跟着这道题走 */
+		const qUid = await takeUid(ctx, await uidLibOf(config), 'question');
+		const next = `${String(markdown).replace(/\s*$/, '')}\n\n${withBlockUid(questionBlock(order), qUid)}`;
 		const written = await writeMarkdown(ctx, config, target, next);
 		cache.data = null;
-		return { ok: true, ...written, path: target, point: pointRel, markdown: next, order, created };
+		return { ok: true, ...written, path: target, point: pointRel, markdown: next, order, created, uid: qUid };
 	}
 
 	/** 表单写回一道题: payload.path 可以是知识点路径, 也可以是题目文件路径 */
@@ -541,14 +543,20 @@ export function apply(ctx, rawConfig) {
 			markdown = questionFileTemplate(pointTitle, order, pointRel);
 		}
 		const wanted = Number.isFinite(Number(payload.order)) && Number(payload.order) > 0 ? Math.round(Number(payload.order)) : null;
+		/* 改一道题不换身份: 沿用这个位置原来那道题的号(可能写在文件里), 原来没有才发新号 */
+		const qLib = await uidLibOf(config);
+		const existing = wanted !== null ? questionBlockNodes(markdown).uids[wanted - 1] || '' : '';
+		if (existing !== '') await adoptUid(ctx, qLib, 'question', existing);
+		const qUid = existing !== '' ? existing : await takeUid(ctx, qLib, 'question');
 		const block = questionBlockFromFields({ ...fields, kind, options }, wanted ?? countQuestionItems(markdown).total + 1);
-		const next = saveQuestionBlock(markdown, wanted, block);
+		const next = saveQuestionBlock(markdown, wanted, block, qUid);
 		const written = await writeMarkdown(ctx, config, target, next);
 		cache.data = null;
 		const counts = countQuestionItems(next);
 		return {
 			ok: true,
 			...written,
+			uid: qUid,
 			path: target,
 			point: pointRel,
 			markdown: next,
@@ -576,6 +584,8 @@ export function apply(ctx, rawConfig) {
 		const markdown = await ctx.fs.readText(target);
 		const trimmed = removeQuestionBlock(markdown, Number(payload.order));
 		if (!trimmed) throw new Error(`question-not-found: ${relPath}#${payload.order}`);
+		/* 这道题的号不回收: 记进计数器(以后不会再发同一个), 号本身留在删掉的那段文本里 */
+		if (trimmed.uid) await adoptUid(ctx, await uidLibOf(config), 'question', trimmed.uid);
 		/* 删掉的这一道题不丢: 先另存一份到画布根目录的 .remove/<日期桶>/ 里, 再重写文件 */
 		const bucket = removeBucketFor(config);
 		const movedTo = saveRemovedText(config, relPath, trimmed.removed, Number(payload.order), bucket);
@@ -584,6 +594,7 @@ export function apply(ctx, rawConfig) {
 		return {
 			ok: true,
 			path: relPath,
+			uid: trimmed.uid || '',
 			removed: trimmed.title,
 			remaining: trimmed.remaining,
 			movedTo,

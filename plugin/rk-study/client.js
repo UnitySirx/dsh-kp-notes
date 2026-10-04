@@ -3057,7 +3057,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 137;
+		const MODULE_VERSION = 138;
 		const CLIENT_MODULES = ['dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 

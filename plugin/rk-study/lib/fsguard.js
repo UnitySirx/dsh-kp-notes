@@ -16,7 +16,7 @@
  *     若以后要收紧, 正确做法是维护一份「合法 root 白名单」(baseConfig.root + 已授权的画布),
  *     而不是继续加字符串前缀判断。
  */
-import { normalizeRelPath } from './util.js?v=51';
+import { normalizeRelPath } from './util.js?v=52';
 
 /** 把 root 与 root 内的相对路径拼成绝对路径(相对路径已归一化, 不含 .. ) */
 export function absPathOf(config, relPath) {
