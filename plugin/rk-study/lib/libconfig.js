@@ -14,15 +14,22 @@
  *   removed  : 手动「移出列表」的画布(墓碑, 重新扫描也不会加回来)
  *   uid      : 这个学习库自己的编号(形如 c0001, 见 uid.js)
  *   seq      : 每类实体「已经发到几号」{ canvas, chapter, section, point, question } —— 只增不减, 号永不复用
- *   uids     : 当前还在的目录 -> 编号(绝对路径 -> uid); 值写 null 表示「这个路径的号没了(删了/改名了)」
+ *
+ * `uids`(绝对路径 -> 编号)不在这里, 单独放 <库>/.config/rk-study-uids.json:
+ * 那份是按实体条数长大的机器账本(几百上千条), 混在界面配置里又长又难读。读号时老版本
+ * 混在这份文件里的 `uids` 会被自动读出来(向后兼容), 第一次写号时把老键摘掉, 从此只有号池那份。
+ * `uids` 里值写 null 表示「这个路径的号没了(删了/改名了)」。
  */
 
-import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE } from './constants.js?v=58';
+import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE, UIDS_FILE } from './constants.js?v=59';
 
 const cache = new Map();
+/* 号池单独缓存: 键是 <库>/.config/rk-study-uids.json 的绝对路径 */
+const uidCache = new Map();
 /** 插件卸载时清掉这份模块级缓存(由 routes.js 的 ctx.effect 调用)。 */
 export function clearLibConfigCache() {
 	cache.clear();
+	uidCache.clear();
 }
 /* 上限只是防手滑: 一个库几百张画布绰绰有余, 也不会让文件无限膨胀 */
 const MAX_ZOOM_KEYS = 400;
@@ -45,6 +52,12 @@ export function configDirOf(lib) {
 export function configPathOf(lib) {
 	const dir = configDirOf(lib);
 	return dir === '' ? '' : `${dir}/${CONFIG_FILE}`;
+}
+
+/** 号池文件: <库>/.config/rk-study-uids.json */
+export function uidConfigPathOf(lib) {
+	const dir = configDirOf(lib);
+	return dir === '' ? '' : `${dir}/${UIDS_FILE}`;
 }
 
 function isObject(value) {
@@ -182,7 +195,9 @@ function cleanTop(patch) {
 	const removed = cleanRemoved(patch.removed);
 	if (removed) out.removed = removed;
 	if (isObject(patch.seq)) out.seq = cleanSeq(patch.seq);
-	if (isObject(patch.uids)) out.uids = cleanUids(patch.uids);
+	/* uids 现在住在号池那个文件里; 这里只认「显式 null = 把老键从这份配置里摘掉」(迁移用) */
+	if (patch.uids === null) out.uids = null;
+	else if (isObject(patch.uids)) out.uids = cleanUids(patch.uids);
 	return out;
 }
 
@@ -228,6 +243,44 @@ export async function writeLibConfig(ctx, lib, patch) {
 	const target = await ctx.fs.resolve(path);
 	await ctx.fs.writeText(target, `${JSON.stringify(merged, null, '\t')}\n`, undefined, undefined, { mode: 'workspace-write', workspaceRoot: lib });
 	cache.set(path, { at: Date.now(), data: merged });
+	return merged;
+}
+
+/* 读号池(绝对路径 -> uid)。文件不存在 / 坏了 ⇒ 回退到老版本的 rk-study.json.uids(还没搬过的库照常认号)。 */
+export async function readUidStore(ctx, lib, fresh) {
+	const path = uidConfigPathOf(lib);
+	if (path === '') return {};
+	const hit = uidCache.get(path);
+	if (fresh !== true && hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.data;
+	let data = null;
+	try {
+		const target = await ctx.fs.resolve(path);
+		if (await ctx.fs.stat(target)) {
+			const parsed = JSON.parse(await ctx.fs.readText(target));
+			data = cleanUids(isObject(parsed) ? parsed.uids : {});
+		}
+	} catch {
+		data = null;
+	}
+	/* 老键只用来「补缺」: 号池里已经有的为准(它才是删过号的权威), 老配置里还有的照读 ——
+	   迁移把老键摘掉之后这段就自然什么都不做。 */
+	const legacy = cleanUids((await readLibConfig(ctx, lib, fresh)).uids);
+	if (Object.keys(legacy).length > 0) data = { ...legacy, ...(data || {}) };
+	else if (data === null) data = {};
+	uidCache.set(path, { at: Date.now(), data });
+	return data;
+}
+
+/* 把一批号写进号池(值 null = 删掉那条); 返回写完之后的完整号表。
+   第一次写就把老版本混在 rk-study.json 里的 uids 摘掉 —— 迁移是一次性、无损的。 */
+export async function writeUidStore(ctx, lib, patch) {
+	const path = uidConfigPathOf(lib);
+	if (path === '') throw new Error('bad-config-root');
+	const merged = deepMerge(await readUidStore(ctx, lib, true), cleanUids(patch));
+	const target = await ctx.fs.resolve(path);
+	await ctx.fs.writeText(target, `${JSON.stringify({ version: 1, uids: merged }, null, '\t')}\n`, undefined, undefined, { mode: 'workspace-write', workspaceRoot: lib });
+	uidCache.set(path, { at: Date.now(), data: merged });
+	if ('uids' in (await readLibConfig(ctx, lib, true))) await writeLibConfig(ctx, lib, { uids: null });
 	return merged;
 }
 

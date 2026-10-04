@@ -14,17 +14,18 @@
  * 于是在同一个位置重建同名东西时会拿到一个**新号**, 老号永远只属于原来那个东西。
  *
  * 号存在哪:
- *   - 目录(canvas / chapter)没有 frontmatter 可写, 记在**学习库的配置**里
- *     <库>/.config/rk-study.json 的 `uids`(绝对路径 -> uid) 与 `seq`(每类下一个号);
+ *   - 目录(canvas / chapter)没有 frontmatter 可写, 记在**学习库**的号池文件
+ *     <库>/.config/rk-study-uids.json 的 `uids`(绝对路径 -> uid);
+ *     发号计数器 `seq`(每类下一个号)仍在 <库>/.config/rk-study.json 里;
  *   - 文件(section / point / question)另有办法把 uid 写进 markdown 的 frontmatter,
  *     这里只负责发号, 落盘由调用方决定(见 routes.js / write.js)。
  * 之所以不放画布自己的 .config: 插件一直保持「单张画布不写盘、笔记目录干干净净」这条规矩。
  *
- * 读写全部走 libconfig 的 readLibConfig / writeLibConfig(带 1 秒缓存, 只认白名单键),
- * 这里不碰 node:fs —— 也就没有越界写盘的可能。
+ * 读写全部走 libconfig 的 readLibConfig / writeLibConfig / readUidStore / writeUidStore
+ * (带 1 秒缓存, 只认白名单键), 这里不碰 node:fs —— 也就没有越界写盘的可能。
  */
 
-import { readLibConfig, writeLibConfig } from './libconfig.js?v=58';
+import { readLibConfig, writeLibConfig, readUidStore, writeUidStore } from './libconfig.js?v=59';
 
 /** 五类实体; 前缀既是类型标记, 也方便 grep(比如找出所有 h0007 的引用) */
 export const UID_PREFIX = { canvas: 'c', chapter: 'h', section: 's', point: 'p', question: 'q' };
@@ -85,9 +86,9 @@ export async function ensureUids(ctx, lib, kind, paths) {
 	if (list.length === 0) return out;
 	if (!UID_PREFIX[kind]) throw new Error(`bad-uid-kind: ${kind}`);
 	const config = await readLibConfig(ctx, lib, true);
-	const uids = { ...(config.uids || {}) };
+	const uids = { ...(await readUidStore(ctx, lib, true)) };
 	let next = Math.max(0, Math.min(MAX_SEQ, Math.floor(Number((config.seq || {})[kind]) || 0)));
-	let dirty = false;
+	const patch = {};
 	for (const abs of list) {
 		const hit = uids[abs];
 		if (isUid(hit, kind)) {
@@ -97,10 +98,13 @@ export async function ensureUids(ctx, lib, kind, paths) {
 		next += 1;
 		const uid = formatUid(kind, next);
 		uids[abs] = uid;
+		patch[abs] = uid;
 		out[abs] = uid;
-		dirty = true;
 	}
-	if (dirty) await writeLibConfig(ctx, lib, { seq: { [kind]: next }, uids });
+	if (Object.keys(patch).length > 0) {
+		await writeLibConfig(ctx, lib, { seq: { [kind]: next } });
+		await writeUidStore(ctx, lib, patch);
+	}
 	return out;
 }
 
@@ -109,8 +113,7 @@ export async function uidsFor(ctx, lib, paths) {
 	const list = cleanList(paths);
 	const out = {};
 	if (list.length === 0) return out;
-	const config = await readLibConfig(ctx, lib);
-	const uids = config.uids || {};
+	const uids = await readUidStore(ctx, lib);
 	for (const abs of list) {
 		if (isUid(uids[abs])) out[abs] = uids[abs];
 	}
@@ -125,10 +128,10 @@ export async function moveUid(ctx, lib, fromAbs, toAbs) {
 	const from = String(fromAbs ?? '');
 	const to = String(toAbs ?? '');
 	if (from === '' || to === '' || from === to) return '';
-	const config = await readLibConfig(ctx, lib, true);
-	const hit = (config.uids || {})[from];
+	const uids = await readUidStore(ctx, lib, true);
+	const hit = uids[from];
 	if (!isUid(hit)) return '';
-	await writeLibConfig(ctx, lib, { uids: { [from]: null, [to]: hit } });
+	await writeUidStore(ctx, lib, { [from]: null, [to]: hit });
 	return hit;
 }
 
@@ -142,8 +145,7 @@ export async function dropUids(ctx, lib, paths) {
 	const list = cleanList(paths);
 	const out = {};
 	if (list.length === 0) return out;
-	const config = await readLibConfig(ctx, lib, true);
-	const table = config.uids || {};
+	const table = await readUidStore(ctx, lib, true);
 	const patch = {};
 	for (const abs of list) {
 		if (!isUid(table[abs])) continue;
@@ -151,7 +153,7 @@ export async function dropUids(ctx, lib, paths) {
 		patch[abs] = null;
 	}
 	if (Object.keys(patch).length === 0) return out;
-	await writeLibConfig(ctx, lib, { uids: patch });
+	await writeUidStore(ctx, lib, patch);
 	return out;
 }
 
@@ -162,8 +164,7 @@ export async function dropUids(ctx, lib, paths) {
 export async function adoptUids(ctx, lib, mapping) {
 	const entries = mapping && typeof mapping === 'object' ? Object.entries(mapping) : [];
 	if (entries.length === 0) return {};
-	const config = await readLibConfig(ctx, lib, true);
-	const uids = { ...(config.uids || {}) };
+	const uids = { ...(await readUidStore(ctx, lib, true)) };
 	const patch = {};
 	for (const [abs, uid] of entries) {
 		const key = String(abs ?? '');
@@ -173,7 +174,7 @@ export async function adoptUids(ctx, lib, mapping) {
 		patch[key] = String(uid);
 	}
 	if (Object.keys(patch).length === 0) return {};
-	await writeLibConfig(ctx, lib, { uids: patch });
+	await writeUidStore(ctx, lib, patch);
 	return patch;
 }
 
@@ -242,9 +243,9 @@ export async function adoptUid(ctx, lib, kind, uid) {
 }
 
 export async function uidTable(ctx, lib) {
-	const config = await readLibConfig(ctx, lib);
+	const table = await readUidStore(ctx, lib);
 	const out = {};
-	for (const [abs, uid] of Object.entries(config.uids || {})) {
+	for (const [abs, uid] of Object.entries(table)) {
 		if (isUid(uid)) out[abs] = uid;
 	}
 	return out;

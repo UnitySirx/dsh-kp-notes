@@ -46,6 +46,8 @@ export const ROOTS_ROUTE = '/rk-study/roots';
 export const CONFIG_ROUTE = '/rk-study/config';
 export const CONFIG_DIR = '.config';
 export const CONFIG_FILE = 'rk-study.json';
+/* 号池单独一个文件: <库>/.config/rk-study-uids.json —— 只放 uids(绝对路径 -> uid), 与界面配置分家 */
+export const UIDS_FILE = 'rk-study-uids.json';
 /* 插件自己的状态(画布列表 / 学习库 / 上次停在哪张 / 移出列表)。与「学习库那一级的 .config」不同, 这份不
  * 属于任何画布目录, 而是插件自己的持久化 —— 落在 DSH 自己的数据目录里(与 .plugin-backups / cache 同级)。
  * 存在的理由: 浏览器 localStorage 一换浏览器、清了缓存、或者宿主换了访问端口就整份读不到, 表现就是
