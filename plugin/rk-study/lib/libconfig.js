@@ -1,6 +1,6 @@
 /* 学习库(画布存放目录)自己的配置: <库>/.config/rk-study.json
  *
- * 只有**学习库那一级**写这个文件 —— 例如 /Users/unitysir/Desktop/WorkNotes/.config/rk-study.json。
+ * 只有**学习库那一级**写这个文件 —— 例如 <学习库>/.config/rk-study.json。
  * 单张画布自己不再写盘(画布名 = 目录名, 模板在 .templates/), 所以笔记目录里干干净净。
  *
  * 目录名固定 `.config`, 文件名固定 `rk-study.json`: 配置跟着笔记走(git 同步、换浏览器/换机器都还在)。
