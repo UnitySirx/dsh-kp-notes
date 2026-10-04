@@ -1,7 +1,8 @@
 /* rk-study · host/scan —— 从 host.js 第 640-967 行原样切出 */
-import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES } from './constants.js?v=48';
-import { parseDocument } from './parse.js?v=48';
-import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=48';
+import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES } from './constants.js?v=50';
+import { parseDocument } from './parse.js?v=50';
+import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=50';
+import { uidFromText } from './uid.js?v=50';
 
 /* ------------------------------------------------------------------ scan */
 
@@ -116,6 +117,7 @@ export async function buildCatalog(ctx, config, signal) {
 			points: parsed.points,
 			questions: parsed.questions,
 			frontmatter: front,
+			uid: uidFromText(text, mode),
 			class: classified,
 			parsed,
 		};
@@ -177,6 +179,7 @@ export async function buildCatalog(ctx, config, signal) {
 	const toSection = (record) => ({
 		path: record.path,
 		file: record.file,
+		uid: record.uid || '',
 		title: record.title,
 		kind: record.kind === 'section' ? 'section' : 'note',
 		order: record.order,
@@ -223,6 +226,8 @@ export async function buildCatalog(ctx, config, signal) {
 			const section = attach(record);
 			const point = record.parsed.points[0];
 			if (!point) return;
+			/* 知识点文件自己的号(写在它 frontmatter 里的 uid)挂到这条知识点上 */
+			if (record.uid && !point.uid) point.uid = record.uid;
 			if (section.path !== record.path) {
 				section.points.push(point);
 				section.pointsCount += 1;

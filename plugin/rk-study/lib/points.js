@@ -1,7 +1,7 @@
 /* rk-study · host/points —— 从 host.js 第 1254-1366 行原样切出 */
-import { buildNodes, isQuestionHeading, scanHeadings, subtreeEnd } from './headings.js?v=48';
-import { sanitizeName } from './templates.js?v=48';
-import { baseName, cleanTitle, parseFrontmatter, stripInline, stripNumericPrefix } from './util.js?v=48';
+import { buildNodes, isQuestionHeading, scanHeadings, subtreeEnd } from './headings.js?v=50';
+import { sanitizeName } from './templates.js?v=50';
+import { baseName, cleanTitle, parseFrontmatter, stripInline, stripNumericPrefix } from './util.js?v=50';
 
 /* ------------------------------------------------ knowledge point regions */
 export function splitTagsValue(value) {

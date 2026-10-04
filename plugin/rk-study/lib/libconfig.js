@@ -17,7 +17,7 @@
  *   uids     : 当前还在的目录 -> 编号(绝对路径 -> uid); 值写 null 表示「这个路径的号没了(删了/改名了)」
  */
 
-import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE } from './constants.js?v=48';
+import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE } from './constants.js?v=50';
 
 const cache = new Map();
 /** 插件卸载时清掉这份模块级缓存(由 routes.js 的 ctx.effect 调用)。 */
