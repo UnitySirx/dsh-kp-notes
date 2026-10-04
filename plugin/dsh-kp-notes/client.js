@@ -103,6 +103,7 @@ window.__ModuleLoader__.load({
 				useGitPanel,
 				useRoots,
 				useEditing,
+				useCanvas,
 				setMermaidTheme,
 				/* 数据层(client/api.js): 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook */
 				baseNameOf,
@@ -310,17 +311,6 @@ window.__ModuleLoader__.load({
 
 			const [route, setRoute] = useState({ view: 'map' });
 			const [query, setQuery] = useState('');
-			const [view, setView] = useState({ x: 26, y: 22, scale: 1 });
-			const [panning, setPanning] = useState(false);
-			const [measureTick, setMeasureTick] = useState(0);
-			const stageRef = useRef(null);
-			const ringRef = useRef(null);
-			const hoverRef = useRef(null);
-			const panRef = useRef(null);
-			const measured = useRef({});
-			const didFit = useRef(false);
-			const mapFits = useRef(0); /* 导图: 进入后自动 fit 的次数(最多两次: 先按当前高度、量稳后再来一次) */
-			const userMoved = useRef(false); /* 用户自己缩放过/拖过视野 ⇒ 之后不再自动 fit(展开知识点也绝不能把视野复位) */
 			const [editor, setEditor] = useState(null);
 			const [nameDialog, setNameDialog] = useState(null);
 			const [pointDialog, setPointDialog] = useState(null);
@@ -638,461 +628,12 @@ window.__ModuleLoader__.load({
 			const detailOpen = route.view === 'section' || route.view === 'point';
 			/* 章节图画布常驻: 右侧面板打开时也照样能平移/缩放 */
 			const mapReady = level1 ? true : query.trim() === '' && !!catalog && (catalog.chapters || []).length > 0;
-			const mapRef = useRef(mapReady);
-			mapRef.current = mapReady;
-			const layoutKey = 'rk-canvas:' + (level1 ? 'roots' : (catalog && catalog.root) || 'default');
-			/* 学习库配置里视野的键: 一级画布是 'roots', 每张画布用它自己的根目录路径 */
-			const zoomKey = level1 ? 'roots' : (catalog && catalog.root) || 'default';
-			const VIEW_VERSION = 2;
-			const cardWidth = 372;
-			const cardGap = 18;
-			const ROOT_CARD_H = 188;
-			const MIN_SCALE = 0.2; /* 一行卡片可能很长, 复位时允许缩得更小才能全铺满 */
-			const MAX_SCALE = 2.4;
-			/* 插件区域的实际宽度: 宿主侧栏展开/收起、拉窗口都由它驱动自适应 */
-			const [stageBox, setStageBox] = useState({ w: 0, h: 0 });
-			/* 一级画布的列数跟着可用宽度走(窄了就 1-2 列), 别硬撑 3 列 */
-			const rootCols = stageBox.w > 0 ? Math.max(1, Math.min(3, Math.floor((stageBox.w - 44 + cardGap) / (cardWidth + cardGap)))) : 3;
-			/* 上次自动铺满时的尺寸, 用来区分「尺寸变了」和「内容变了」 */
-			const lastFit = useRef({ w: 0, h: 0 });
-			const interacting = panning;
-
-			/* 画布视野: 按工作区存进 localStorage, 刷新后保持 */
-			useEffect(() => {
-				const applyView = (saved) => setView({
-					x: Number(saved.x) || 0,
-					y: Number(saved.y) || 0,
-					scale: Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number(saved.scale) || 1)),
-				});
-				try {
-					const raw = window.localStorage.getItem(layoutKey);
-					if (raw) {
-						const saved = JSON.parse(raw);
-						if (saved && saved.view && saved.v === VIEW_VERSION) { applyView(saved.view); userMoved.current = true; }
-						didFit.current = true;
-						return;
-					}
-				} catch (problem) {
-					/* 存储不可用就算了 */
-				}
-				/* 本机没存过(换浏览器 / 换机器) ⇒ 用学习库配置里的那一份 */
-				const fromFile = (libZoomRef.current || {})[zoomKey];
-				if (fromFile && typeof fromFile === 'object') {
-					applyView(fromFile);
-					userMoved.current = true;
-					didFit.current = true;
-				}
-			}, [layoutKey, zoomKey, libTick]);
-
-			useEffect(() => {
-				if (!catalog && !level1) return;
-				/* 视野还没定下来之前(等学习库配置 / 首次铺满)一个字节都别记: 先记下来就会把文件里存的那份顶掉 */
-				if (!didFit.current) return;
-				try {
-					window.localStorage.setItem(layoutKey, JSON.stringify({ v: VIEW_VERSION, view }));
-				} catch (problem) {
-					/* 存储不可用就算了 */
-				}
-				/* 视野也记进学习库的配置(换浏览器 / 换机器时照着恢复) */
-				saveLib({ zoom: { [zoomKey]: { x: view.x, y: view.y, scale: view.scale } } });
-			}, [layoutKey, zoomKey, view, catalog, level1, saveLib]);
-
-			/* hover 高亮: 用一个屏幕空间的框跟随鼠标下的卡片/小节行 */
-			const updateRing = useCallback(() => {
-				const ring = ringRef.current;
-				const stage = stageRef.current;
-				const el = hoverRef.current;
-				if (!ring || !stage) return;
-				if (!el || !el.isConnected) {
-					hoverRef.current = null;
-					ring.classList.remove('rk-on');
-					return;
-				}
-				const sr = stage.getBoundingClientRect();
-				const r = el.getBoundingClientRect();
-				let left = r.left;
-				let top = r.top;
-				let right = r.right;
-				let bottom = r.bottom;
-				if (!el.classList.contains('rk-chapter')) {
-					/* 小节行等元素可能比卡片宽(靠卡片 overflow:hidden 裁掉), 高亮要跟着裁 */
-					const cardEl = el.closest && el.closest('.rk-chapter');
-					if (cardEl) {
-						const cr = cardEl.getBoundingClientRect();
-						left = Math.max(left, cr.left);
-						top = Math.max(top, cr.top);
-						right = Math.min(right, cr.right);
-						bottom = Math.min(bottom, cr.bottom);
-					}
-				}
-				const zoom = zoomRef.current || 1; /* 指针量到的是缩放后的屏幕像素, 要换回 stage 本地坐标 */
-				ring.style.width = Math.max(0, Math.round((right - left) / zoom)) + 'px';
-				ring.style.height = Math.max(0, Math.round((bottom - top) / zoom)) + 'px';
-				ring.style.transform =
-					'translate(' + Math.round((left - sr.left) / zoom) + 'px, ' + Math.round((top - sr.top) / zoom) + 'px)';
-				ring.classList.add('rk-on');
-			}, []);
-
-			const clearRing = useCallback(() => {
-				hoverRef.current = null;
-				if (ringRef.current) ringRef.current.classList.remove('rk-on');
-			}, []);
-
-			const onStagePointerOver = useCallback(
-				(event) => {
-					const ring = ringRef.current;
-					if (!mapRef.current || !ring) return;
-					const target = event.target;
-					if (!target || !target.closest) return;
-					if (target.closest('.rk-btn')) {
-						clearRing();
-						return;
-					}
-					const sec = target.closest('.rk-sec');
-					const card = sec ? null : target.closest('.rk-chapter');
-					const node = sec || card ? null : target.closest('.rk-mm-node');
-					const el = sec || card || node;
-					if (!el) {
-						clearRing();
-						return;
-					}
-					if (hoverRef.current !== el) {
-						hoverRef.current = el;
-						ring.classList.toggle('rk-sec', !!sec);
-						ring.classList.toggle('rk-card', !!card);
-						ring.classList.toggle('rk-mm', !!node);
-					}
-					updateRing();
-				},
-				[clearRing, updateRing],
-			);
-
-			/* 视野(滚轮缩放/平移)一变, 高亮框按提交后的新布局重新量一次 */
-			useLayoutEffect(() => {
-				if (hoverRef.current) updateRing();
-			}, [view, updateRing]);
-
-			useEffect(() => {
-				let frame = 0;
-				const onResize = () => {
-					if (frame) window.cancelAnimationFrame(frame);
-					frame = window.requestAnimationFrame(updateRing);
-				};
-				window.addEventListener('resize', onResize);
-				return () => {
-					if (frame) window.cancelAnimationFrame(frame);
-					window.removeEventListener('resize', onResize);
-				};
-			}, [updateRing]);
-
-			/* 滚轮缩放: 以指针位置为锚点(必须非 passive 才能 preventDefault) */
-			useEffect(() => {
-				const stage = stageRef.current;
-				if (!stage) return undefined;
-				const onWheel = (event) => {
-					closeMenu();
-					if (!mapRef.current) return;
-					event.preventDefault();
-					userMoved.current = true;
-					const rect = stage.getBoundingClientRect();
-					const zoom = zoomRef.current || 1;
-					const px = (event.clientX - rect.left) / zoom;
-					const py = (event.clientY - rect.top) / zoom;
-					setView((value) => {
-						const factor = Math.exp(-event.deltaY * 0.0016);
-						const scale = roundScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, value.scale * factor)));
-						const k = scale / value.scale;
-						return { scale, x: snapToDevice(px - (px - value.x) * k), y: snapToDevice(py - (py - value.y) * k) };
-					});
-				};
-				stage.addEventListener('wheel', onWheel, { passive: false });
-				return () => stage.removeEventListener('wheel', onWheel);
-			}, [mapReady, updateRing]);
-
-			/* 量一次真实卡片高度, 自动布局才不会互相压住 */
-			useLayoutEffect(() => {
-				const stage = stageRef.current;
-				if (!stage || !mapRef.current || !catalog) return;
-				let changed = false;
-				catalog.chapters.forEach((chapter) => {
-					const element = stage.querySelector('[data-chapter="' + chapter.id + '"]');
-					if (!element) return;
-					const height = element.offsetHeight;
-					if (height > 0 && measured.current[chapter.id] !== height) {
-						measured.current[chapter.id] = height;
-						changed = true;
-					}
-				});
-				if (changed) setMeasureTick((value) => value + 1);
+			/* 画布视口 / 导图几何 / 舞台指针这一层搬到了 client/canvas.js */
+			const { view, setView, panning, setPanning, measureTick, setMeasureTick, stageRef, ringRef, hoverRef, panRef, measured, didFit, mapFits, userMoved, mapRef, layoutKey, zoomKey, VIEW_VERSION, cardWidth, cardGap, ROOT_CARD_H, MIN_SCALE, MAX_SCALE, stageBox, setStageBox, rootCols, lastFit, interacting, mmSizes, setMmSizes, updateRing, clearRing, onStagePointerOver, positions, onMindMeasure, mind, rootCards, extent, fitView, refreshMap, menu, setMenu, menuRef, closeMenu, openMenu, onStagePointerDown, onStagePointerMove, onStagePointerUp, needle, hits } = useCanvas({
+				t, mode, mapReady, level1, catalog, query, reload, setRoute,
+				folded, opened, roots, libTick, saveLib, zoomRef, libZoomRef, libReadyRef,
+				roundScale, snapToDevice, layoutMindmap, buildMindmapTree, flattenPoints,
 			});
-
-			/* 所有章节卡排成一行, 不换行 */
-			const positions = useMemo(() => {
-				const out = {};
-				((catalog && catalog.chapters) || []).forEach((chapter, index) => {
-					out[chapter.id] = { x: index * (cardWidth + cardGap), y: 0 };
-				});
-				return out;
-			}, [catalog]);
-
-			/* 思维导图: 目录 + 折叠状态 → 节点 / 连线 / 内容尺寸(画布模式下是 null) */
-			/* 知识点节点要按「真实渲染后的高度」排布, 所以先渲染一遍量高, 再拿量到的高度重排 */
-			const [mmSizes, setMmSizes] = useState(null);
-			const onMindMeasure = useCallback((map) => {
-				setMmSizes((prev) => {
-					const before = prev || {};
-					const keys = Object.keys(map);
-					if (keys.length === Object.keys(before).length && keys.every((key) => Math.abs((before[key] || 0) - map[key]) < 0.5)) return prev;
-					return map;
-				});
-			}, []);
-			/* 一级画布上永远是卡片, 不做导图: catalog 这时可能还是上一张画布留下的旧数据,
-			 * 不挡掉的话导图的 extent / 按钮 / 右键都会被它影响 */
-			const mind = useMemo(
-				() => (mode === 'map' && !level1 && catalog ? layoutMindmap(buildMindmapTree(catalog, folded, opened, t), mmSizes) : null),
-				[mode, level1, catalog, folded, opened, t, mmSizes],
-			);
-
-			/* 一级画布: 画布卡片按 3 列排, 尺寸统一, 不用量高 */
-			const rootCards = useMemo(
-				() => roots.map((entry, index) => ({ entry, x: (index % rootCols) * (cardWidth + cardGap), y: Math.floor(index / rootCols) * (ROOT_CARD_H + cardGap) })),
-				[roots, rootCols],
-			);
-
-			const extent = useMemo(() => {
-				if (mind) return { w: mind.width, h: mind.height };
-				if (level1) {
-					const count = Math.max(1, rootCards.length + 1);
-					const cols = Math.min(rootCols, count);
-					const rows = Math.ceil(count / rootCols);
-					return { w: cols * cardWidth + (cols - 1) * cardGap, h: rows * ROOT_CARD_H + (rows - 1) * cardGap };
-				}
-				let w = 0;
-				let hgt = 0;
-				((catalog && catalog.chapters) || []).forEach((chapter) => {
-					const spot = positions[chapter.id];
-					if (!spot) return;
-					const height = measured.current[chapter.id] || 300;
-					w = Math.max(w, spot.x + cardWidth);
-					hgt = Math.max(hgt, spot.y + height);
-				});
-				return { w, h: hgt };
-			}, [mind, level1, rootCards, positions, catalog, measureTick, rootCols]);
-
-			/* 复位: 把所有卡片缩放到刚好铺满可视区 */
-			const fitView = useCallback(() => {
-				if (mind || level1) {
-					/* 导图 / 一级画布: 缩放并居中, 让整棵树(或整排卡片)刚好落在可视区里 */
-					const box = mind ? { width: mind.width, height: mind.height } : { width: extent.w, height: extent.h };
-					const area = stageRef.current;
-					if (!area || box.width <= 0 || box.height <= 0) {
-						setView({ x: 26, y: 22, scale: 1 });
-						return;
-					}
-					const roomW = area.clientWidth - 40;
-					const roomH = area.clientHeight - 40;
-					if (roomW <= 0 || roomH <= 0) {
-						setView({ x: 26, y: 22, scale: 1 });
-						return;
-					}
-					const zoom = roundScale(Math.min(1, Math.max(MIN_SCALE, Math.min(roomW / box.width, roomH / box.height))));
-					setView({
-						scale: zoom,
-						x: snapToDevice(Math.max(20, Math.round((area.clientWidth - box.width * zoom) / 2))),
-						y: snapToDevice(Math.max(16, Math.round((area.clientHeight - box.height * zoom) / 2))),
-					});
-					return;
-				}
-				const stage = stageRef.current;
-				if (!stage) return;
-				const availW = stage.clientWidth - 48;
-				const availH = stage.clientHeight - 48;
-				if (extent.w <= 0 || extent.h <= 0 || availW <= 0 || availH <= 0) {
-					setView({ x: 26, y: 22, scale: 1 });
-					return;
-				}
-				const scale = roundScale(Math.min(1, Math.max(MIN_SCALE, Math.min(availW / extent.w, availH / extent.h))));
-				setView({
-					scale,
-					x: snapToDevice(Math.max(24, Math.round((stage.clientWidth - extent.w * scale) / 2))),
-					y: snapToDevice(Math.max(20, Math.round((stage.clientHeight - extent.h * scale) / 2))),
-				});
-			}, [extent, mind, level1]);
-
-			/* 首次进入画布(没有存过视图)自动铺满一次 */
-			useEffect(() => {
-				if (!mapReady || didFit.current || measureTick === 0 || extent.w <= 0 || mind || level1) return;
-				didFit.current = true;
-				fitView();
-			}, [mapReady, measureTick, extent, fitView, mind, level1]);
-
-			/* 一级画布: 卡片是定高的, 没有「量高」这一步, 所以列表一变(0 → N)就重新铺满一次
-			 * 但要等学习库配置读完: 文件里存过视野就照它恢复(见上面的读 effect), 没存过才铺满;
-			 * 铺过一次就收手(didFit), 之后不再跟着列表变化乱跳 */
-			useEffect(() => {
-				if (!level1 || !mapReady || extent.w <= 0 || roots.length === 0) return;
-				if (!libReadyRef.current) return;
-				if (didFit.current) return;
-				didFit.current = true;
-				fitView();
-			}, [level1, mapReady, extent, fitView, roots.length, libTick]);
-
-			/* 容器尺寸一变(拉窗口 / 宿主侧栏开合 / 全屏)就重新量一次 */
-			useEffect(() => {
-				const stage = stageRef.current;
-				if (!stage || !mapReady) return undefined;
-				const sync = () => setStageBox({ w: stage.clientWidth, h: stage.clientHeight });
-				sync();
-				const ro = new ResizeObserver(sync);
-				ro.observe(stage);
-				return () => ro.disconnect();
-			}, [mapReady]);
-
-			/* 尺寸变了: 只在「这一屏已经装不下现在的画布」时重新铺满,
-			 * 免得把用户自己调好的视野白白抖掉; 第一次观测只记下来, 交给上面 didFit 那两条 */
-			useEffect(() => {
-				if (!mapReady || stageBox.w <= 0 || stageBox.h <= 0) return;
-				const last = lastFit.current;
-				if (last.w === 0 && last.h === 0) {
-					lastFit.current = { w: stageBox.w, h: stageBox.h };
-					return;
-				}
-				if (last.w === stageBox.w && last.h === stageBox.h) return;
-				lastFit.current = { w: stageBox.w, h: stageBox.h };
-				const fits = view.scale * extent.w <= stageBox.w - 24 && view.scale * extent.h <= stageBox.h - 24;
-				if (fits) return;
-				fitView();
-			}, [stageBox, mapReady, fitView, extent, view.scale]);
-
-			/* 切模式时视图复位一次(导图与画布的布局不一样), 并让下次回画布时重新铺满 */
-			useEffect(() => {
-				didFit.current = false;
-				mapFits.current = 0;
-				userMoved.current = false;
-				setView({ x: 26, y: 22, scale: 1 });
-			}, [mode]);
-
-			/* 导图: 进来先自动 fit 一次(整棵树可见), 等内容节点量完高再 fit 一次收工 */
-			useEffect(() => {
-				if (mode !== 'map' || !mind || userMoved.current || mapFits.current >= 2) return;
-				const land = fitView;
-				if (mapFits.current === 0) {
-					mapFits.current = 1;
-					const first = setTimeout(land, 60);
-					return () => clearTimeout(first);
-				}
-				if (!mmSizes) return;
-				mapFits.current = 2;
-				const second = setTimeout(land, 80);
-				return () => clearTimeout(second);
-			}, [mode, mind, mmSizes, fitView]);
-
-			/* 导图页的刷新: 重新扫描笔记 + 丢掉量到的高度, 重画一遍再 fit */
-			const refreshMap = useCallback(() => {
-				setMmSizes(null);
-				mapFits.current = 0;
-				userMoved.current = false;
-				reload(true);
-			}, [reload]);
-
-			/* 右键菜单: 屏幕空间浮层(不参与画布缩放), 靠 stage 的 padding-box 定位 */
-			const MENU_W = 196;
-			const MENU_ITEM_H = 30;
-			const MENU_SEP_H = 11;
-			const MENU_PAD = 10;
-			const [menu, setMenu] = useState(null);
-			const menuRef = useRef(null);
-			const closeMenu = useCallback(() => setMenu(null), []);
-			const openMenu = useCallback((event, items) => {
-				const stage = stageRef.current;
-				if (!stage) return;
-				const box = stage.getBoundingClientRect();
-				const height = MENU_PAD + items.reduce((sum, item) => sum + (item.sep ? MENU_SEP_H : MENU_ITEM_H), 0);
-				const maxX = Math.max(6, stage.clientWidth - MENU_W - 8);
-				const maxY = Math.max(6, stage.clientHeight - height - 8);
-				setMenu({
-					x: Math.max(6, Math.min(Math.round((event.clientX - box.left) / zoomRef.current), maxX)),
-					y: Math.max(6, Math.min(Math.round((event.clientY - box.top) / zoomRef.current), maxY)),
-					items,
-					confirming: null,
-				});
-			}, []);
-			useEffect(() => {
-				if (!menu) return undefined;
-				const onDown = (event) => {
-					const el = menuRef.current;
-					if (el && el.contains(event.target)) return;
-					closeMenu();
-				};
-				const onKey = (event) => {
-					if (event.key === 'Escape') closeMenu();
-				};
-				window.addEventListener('pointerdown', onDown, true);
-				window.addEventListener('keydown', onKey, true);
-				window.addEventListener('blur', closeMenu);
-				window.addEventListener('resize', closeMenu);
-				return () => {
-					window.removeEventListener('pointerdown', onDown, true);
-					window.removeEventListener('keydown', onKey, true);
-					window.removeEventListener('blur', closeMenu);
-					window.removeEventListener('resize', closeMenu);
-				};
-			}, [menu, closeMenu]);
-
-			/* 空白处按住拖动 = 平移画布 */
-			const onStagePointerDown = (event) => {
-				if (!mapReady || event.button !== 0) return;
-				const target = event.target;
-				if (target.closest('.rk-chapter') || target.closest('.rk-rootcard') || (target.closest && target.closest('a'))) return;
-				/* 导图里的 `+ / −` 按钮不参与平移: 一旦 setPointerCapture, 指针的兼容鼠标事件会被改派到 stage, 按钮的 click 就没了 */
-				if (target.closest && target.closest('.rk-mm-fold')) return; /* 导图节点可穿透(按住节点也能拖动画布), 但节点里的链接照旧可点 */
-				/* 导图节点上不能 preventDefault: 那会连带吞掉这个指针的兼容鼠标事件, `+ / −` 的 click 就没了(文字选中已由 `.rk-mm` 的 user-select:none 关掉) */
-				if (!(target.closest && target.closest('.rk-mm-node'))) event.preventDefault();
-				panRef.current = {
-					pointerId: event.pointerId,
-					startX: event.clientX,
-					startY: event.clientY,
-					originX: view.x,
-					originY: view.y,
-				};
-				setPanning(true);
-				try {
-					event.currentTarget.setPointerCapture(event.pointerId);
-				} catch (problem) {
-					/* 忽略 */
-				}
-			};
-			const onStagePointerMove = (event) => {
-				const pan = panRef.current;
-				if (pan && pan.pointerId === event.pointerId) {
-					const zoom = zoomRef.current || 1;
-					const moved = { x: snapToDevice(pan.originX + (event.clientX - pan.startX) / zoom), y: snapToDevice(pan.originY + (event.clientY - pan.startY) / zoom) };
-					userMoved.current = true;
-					setView((value) => ({ ...value, x: moved.x, y: moved.y }));
-				}
-			};
-			const onStagePointerUp = (event) => {
-				const pan = panRef.current;
-				if (pan && pan.pointerId === event.pointerId) {
-					panRef.current = null;
-					setPanning(false);
-				}
-			};
-			const needle = query.trim().toLowerCase();
-			const hits = useMemo(() => {
-				if (needle === '' || !catalog) return [];
-				const out = [];
-				catalog.chapters.forEach((chapter) => {
-					chapter.sections.forEach((section) => {
-						flattenPoints(section.points, 0, []).forEach((point) => {
-							const haystack = (point.title + ' ' + (point.summary || '') + ' ' + section.title + ' ' + chapter.title).toLowerCase();
-							if (haystack.indexOf(needle) >= 0) out.push({ chapter, section, point });
-						});
-					});
-				});
-				return out.slice(0, 60);
-			}, [catalog, needle]);
-
 			const openSection = useCallback((path) => setRoute({ view: 'section', path }), []);
 			const openPoint = useCallback((path, pointId) => setRoute({ view: 'point', path, pointId }), []);
 
@@ -2050,7 +1591,7 @@ window.__ModuleLoader__.load({
 			return panelRoot;
 		}
 
-		/* client/ 下的十一个模块用原生 import() 加载: loader 的 chunk 协议只认插件根目录的 client.<名>.js,
+		/* client/ 下的这些模块用原生 import() 加载: loader 的 chunk 协议只认插件根目录的 client.<名>.js,
 		 * 装不下子目录。所以改走插件自己的只读静态路由 /rk-study/client/<名>.js(见 host 半 lib/routes.js)。
 		 * 模块之间不互相 import, 依赖统一由入口按拓扑顺序注入。
 		 *
@@ -2059,12 +1600,12 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 152;
-		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
+		const MODULE_VERSION = 153;
+		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
 		async function apply(ctx) {
-			const [api, store, theme, gitPanel, rootsMod, editingMod, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
+			const [api, store, theme, gitPanel, rootsMod, editingMod, canvasMod, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
 			/* api: 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook(见 client/api.js) */
 			const apiMods = api.createApi({ React });
 			/* store: 本机 localStorage + 学习库配置文件(<库>/.config/rk-study.json)的读写(见 client/store.js) */
@@ -2084,6 +1625,8 @@ window.__ModuleLoader__.load({
 			const rootsMods = rootsMod.createRoots({ React, api: apiMods });
 			/* editing: 打开/编辑/新建/删除(见 client/editing.js) */
 			const editingMods = editingMod.createEditing({ React, api: apiMods });
+			/* canvas: 画布视口 / 导图几何 / 舞台指针(见 client/canvas.js) */
+			const canvasMods = canvasMod.createCanvas({ React });
 			const utilMods = util.createUtil();
 			const vendorMods = vendor.createVendor({ React });
 			/* milkdown: 把 vendor 里的 zt-react-milkdown 包跑起来(编辑界面用); 加载失败由调用方回退 textarea */
@@ -2104,7 +1647,7 @@ window.__ModuleLoader__.load({
 			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods });
 			/* mindmap: 思维导图模式(左→右的章节 / 小节 / 知识点树), 知识点节点里渲染整篇 markdown 正文 */
 			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody });
-			const mods = Object.assign({}, apiMods, storeMods, themeMods, gitPanelMods, rootsMods, editingMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
+			const mods = Object.assign({}, apiMods, storeMods, themeMods, gitPanelMods, rootsMods, editingMods, canvasMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
 
 			ensureStyles(ctx, cssMods.CSS);
 			ctx.effect(() => ctx.locale.register(NS, { zh: dictMods.zh, en: dictMods.en }), 'rk-study: dictionaries');
