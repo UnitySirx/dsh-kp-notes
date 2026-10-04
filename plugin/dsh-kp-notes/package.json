@@ -2,13 +2,13 @@
   "name": "dsh-kp-notes",
   "version": "1.0.0",
   "type": "module",
-  "description": "基于 DeepSeek Harness 开发的知识点(Knowledge Point)笔记插件",
+  "description": "DeepSeek Harness 知识点(Knowledge Point)笔记插件：把 Markdown 笔记目录变成卡片式学习画布，章节 / 小节 / 知识点 / 题目分层，支持 KaTeX 公式、Mermaid 流程图、思维导图与面板内编辑",
   "author": "UnitySir",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/UnitySirx/dsh-kp-notes.git",
-    "directory": "plugin/rk-study"
+    "directory": "plugin/dsh-kp-notes"
   },
   "homepage": "https://github.com/UnitySirx/dsh-kp-notes#readme",
   "keywords": [
@@ -24,8 +24,8 @@
   ],
   "icon": "./icon.svg",
   "meta": {
-    "title": "系统架构设计师 · 学习画布",
-    "description": "用 Markdown 笔记驱动的学习画布：每个章节一张卡片，点击查看详情，题目可遮挡答案自测"
+    "title": "知识点笔记 · 学习画布",
+    "description": "用 Markdown 笔记驱动的卡片画布：每个章节一张卡片，题目可遮挡答案自测，知识点支持公式与流程图"
   },
   "exports": {
     ".": "./host.js",

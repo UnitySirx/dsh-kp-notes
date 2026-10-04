@@ -79,7 +79,7 @@ async function run(ctx, root, args, timeout = GIT_TIMEOUT_MS, signal) {
 
 /* 改动分组: 插件代码 / 笔记与题目 / 其它 */
 function groupOf(path, config) {
-	if (path === 'plugin/rk-study' || path.startsWith('plugin/rk-study/')) return 'plugin';
+	if (path === 'plugin/dsh-kp-notes' || path.startsWith('plugin/dsh-kp-notes/')) return 'plugin';
 	const notePrefix = `${config.noteDir}/`;
 	const questionPrefix = `${config.questionDir}/`;
 	if (path.startsWith(notePrefix) || path.startsWith(questionPrefix)) return 'notes';
@@ -199,7 +199,7 @@ export async function gitPush(ctx, config, options, signal) {
 }
 
 function scopePaths(scope, config) {
-	if (scope === 'plugin') return ['plugin/rk-study'];
+	if (scope === 'plugin') return ['plugin/dsh-kp-notes'];
 	if (scope === 'notes') return [config.noteDir, config.questionDir];
 	return [];
 }

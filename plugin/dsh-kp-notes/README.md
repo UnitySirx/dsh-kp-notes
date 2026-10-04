@@ -4,10 +4,10 @@
 
 左侧边栏「全局面板」里叫 **知识点笔记**（英文界面 `Architect Notes`）。完整文档、开发说明与全部截图见仓库：<https://github.com/UnitySirx/dsh-kp-notes>
 
-![多画布](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/rk-study/screenshots/01-canvases.jpg)
-![知识点详情：表格 + KaTeX 公式](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/rk-study/screenshots/03-point-detail.jpg)
-![题目答案遮挡](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/rk-study/screenshots/04-questions.jpg)
-![思维导图](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/rk-study/screenshots/06-mindmap.jpg)
+![多画布](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/dsh-kp-notes/screenshots/01-canvases.jpg)
+![知识点详情：表格 + KaTeX 公式](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/dsh-kp-notes/screenshots/03-point-detail.jpg)
+![题目答案遮挡](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/dsh-kp-notes/screenshots/04-questions.jpg)
+![思维导图](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/dsh-kp-notes/screenshots/06-mindmap.jpg)
 
 ## 安装
 
@@ -16,7 +16,7 @@
 dsh plugin --profile <profile 名> add dsh-kp-notes
 
 # 或者直接装本仓库（源码即成品，没有构建步骤）
-dsh plugin --profile <profile 名> add link:/绝对路径/rk-study/plugin/rk-study
+dsh plugin --profile <profile 名> add link:/绝对路径/rk-study/plugin/dsh-kp-notes
 ```
 
 装完刷新页面，在左侧「全局面板 → 知识点笔记」打开；第一次用点「⇪ 导入目录」把已有笔记库加进来，或者「＋ 新建学习画布」。

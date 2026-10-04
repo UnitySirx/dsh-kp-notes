@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 
 /* @deepseek-ai/schemastery 由 DSH 运行时的模块解析提供(插件目录自身不放 node_modules)。但插件是按
- * **真实路径** file:///Users/…/rk-study/plugin/rk-study/host.js 加载的, 宿主那份 node_modules 不在它的
+ * **真实路径** file:///Users/…/rk-study/plugin/dsh-kp-notes/host.js 加载的, 宿主那份 node_modules 不在它的
  * 上层目录里 —— 静态 import 会 ERR_MODULE_NOT_FOUND, 把整个 host 半拖挂(实测: "rk-study-v2 … failed
  * to import", 插件的所有路由全部 404)。所以改成动态 import + 兜底: 解析得到就用真 schema(配置文件能
  * 拿到字段提示), 解析不到就 export undefined —— cordis 的 Config 本来就是可选的, 插件照常工作。 */
