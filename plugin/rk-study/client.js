@@ -322,58 +322,6 @@ window.__ModuleLoader__.load({
 			return data;
 		}
 
-		async function openBin() {
-			setBinDialog({ busy: true, data: null, error: '' });
-			try {
-				setBinDialog({ busy: false, data: await readBin(), error: '' });
-			} catch (problem) {
-				setBinDialog({ busy: false, data: null, error: String((problem && problem.message) || problem) });
-			}
-		}
-
-		async function reloadBin() {
-			try {
-				const data = await readBin();
-				setBinDialog((current) => (current ? { busy: false, data, error: '' } : current));
-			} catch (problem) {
-				setBinDialog((current) => (current ? { busy: false, data: current.data, error: String((problem && problem.message) || problem) } : current));
-			}
-		}
-
-		/* 恢复一条: 搬回原位, 号跟着回去; 被移出列表的画布顺手把墓碑放开, 让它重新出现在画布列表里。
-		 * 原位已经有同名的东西时宿主会拒绝（绝不覆盖）, 这里把原话提示给用户。 */
-		async function restoreBinItem(bucket, item) {
-			setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
-			try {
-				await postAction({ action: 'restore', bucket, item: item.item });
-				unmarkRemoved(String(item.target || ''));
-				flash(t('binRestored') + ' · ' + item.item);
-				if (level1) setRootTick((value) => value + 1);
-				else reload(true);
-				await reloadBin();
-			} catch (problem) {
-				const message = String((problem && problem.message) || problem);
-				setBinDialog((current) => (current ? { ...current, busy: false, error: message } : current));
-			}
-		}
-
-		async function restoreWholeBin(bucket) {
-			setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
-			try {
-				const result = await postAction({ action: 'restoreBucket', bucket });
-				const done = (result.restored || []).length;
-				const skipped = (result.skipped || []).length;
-				(result.restored || []).forEach((row) => unmarkRemoved(String(row.target || '')));
-				flash(t('binRestored') + ' · ' + done + (skipped > 0 ? ' · ' + skipped + ' ' + t('binSkipped') : ''));
-				if (level1) setRootTick((value) => value + 1);
-				else reload(true);
-				await reloadBin();
-			} catch (problem) {
-				const message = String((problem && problem.message) || problem);
-				setBinDialog((current) => (current ? { ...current, busy: false, error: message } : current));
-			}
-		}
-
 		async function fetchGit(root, scope) {
 			const response = await fetch(withRootFor(GIT_ROUTE + '?scope=' + (scope === 'all' ? 'all' : 'notes'), root), { headers: { accept: 'application/json' } });
 			const data = await response.json().catch(() => ({}));
@@ -502,6 +450,58 @@ window.__ModuleLoader__.load({
 			const [rootDialog, setRootDialog] = useState(null);
 			const [libraryDialog, setLibraryDialog] = useState(null);
 			const [binDialog, setBinDialog] = useState(null); /* 回收站面板: { busy, data, error } */
+
+			async function openBin() {
+				setBinDialog({ busy: true, data: null, error: '' });
+				try {
+					setBinDialog({ busy: false, data: await readBin(), error: '' });
+				} catch (problem) {
+					setBinDialog({ busy: false, data: null, error: String((problem && problem.message) || problem) });
+				}
+			}
+
+			async function reloadBin() {
+				try {
+					const data = await readBin();
+					setBinDialog((current) => (current ? { busy: false, data, error: '' } : current));
+				} catch (problem) {
+					setBinDialog((current) => (current ? { busy: false, data: current.data, error: String((problem && problem.message) || problem) } : current));
+				}
+			}
+
+			/* 恢复一条: 搬回原位, 号跟着回去; 被移出列表的画布顺手把墓碑放开, 让它重新出现在画布列表里。
+			 * 原位已经有同名的东西时宿主会拒绝（绝不覆盖）, 这里把原话提示给用户。 */
+			async function restoreBinItem(bucket, item) {
+				setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
+				try {
+					await postAction({ action: 'restore', bucket, item: item.item });
+					unmarkRemoved(String(item.target || ''));
+					flash(t('binRestored') + ' · ' + item.item);
+					if (level1) setRootTick((value) => value + 1);
+					else reload(true);
+					await reloadBin();
+				} catch (problem) {
+					const message = String((problem && problem.message) || problem);
+					setBinDialog((current) => (current ? { ...current, busy: false, error: message } : current));
+				}
+			}
+
+			async function restoreWholeBin(bucket) {
+				setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
+				try {
+					const result = await postAction({ action: 'restoreBucket', bucket });
+					const done = (result.restored || []).length;
+					const skipped = (result.skipped || []).length;
+					(result.restored || []).forEach((row) => unmarkRemoved(String(row.target || '')));
+					flash(t('binRestored') + ' · ' + done + (skipped > 0 ? ' · ' + skipped + ' ' + t('binSkipped') : ''));
+					if (level1) setRootTick((value) => value + 1);
+					else reload(true);
+					await reloadBin();
+				} catch (problem) {
+					const message = String((problem && problem.message) || problem);
+					setBinDialog((current) => (current ? { ...current, busy: false, error: message } : current));
+				}
+			}
 
 			/* 设置一律只留在浏览器 localStorage 里(画布目录里不写配置文件):
 			 * 画布列表 / 上次停在哪张画布 / 移出列表的墓碑 / 字号 / 配色 / 画布还是导图 / 逐项配色 / 导图折叠。
