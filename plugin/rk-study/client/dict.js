@@ -312,6 +312,7 @@ export function createDict(deps) {
 		binRestoreAll: '整桶恢复',
 		binRestored: '已恢复',
 		binSkipped: '项被跳过（原位已有同名文件）',
+		binFrom: '来自',
 		binEmpty: '回收站是空的',
 		deleteHint: '',
 	};
@@ -624,6 +625,7 @@ export function createDict(deps) {
 		binRestoreAll: 'Restore all',
 		binRestored: 'Restored',
 		binSkipped: 'skipped (same name already there)',
+		binFrom: 'in',
 		binEmpty: 'The bin is empty',
 		deleteHint: '',
 	};

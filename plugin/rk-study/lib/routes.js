@@ -6,21 +6,21 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { listBin, restoreBucket, restoreItem } from './bin.js?v=54';
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=54';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=54';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=54';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=54';
-import { buildNodes, scanHeadings } from './headings.js?v=54';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=54';
-import { parseDocument } from './parse.js?v=54';
-import { pointRegion, rebuildPoint } from './points.js?v=54';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=54';
-import { buildCatalog } from './scan.js?v=54';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=54';
-import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=54';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=54';
-import { readBody, safePath, writeMarkdown } from './write.js?v=54';
+import { listAllBins, restoreBucket, restoreItem } from './bin.js?v=55';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=55';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=55';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=55';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=55';
+import { buildNodes, scanHeadings } from './headings.js?v=55';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=55';
+import { parseDocument } from './parse.js?v=55';
+import { pointRegion, rebuildPoint } from './points.js?v=55';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=55';
+import { buildCatalog } from './scan.js?v=55';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=55';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=55';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=55';
+import { readBody, safePath, writeMarkdown } from './write.js?v=55';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -813,6 +813,16 @@ export function apply(ctx, rawConfig) {
 	}
 
 	async function handler(req, res) {
+		/* 回收站记录躺在 <目录>/.remove/<桶>/… 里; 一级画布那层可能来自不同目录,
+		 * 认号要认到那个目录自己的号池上去。box 不合法就照旧用当前 config。 */
+		const binSource = (base, box) => {
+			const text = String(box ?? '').replace(/\/+$/, '');
+			const suffix = '/.remove';
+			if (text === '' || text.charAt(0) !== '/' || !text.endsWith(suffix)) return base;
+			const owner = text.slice(0, text.length - suffix.length);
+			return owner === '' ? base : Object.assign({}, base, { root: owner });
+		};
+
 		const url = new URL(req.url ?? ROUTE, 'http://localhost');
 		const method = (req.method ?? 'GET').toUpperCase();
 
@@ -820,7 +830,18 @@ export function apply(ctx, rawConfig) {
 			if (method === 'GET' || method === 'HEAD') {
 				/* 回收站: 这个根目录的 .remove 里有什么（删除的章节/小节/知识点 + 被移出列表的画布） */
 				if (url.searchParams.get('bin') === '1') {
-					sendJson(res, 200, Object.assign({ ok: true }, listBin(config)));
+					/* 一级画布那一层要看的不止这个目录: 被「移出列表」的画布躺在各自父目录的 .remove 里,
+					 * 客户端镜像在宿主这儿的画布列表就是它们的位置, 一并算上。 */
+					let known = [];
+					try {
+						const text = await readFileText(STATE_FILE, undefined, TEMPLATE_MAX_BYTES);
+						const parsed = JSON.parse(String(text === null || text === undefined ? '' : text));
+						if (parsed && Array.isArray(parsed.roots)) known = parsed.roots.slice();
+						if (parsed && typeof parsed.defaultRoot === 'string' && parsed.defaultRoot !== '') known.push({ path: parsed.defaultRoot });
+					} catch {
+						/* 状态读不到就只列当前这个目录 */
+					}
+					sendJson(res, 200, listAllBins(config, known));
 					return;
 				}
 				if (url.searchParams.has('file')) {
@@ -876,14 +897,17 @@ export function apply(ctx, rawConfig) {
 				const payload = await readBody(req, MAX_BODY_BYTES);
 				const action = String(payload.action ?? '');
 				if (action === 'restore') {
-					const result = await restoreItem(ctx, config, await uidLibOf(config), payload.bucket, payload.item);
+					/* box = 这条记录躺在哪只 .remove 里（一级画布那层会来自不同的父目录）; 号池按那个目录算 */
+					const source = binSource(config, payload.box);
+					const result = await restoreItem(ctx, config, await uidLibOf(source), payload.bucket, payload.item, payload.box);
 					cache.data = null;
 					caches.delete(config.root);
 					sendJson(res, result.ok ? 200 : 400, result);
 					return;
 				}
 				if (action === 'restoreBucket') {
-					const result = await restoreBucket(ctx, config, await uidLibOf(config), payload.bucket);
+					const source = binSource(config, payload.box);
+					const result = await restoreBucket(ctx, config, await uidLibOf(source), payload.bucket, payload.box);
 					cache.data = null;
 					caches.delete(config.root);
 					sendJson(res, 200, result);

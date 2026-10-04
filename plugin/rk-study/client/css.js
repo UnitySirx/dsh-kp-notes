@@ -75,6 +75,7 @@ export function createCss(deps) {
 .rk-bin-head { display:flex; align-items:center; gap:10px; padding:8px 11px; border-bottom:1px solid var(--rk-line-1, var(--rk-line-2)); background:var(--rk-bg-3, var(--rk-bg-2)); }
 .rk-bin-when { flex:1; font-family:var(--rk-mono); font-size:12px; color:var(--rk-text); }
 .rk-bin-count { font-size:11px; color:var(--rk-muted); }
+.rk-bin-src { max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--rk-mono); font-size:10.5px; color:var(--rk-muted); opacity:.85; }
 .rk-bin-list { margin:0; padding:0; list-style:none; max-height:44vh; overflow:auto; }
 .rk-bin-item { display:flex; align-items:center; gap:9px; padding:6px 11px; border-top:1px solid var(--rk-line-1, transparent); }
 .rk-bin-item:first-child { border-top:none; }

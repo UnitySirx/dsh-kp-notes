@@ -315,8 +315,8 @@ window.__ModuleLoader__.load({
 
 		/* 回收站: 这个根目录的 .remove 里收着什么 —— 删掉的章节/小节/知识点, 或者「移出列表」的画布。
 		 * 宿主已经把「原位还在不在」「原来的号是多少」算好了, 前端只负责显示和点按钮。 */
-		async function readBin() {
-			const response = await fetch(routeUrl({ bin: 1 }), { headers: { accept: 'application/json' } });
+		async function readBin(root) {
+			const response = await fetch(routeUrl({ bin: 1 }, root), { headers: { accept: 'application/json' } });
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok || data.ok === false) throw new Error(data.message || data.error || 'HTTP ' + response.status);
 			return data;
@@ -451,10 +451,14 @@ window.__ModuleLoader__.load({
 			const [libraryDialog, setLibraryDialog] = useState(null);
 			const [binDialog, setBinDialog] = useState(null); /* 回收站面板: { busy, data, error } */
 
+			/* 回收站看哪只 .remove: 画布里看这张画布自己的, 一级画布那层看学习库那一层
+			 * (宿主还会把每张画布的父目录一并算上 —— 被移出列表的画布躺在各自父目录里) */
+			const binRoot = () => (level1 ? libPath : rootPath || libPath);
+
 			async function openBin() {
 				setBinDialog({ busy: true, data: null, error: '' });
 				try {
-					setBinDialog({ busy: false, data: await readBin(), error: '' });
+					setBinDialog({ busy: false, data: await readBin(binRoot()), error: '' });
 				} catch (problem) {
 					setBinDialog({ busy: false, data: null, error: String((problem && problem.message) || problem) });
 				}
@@ -462,23 +466,41 @@ window.__ModuleLoader__.load({
 
 			async function reloadBin() {
 				try {
-					const data = await readBin();
+					const data = await readBin(binRoot());
 					setBinDialog((current) => (current ? { busy: false, data, error: '' } : current));
 				} catch (problem) {
 					setBinDialog((current) => (current ? { busy: false, data: current.data, error: String((problem && problem.message) || problem) } : current));
 				}
 			}
 
-			/* 恢复一条: 搬回原位, 号跟着回去; 被移出列表的画布顺手把墓碑放开, 让它重新出现在画布列表里。
+			/* 一级画布那层恢复的可能是「被移出列表」的画布: 除了放开墓碑, 还要把它重新登记进画布列表,
+			 * 否则放过墓碑了、列表里也看不见它。 */
+			const noteRestoredCanvas = (target) => {
+				const item = String(target || '');
+				if (!level1 || item === '' || item.charAt(0) !== '/') return;
+				const list = readRoots().slice();
+				if (!list.some((entry) => entry.path === item)) {
+					list.push({ path: item, name: baseNameOf(item) || item });
+					saveRoots(list);
+				}
+				unmarkRemoved(item);
+				setRoots(list);
+				loadRootStats(list);
+				setRootTick((value) => value + 1);
+			};
+
+			/* 恢复一条: 搬回原位, 号跟着回去; 被移出列表的画布顺手放开墓碑。
 			 * 原位已经有同名的东西时宿主会拒绝（绝不覆盖）, 这里把原话提示给用户。 */
 			async function restoreBinItem(bucket, item) {
 				setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
 				try {
-					await postAction({ action: 'restore', bucket, item: item.item });
-					unmarkRemoved(String(item.target || ''));
+					await postAction({ action: 'restore', bucket: bucket.name, item: item.item, box: bucket.box || '' });
+					if (level1) noteRestoredCanvas(item.target);
+					else {
+						unmarkRemoved(String(item.target || ''));
+						reload(true);
+					}
 					flash(t('binRestored') + ' · ' + item.item);
-					if (level1) setRootTick((value) => value + 1);
-					else reload(true);
 					await reloadBin();
 				} catch (problem) {
 					const message = String((problem && problem.message) || problem);
@@ -489,13 +511,15 @@ window.__ModuleLoader__.load({
 			async function restoreWholeBin(bucket) {
 				setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
 				try {
-					const result = await postAction({ action: 'restoreBucket', bucket });
+					const result = await postAction({ action: 'restoreBucket', bucket: bucket.name, box: bucket.box || '' });
 					const done = (result.restored || []).length;
 					const skipped = (result.skipped || []).length;
-					(result.restored || []).forEach((row) => unmarkRemoved(String(row.target || '')));
+					(result.restored || []).forEach((row) => {
+						if (level1) noteRestoredCanvas(row.target);
+						else unmarkRemoved(String(row.target || ''));
+					});
+					if (!level1) reload(true);
 					flash(t('binRestored') + ' · ' + done + (skipped > 0 ? ' · ' + skipped + ' ' + t('binSkipped') : ''));
-					if (level1) setRootTick((value) => value + 1);
-					else reload(true);
 					await reloadBin();
 				} catch (problem) {
 					const message = String((problem && problem.message) || problem);
@@ -3042,19 +3066,22 @@ window.__ModuleLoader__.load({
 											: (binDialog.data.buckets || []).map((bucket) =>
 													h(
 														'div',
-														{ key: bucket.name, className: 'rk-bin-bucket' },
+														{ key: (bucket.box || '') + '|' + bucket.name, className: 'rk-bin-bucket' },
 														h(
 															'div',
 															{ className: 'rk-bin-head' },
 															h('span', { className: 'rk-bin-when' }, bucket.at || bucket.name),
 															h('span', { className: 'rk-bin-count' }, String(bucket.count || 0) + ' ' + t('binItems')),
+															(binDialog.data.boxes || []).length > 1 && bucket.root
+																? h('span', { className: 'rk-bin-src', title: bucket.root }, t('binFrom') + ' ' + bucket.root)
+																: null,
 															h(
 																'button',
 																{
 																	className: 'rk-btn rk-bin-btn',
 																	type: 'button',
 																	disabled: binDialog.busy,
-																	onClick: () => restoreWholeBin(bucket.name),
+																	onClick: () => restoreWholeBin(bucket),
 																},
 																'↩ ' + t('binRestoreAll'),
 															),
@@ -3074,7 +3101,7 @@ window.__ModuleLoader__.load({
 																			className: 'rk-btn rk-bin-btn',
 																			type: 'button',
 																			disabled: binDialog.busy,
-																			onClick: () => restoreBinItem(bucket.name, item),
+																			onClick: () => restoreBinItem(bucket, item),
 																		},
 																		'↩ ' + t('binRestore'),
 																	),
@@ -3182,7 +3209,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 140;
+		const MODULE_VERSION = 141;
 		const CLIENT_MODULES = ['dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
