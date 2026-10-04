@@ -6,19 +6,20 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=46';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText } from './delete.js?v=46';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=46';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=46';
-import { buildNodes, scanHeadings } from './headings.js?v=46';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=46';
-import { parseDocument } from './parse.js?v=46';
-import { pointRegion, rebuildPoint } from './points.js?v=46';
-import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=46';
-import { buildCatalog } from './scan.js?v=46';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=46';
-import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=46';
-import { readBody, safePath, writeMarkdown } from './write.js?v=46';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=47';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=47';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=47';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=47';
+import { buildNodes, scanHeadings } from './headings.js?v=47';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=47';
+import { parseDocument } from './parse.js?v=47';
+import { pointRegion, rebuildPoint } from './points.js?v=47';
+import { removeQuestionBlock, saveQuestionBlock } from './questions.js?v=47';
+import { buildCatalog } from './scan.js?v=47';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=47';
+import { dropUids, ensureUids, moveUid } from './uid.js?v=47';
+import { baseName, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=47';
+import { readBody, safePath, writeMarkdown } from './write.js?v=47';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -105,6 +106,14 @@ export function apply(ctx, rawConfig) {
 		return ctx.fs.resolve(activeConfig().root, { signal });
 	}
 
+	/* uid 发号簿放在**学习库那一级**(同一个库里的画布共用一个号池, 号在库里唯一);
+	 * 库下面只有这一张画布时, 画布自己就是自己的库。
+	 * 目录类实体(一级画布 / 章节)的号登记在这里; 文件类实体(小节 / 知识点 / 题目)的号写在 markdown 里。 */
+	async function uidLibOf(cfg, signal) {
+		const lib = await libraryDirOf(ctx, cfg, signal);
+		return lib === '' ? cfg.root : lib;
+	}
+
 	async function resolveAbs(abs, signal) {
 		try {
 			return await ctx.fs.resolve(abs, { signal });
@@ -183,11 +192,30 @@ export function apply(ctx, rawConfig) {
 		}
 	}
 
+	/* 给目录类实体(章节)补上 uid: 第一次扫描会把还没号的章节一次性登记好(一个库写一次配置),
+	 * 所以老笔记不用迁移, 打开一次就都有号了。 */
+	async function withChapterUids(data, signal) {
+		const chapters = Array.isArray(data && data.chapters) ? data.chapters : [];
+		const pairs = [];
+		for (const chapter of chapters) {
+			const abs = safeDirPath(config, chapter.dir);
+			if (abs) pairs.push({ chapter, abs });
+		}
+		if (pairs.length === 0) return data;
+		const uids = await ensureUids(ctx, await uidLibOf(config, signal), 'chapter', pairs.map((item) => item.abs));
+		for (const item of pairs) {
+			const uid = uids[item.abs];
+			if (uid) item.chapter.uid = uid;
+		}
+		return data;
+	}
+
 	async function loadCatalog(force, signal) {
 		const fresh = cache.data !== null && (force !== true ? Date.now() - cache.at < CACHE_TTL_MS : false);
 		if (fresh) return cache.data;
 		if (cache.pending && force !== true) return cache.pending;
 		const pending = buildCatalog(ctx, config, signal)
+			.then((data) => withChapterUids(data, signal))
 			.then((data) => {
 				cache.data = data;
 				cache.at = Date.now();
@@ -539,7 +567,9 @@ export function apply(ctx, rawConfig) {
 		if (!abs) throw new Error(`invalid dir: ${dirRel}`);
 		if (await pathExists(abs)) throw new Error(`dir-exists: ${dirRel}`);
 		await mkdirAt(abs);
-		return { ok: true, dir: dirRel, path: dirRel, name: title, order: next, created: true };
+		/* 章节的号: 目录没有 frontmatter 可写, 记在学习库的发号簿里 */
+		const chapterUid = (await ensureUids(ctx, await uidLibOf(config), 'chapter', [abs]))[abs] || '';
+		return { ok: true, dir: dirRel, path: dirRel, name: title, order: next, created: true, uid: chapterUid };
 	}
 
 	/* 改名: 只换目录名(保留序号前缀), 题目镜像目录一起改, 并同步题目的 point: 前缀 */
@@ -569,6 +599,8 @@ export function apply(ctx, rawConfig) {
 		if (!(await dirExists(oldAbs))) throw new Error(`dir-not-found: ${dirRel}`);
 		if (await pathExists(newAbs)) throw new Error(`target-exists: ${nextRel}`);
 		renameSync(oldAbs, newAbs);
+		/* 号跟着章节走: 路径变了, 身份不变 */
+		const chapterUid = await moveUid(ctx, await uidLibOf(config), oldAbs, newAbs);
 		const related = [];
 		const mirrorOldRel = questionDirFor(config, dirRel);
 		const mirrorNewRel = questionDirFor(config, nextRel);
@@ -590,7 +622,7 @@ export function apply(ctx, rawConfig) {
 			}
 		}
 		cache.data = null;
-		return { ok: true, dir: nextRel, path: nextRel, name: chapterName, related };
+		return { ok: true, dir: nextRel, path: nextRel, name: chapterName, related, uid: chapterUid };
 	}
 
 	/* 渲染引擎(katex/mermaid)是插件自带资源, 但照样走 ctx.fs 读 —— 统一文件访问入口 */
@@ -807,8 +839,17 @@ export function apply(ctx, rawConfig) {
 					return;
 				}
 				if (action === 'deleteDir') {
-					const result = await deleteDirEntry(ctx, config, String(payload.dir ?? '').trim());
+					const dir = String(payload.dir ?? '').trim();
+					const result = await deleteDirEntry(ctx, config, dir);
 					cache.data = null;
+					/* 删掉的章节把号一起带走(计数器不回退): 位置不变但重建同名章节会拿到新号。
+					 * 摘下来的号写进这个桶的 .rk-uids.json, 想恢复时还认得回来。 */
+					const abs = safeDirPath(config, dir);
+					if (result.removed && abs) {
+						const dropped = await dropUids(ctx, await uidLibOf(config), [abs]);
+						if (Object.keys(dropped).length > 0 && result.bucket) stashUids(config, result.bucket, dropped);
+						result.uids = dropped;
+					}
 					sendJson(res, 200, result);
 					return;
 				}
@@ -1085,7 +1126,10 @@ export function apply(ctx, rawConfig) {
 		} catch (error) {
 			return { ok: false, error: 'create-failed', root, created, message: error instanceof Error ? error.message : String(error) };
 		}
-		return { ok: true, root, existed, created, templates, sharedTemplateDir: sharedDir, name: root.split('/').filter(Boolean).pop() || root };
+		/* 画布的号: 号池在学习库那一级(库里所有画布共用一个号池), 单张画布就记在自己身上 */
+		const canvasUidLib = validateRoot(payload && payload.library) || (await uidLibOf(cfg));
+		const canvasUid = (await ensureUids(ctx, canvasUidLib, 'canvas', [root]))[root] || '';
+		return { ok: true, root, existed, created, templates, sharedTemplateDir: sharedDir, uid: canvasUid, name: root.split('/').filter(Boolean).pop() || root };
 	}
 
 	const LIBRARY_SKIP = new Set(['node_modules', '.git', 'dist', 'build']);
@@ -1128,7 +1172,9 @@ export function apply(ctx, rawConfig) {
 		}
 		caches.delete(from);
 		caches.delete(target);
-		return { ok: true, root: target, from, name, renamed: true };
+		/* 号跟着画布走: 目录改名了, 身份不变 */
+		const renamedUid = await moveUid(ctx, await uidLibOf({ ...baseConfig, root: from }), from, target);
+		return { ok: true, root: target, from, name, renamed: true, uid: renamedUid };
 	}
 
 	/* 一级画布「移出列表」= 把目录移到同一层 .remove/ 里 —— 点开头, 扫描直接跳过, 内容原样保留,
@@ -1157,7 +1203,10 @@ export function apply(ctx, rawConfig) {
 		}
 		caches.delete(from);
 		caches.delete(target);
-		return { ok: true, root: target, from, name, box, bucket: dir.slice(box.length + 1), removed: true };
+		/* 画布被移出列表: 号从这个库的号池里摘掉(计数器不回退), 但记进这个桶里 —— 想搬回来还能认回身份 */
+		const removedUids = await dropUids(ctx, await uidLibOf({ ...baseConfig, root: from }), [from]);
+		if (Object.keys(removedUids).length > 0) stashUids({ root: parent }, dir.slice(box.length + 1), removedUids);
+		return { ok: true, root: target, from, name, box, bucket: dir.slice(box.length + 1), removed: true, uids: removedUids };
 	}
 
 	/* 笔记库目录下面的一级画布 = 直接子目录里带 notes/ 或 questions/ 的那些。
@@ -1216,6 +1265,7 @@ export function apply(ctx, rawConfig) {
 		const selfQuestions = await pathExists(`${root}/${config.questionDir}`);
 		if (selfNotes || selfQuestions) {
 			const selfName = root.split('/').filter(Boolean).pop() || root;
+			const selfUid = (await ensureUids(ctx, await uidLibOf({ ...baseConfig, root }), 'canvas', [root]))[root] || '';
 			return {
 				ok: true,
 				root,
@@ -1223,7 +1273,7 @@ export function apply(ctx, rawConfig) {
 				canvas: true,
 				created: [],
 				templates: [],
-				canvases: [{ path: root, name: selfName, canvas: true, hasNotes: selfNotes, hasQuestions: selfQuestions }],
+				canvases: [{ path: root, name: selfName, canvas: true, hasNotes: selfNotes, hasQuestions: selfQuestions, uid: selfUid }],
 				truncated: false,
 				name: selfName,
 			};
@@ -1245,6 +1295,12 @@ export function apply(ctx, rawConfig) {
 			return { ok: false, error: 'import-failed', root, created, message: error instanceof Error ? error.message : String(error) };
 		}
 		const scan = await scanLibrary(root);
+		/* 导入进来的画布: 第一次看到就登记好(一个库写一次配置), 老笔记不用迁移 */
+		const importedUids = await ensureUids(ctx, root, 'canvas', scan.canvases.map((item) => item.path));
+		for (const item of scan.canvases) {
+			const uid = importedUids[item.path];
+			if (uid) item.uid = uid;
+		}
 		return {
 			ok: true,
 			root,
@@ -1270,6 +1326,14 @@ export function apply(ctx, rawConfig) {
 					const isCanvas =
 						exists &&
 						((await pathExists(`${wanted}/${config.noteDir}`)) || (await pathExists(`${wanted}/${config.questionDir}`)));
+					/* 画布列表带上号: 上一级目录就是学习库, 号池在库那一级 */
+					if (scan.canvases.length > 0) {
+						const canvasUids = await ensureUids(ctx, wanted, 'canvas', scan.canvases.map((item) => item.path));
+						for (const item of scan.canvases) {
+							const uid = canvasUids[item.path];
+							if (uid) item.uid = uid;
+						}
+					}
 					sendJson(res, 200, {
 						ok: true,
 						path: wanted,

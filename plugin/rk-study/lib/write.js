@@ -1,7 +1,7 @@
 /* rk-study · host/write —— 从 host.js 第 969-1025 行原样切出 */
-import { MARKDOWN_RE } from './constants.js?v=46';
-import { absPathOf, denyOutsideRoot, insideRoot, writePolicyOf } from './fsguard.js?v=46';
-import { normalizeRelPath } from './util.js?v=46';
+import { MARKDOWN_RE } from './constants.js?v=47';
+import { absPathOf, denyOutsideRoot, insideRoot, writePolicyOf } from './fsguard.js?v=47';
+import { normalizeRelPath } from './util.js?v=47';
 
 /* ----------------------------------------------------------------- write */
 

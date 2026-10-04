@@ -9,13 +9,13 @@
  * ctx.fs 没有 delete/unlink API, 移动只能用 node:fs —— 这是刻意保留的: 每个入口在动手之前
  * 都先过 assertInsideRoot(), 用 ctx.fs 的规范化目标确认「要移走的东西在 root 之内」;
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
-import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=46';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=46';
-import { listDirSafe } from './templates.js?v=46';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=46';
-import { safePath } from './write.js?v=46';
+import { MARKDOWN_RE } from './constants.js?v=47';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=47';
+import { listDirSafe } from './templates.js?v=47';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=47';
+import { safePath } from './write.js?v=47';
 
 /* --------------------------------------------------------------- deleting */
 
@@ -255,6 +255,33 @@ export async function deleteFile(ctx, config, relPath, bucket) {
 	if (!statSync(abs).isFile()) throw new Error(`not a file: ${relPath}`);
 	const movedTo = moveIntoRemove(config, relPath, abs, bucket);
 	return { ok: true, path: relPath, removed: true, movedTo, box: REMOVE_DIR, bucket: removeBucketName(bucket) || String(movedTo ?? '').split('/')[0] };
+}
+
+/**
+ * 把「这次删掉的目录带走了哪个 uid」记进桶里: <画布>/.remove/<桶>/.rk-uids.json。
+ * 点开头的文件, 扫描 / 画布都看不见; 恢复(把目录移回去)时能凭它认回原来的身份。
+ */
+export function stashUids(config, bucket, mapping) {
+	const entries = Object.entries(mapping && typeof mapping === 'object' ? mapping : {});
+	if (entries.length === 0) return null;
+	const clean = String(bucket ?? '').replace(/^\/+|\/+$/g, '');
+	if (clean === '' || clean.includes('..')) return null;
+	const dest = `${removeBoxFor(config)}/${clean}/.rk-uids.json`;
+	mkdirSync(dest.slice(0, dest.lastIndexOf('/')), { recursive: true });
+	writeFileSync(dest, `${JSON.stringify({ at: new Date().toISOString(), uids: Object.fromEntries(entries) }, null, '\t')}\n`, 'utf8');
+	return `${clean}/.rk-uids.json`;
+}
+
+/** 读回某个桶里记着的号; 没有 / 坏了返回 {} */
+export function readStashedUids(config, bucket) {
+	const clean = String(bucket ?? '').replace(/^\/+|\/+$/g, '');
+	if (clean === '' || clean.includes('..')) return {};
+	try {
+		const data = JSON.parse(readFileSync(`${removeBoxFor(config)}/${clean}/.rk-uids.json`, 'utf8'));
+		return data && typeof data.uids === 'object' && data.uids ? data.uids : {};
+	} catch {
+		return {};
+	}
 }
 
 /** 删除整章目录(含其下所有小节/知识点/题目文件); bucket 由调用方决定, 省略则新开一个桶. */
