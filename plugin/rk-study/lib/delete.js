@@ -11,11 +11,11 @@
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=52';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=52';
-import { listDirSafe } from './templates.js?v=52';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=52';
-import { safePath } from './write.js?v=52';
+import { MARKDOWN_RE } from './constants.js?v=53';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=53';
+import { listDirSafe } from './templates.js?v=53';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=53';
+import { safePath } from './write.js?v=53';
 
 /* --------------------------------------------------------------- deleting */
 
@@ -282,6 +282,24 @@ export function readStashedUids(config, bucket) {
 	} catch {
 		return {};
 	}
+}
+
+/**
+ * 把一个 root 下 .remove/ 所有桶里记着的号合并读出来(键是绝对路径)。
+ * 桶名就是时间戳, 名字升序 = 时间升序, 后面的覆盖前面的 —— 路径重名时以最近一次删除留下的号为准。
+ */
+export function readAllStashedUids(root) {
+	const base = String(root ?? '').replace(/\/+$/, '');
+	if (base === '') return {};
+	let names = [];
+	try {
+		names = readdirSync(`${base}/${REMOVE_DIR}`).filter((name) => !name.startsWith('.')).sort();
+	} catch {
+		return {};
+	}
+	const out = {};
+	for (const name of names) Object.assign(out, readStashedUids({ root: base }, name));
+	return out;
 }
 
 /** 删除整章目录(含其下所有小节/知识点/题目文件); bucket 由调用方决定, 省略则新开一个桶. */

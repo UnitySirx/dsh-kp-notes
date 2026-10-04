@@ -6,20 +6,20 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync } from 'node:fs';
 
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=52';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=52';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=52';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=52';
-import { buildNodes, scanHeadings } from './headings.js?v=52';
-import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=52';
-import { parseDocument } from './parse.js?v=52';
-import { pointRegion, rebuildPoint } from './points.js?v=52';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=52';
-import { buildCatalog } from './scan.js?v=52';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=52';
-import { adoptUid, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=52';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=52';
-import { readBody, safePath, writeMarkdown } from './write.js?v=52';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=53';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=53';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=53';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=53';
+import { buildNodes, scanHeadings } from './headings.js?v=53';
+import { configBytesOf, configPathOf, readLibConfig, writeLibConfig } from './libconfig.js?v=53';
+import { parseDocument } from './parse.js?v=53';
+import { pointRegion, rebuildPoint } from './points.js?v=53';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=53';
+import { buildCatalog } from './scan.js?v=53';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=53';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=53';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=53';
+import { readBody, safePath, writeMarkdown } from './write.js?v=53';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -202,7 +202,13 @@ export function apply(ctx, rawConfig) {
 			if (abs) pairs.push({ chapter, abs });
 		}
 		if (pairs.length === 0) return data;
-		const uids = await ensureUids(ctx, await uidLibOf(config, signal), 'chapter', pairs.map((item) => item.abs));
+		const lib = await uidLibOf(config, signal);
+		/* 恢复: 章节目录从 .remove 桶里搬回来时, 先按路径把原来那个号认回来(号是删它的时候留在桶里的) */
+		const stashed = readAllStashedUids(config.root);
+		const revives = {};
+		for (const item of pairs) if (!item.chapter.uid && stashed[item.abs]) revives[item.abs] = stashed[item.abs];
+		if (Object.keys(revives).length > 0) await adoptUids(ctx, lib, revives);
+		const uids = await ensureUids(ctx, lib, 'chapter', pairs.map((item) => item.abs));
 		for (const item of pairs) {
 			const uid = uids[item.abs];
 			if (uid) item.chapter.uid = uid;
@@ -235,6 +241,16 @@ export function apply(ctx, rawConfig) {
 			.map((item) => [item[0], Array.from(new Set(item[1]))]);
 		if (kinds.length === 0) return data;
 		const lib = await uidLibOf(config, signal);
+		/* 恢复: 笔记文件从 .remove 桶里搬回来时, 先按路径把原来的号认回来 */
+		const stashed = readAllStashedUids(config.root);
+		const revives = {};
+		for (const [, list] of kinds) {
+			for (const rel of list) {
+				const abs = safePath(ctx, config, rel);
+				if (abs && !revives[abs] && stashed[abs]) revives[abs] = stashed[abs];
+			}
+		}
+		if (Object.keys(revives).length > 0) await adoptUids(ctx, lib, revives);
 		const maps = {};
 		for (const [kind, list] of kinds) maps[kind] = await ensureUids(ctx, lib, kind, list.map((rel) => safePath(ctx, config, rel)));
 		for (const chapter of chapters) {
@@ -886,8 +902,16 @@ export function apply(ctx, rawConfig) {
 					return;
 				}
 				if (action === 'delete') {
-					const result = await deleteEntry(ctx, config, String(payload.path ?? '').trim());
+					const rel = String(payload.path ?? '').trim();
+					const result = await deleteEntry(ctx, config, rel);
 					cache.data = null;
+					/* 删掉的笔记把号一起带走(计数器不回退): 号写进这个桶的 .rk-uids.json, 想恢复时还认得回来 */
+					const abs = safePath(ctx, config, rel);
+					if (result.removed && abs) {
+						const dropped = await dropUids(ctx, await uidLibOf(config), [abs]);
+						if (Object.keys(dropped).length > 0 && result.bucket) stashUids(config, result.bucket, dropped);
+						result.uids = dropped;
+					}
 					sendJson(res, 200, result);
 					return;
 				}
@@ -1318,7 +1342,11 @@ export function apply(ctx, rawConfig) {
 		const selfQuestions = await pathExists(`${root}/${config.questionDir}`);
 		if (selfNotes || selfQuestions) {
 			const selfName = root.split('/').filter(Boolean).pop() || root;
-			const selfUid = (await ensureUids(ctx, await uidLibOf({ ...baseConfig, root }), 'canvas', [root]))[root] || '';
+			const selfLib = await uidLibOf({ ...baseConfig, root });
+			/* 这张画布可能是从 .remove 桶里搬回来的: 先按路径把原来的号认回来, 再兜底发新号 */
+			const selfStash = readAllStashedUids(parentOfPath(root));
+			if (selfStash[root]) await adoptUids(ctx, selfLib, { [root]: selfStash[root] });
+			const selfUid = (await ensureUids(ctx, selfLib, 'canvas', [root]))[root] || '';
 			return {
 				ok: true,
 				root,
