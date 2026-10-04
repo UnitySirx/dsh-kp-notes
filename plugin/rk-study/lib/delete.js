@@ -11,11 +11,11 @@
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
 import { existsSync, mkdirSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=45';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=45';
-import { listDirSafe } from './templates.js?v=45';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=45';
-import { safePath } from './write.js?v=45';
+import { MARKDOWN_RE } from './constants.js?v=46';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=46';
+import { listDirSafe } from './templates.js?v=46';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=46';
+import { safePath } from './write.js?v=46';
 
 /* --------------------------------------------------------------- deleting */
 

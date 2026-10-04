@@ -12,9 +12,12 @@
  *   zoom     : 每张画布的视野(缩放 + 平移), 键是 "roots"(一级画布) 或画布绝对路径
  *   canvases : 列表里的画布 [{ path, name }](「＋ 新建学习画布」建过的)
  *   removed  : 手动「移出列表」的画布(墓碑, 重新扫描也不会加回来)
+ *   uid      : 这个学习库自己的编号(形如 c0001, 见 uid.js)
+ *   seq      : 每类实体「已经发到几号」{ canvas, chapter, section, point, question } —— 只增不减, 号永不复用
+ *   uids     : 当前还在的目录 -> 编号(绝对路径 -> uid); 值写 null 表示「这个路径的号没了(删了/改名了)」
  */
 
-import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE } from './constants.js?v=45';
+import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE } from './constants.js?v=46';
 
 const cache = new Map();
 /** 插件卸载时清掉这份模块级缓存(由 routes.js 的 ctx.effect 调用)。 */
@@ -25,6 +28,10 @@ export function clearLibConfigCache() {
 const MAX_ZOOM_KEYS = 400;
 const MAX_CANVASES = 1000;
 const MAX_REMOVED = 1000;
+const MAX_UIDS = 20000;
+const MAX_SEQ = 999999999;
+const UID_RE = /^[chspq]\d{4,9}$/;
+const SEQ_KEYS = ['canvas', 'chapter', 'section', 'point', 'question'];
 const MAX_SCALE = 4;
 const MIN_SCALE = 0.05;
 const FONT_MIN = 60;
@@ -127,11 +134,46 @@ function cleanUi(raw) {
 	return out;
 }
 
+/* 发号计数: 只认五类关键字, 值取 0..MAX_SEQ 的整数; 脏值直接丢掉(宁可从 0 开始, 也不发重复号) */
+function cleanSeq(raw) {
+	const out = {};
+	if (!isObject(raw)) return out;
+	for (const key of SEQ_KEYS) {
+		if (!(key in raw)) continue;
+		const value = Math.floor(Number(raw[key]));
+		if (Number.isFinite(value) && value >= 0 && value <= MAX_SEQ) out[key] = value;
+	}
+	return out;
+}
+
+/* 路径 -> 编号; null 是「删掉这条」(deepMerge 会把键删掉), 保留原样透传 */
+function cleanUids(raw) {
+	const out = {};
+	if (!isObject(raw)) return out;
+	let count = 0;
+	for (const [key, value] of Object.entries(raw)) {
+		if (count >= MAX_UIDS) break;
+		const abs = cleanPath(key);
+		if (abs === '') continue;
+		if (value === null) {
+			out[abs] = null;
+			count += 1;
+			continue;
+		}
+		const uid = String(value ?? '');
+		if (!UID_RE.test(uid)) continue;
+		out[abs] = uid;
+		count += 1;
+	}
+	return out;
+}
+
 /* 只认白名单里的顶层键, 并且把值洗干净 */
 function cleanTop(patch) {
 	const out = {};
 	if (!isObject(patch)) return out;
 	if ('version' in patch) out.version = 1;
+	if ('uid' in patch && UID_RE.test(String(patch.uid ?? ''))) out.uid = String(patch.uid);
 	const ui = cleanUi(patch.ui);
 	if (Object.keys(ui).length > 0) out.ui = ui;
 	if (isObject(patch.zoom)) out.zoom = cleanZoom(patch.zoom);
@@ -139,10 +181,14 @@ function cleanTop(patch) {
 	if (canvases) out.canvases = canvases;
 	const removed = cleanRemoved(patch.removed);
 	if (removed) out.removed = removed;
+	if (isObject(patch.seq)) out.seq = cleanSeq(patch.seq);
+	if (isObject(patch.uids)) out.uids = cleanUids(patch.uids);
 	return out;
 }
 
-/* 深度合并; 值为 null 表示「删掉这个键」(客户端能撤销单条记录, 比如画布改名后清掉旧路径)。 */
+/* 深度合并; 值为 null 表示「删掉这个键」(客户端能撤销单条记录, 比如画布改名后清掉旧路径)。
+   注意 null 的删除在**任意深度**都要生效(uids 就是靠它删单条), 所以对象一律递归合并,
+   不能因为 base 里还没有这个键就把 patch 的对象整个搬过去 —— 那样里面夹的 null 会留在文件里。 */
 function deepMerge(base, patch) {
 	const out = { ...(isObject(base) ? base : {}) };
 	for (const [key, value] of Object.entries(patch)) {
@@ -150,7 +196,7 @@ function deepMerge(base, patch) {
 			delete out[key];
 			continue;
 		}
-		if (isObject(value) && isObject(out[key])) out[key] = deepMerge(out[key], value);
+		if (isObject(value)) out[key] = deepMerge(isObject(out[key]) ? out[key] : {}, value);
 		else out[key] = value;
 	}
 	return out;
