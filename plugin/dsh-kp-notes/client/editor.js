@@ -7,7 +7,7 @@ export function createEditor(deps) {
 	const React = deps.React;
 	const h = React.createElement;
 	const { useState, useEffect, useRef } = React;
-	const { DeleteButton, LivePreview, MarkdownToolbar, snippetKeyDown, milkdown } = deps || {};
+	const { DeleteButton, LivePreview, MarkdownToolbar, snippetKeyDown, milkdown, unescapeRedundant } = deps || {};
 
 	/* YAML frontmatter 不能交给富文本编辑器: title / type / tags / order 是插件的元数据,
 	 * 让 Milkdown 把 `---` 当成分割线 + 那几行当成段落读进去, 保存时就会被改写掉。
@@ -26,19 +26,22 @@ export function createEditor(deps) {
 	}
 
 	/* 富文本回吐的 markdown 清洗: 空段落会被序列化成单独一行的 <br />,
-	 * 连续空行也可能多出来 —— 不清掉的话每编辑一次, 笔记里就多一点这种噪声。 */
+	 * 连续空行也可能多出来 —— 不清掉的话每编辑一次, 笔记里就多一点这种噪声。
+	 * 另外回吐的纯文本会被 remark 加防御性反斜杠(snake\_case), 由 unescapeRedundant
+	 * 用渲染器校验后去掉, 见 client/md.js。 */
 	function cleanMarkdown(text) {
-		return String(text || '')
+		const tidy = String(text || '')
 			.split('\n')
 			.filter((line) => !/^\s*<br\s*\/?>\s*$/i.test(line))
 			.map((line) => line.replace(/[ \t]+$/, ''))
 			.join('\n')
 			.replace(/\n{3,}/g, '\n\n');
+		return typeof unescapeRedundant === 'function' ? unescapeRedundant(tidy) : tidy;
 	}
 
 	function Editor({ state, t, onClose, onSave, saving, onDelete, onError, onEditTemplates, theme }) {
 		const opening = splitFront(state.markdown || '');
-		const [value, setValue] = useState(opening.body);
+		const [value, setValue] = useState(() => cleanMarkdown(opening.body));
 		const [title, setTitle] = useState(state.title || '');
 		const areaRef = useRef(null);
 		const headRef = useRef(opening.head);
@@ -58,7 +61,7 @@ export function createEditor(deps) {
 			lastKeyRef.current = noteKey;
 			const next = splitFront(state.markdown || '');
 			headRef.current = next.head;
-			setValue(next.body);
+			setValue(cleanMarkdown(next.body));
 			setTitle(state.title || '');
 			setSeed((prev) => prev + 1);
 		}, [noteKey, state.markdown, state.title]);

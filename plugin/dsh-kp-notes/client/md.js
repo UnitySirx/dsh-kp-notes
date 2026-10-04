@@ -10,12 +10,51 @@ export function createMd(deps) {
 	const { MathNode, MermaidBlock, looksLikeMath } = deps || {};
 	/* ------------------------------------------------------- markdown md */
 
+	/* markdown 里 `\X` 是「X 的字面量」(CommonMark), Milkdown 回吐的 snake\_case、a\*b\*c
+	 * 都靠这个语义才是对的原样文本。这里先把正文里的 \X 换成私用区掩码, 让 \* \_ 之类
+	 * 不再被当成强调定界符, 渲染出的字符串再解回原字符; 代码片段/公式里的反斜杠不动。 */
+	const MASK_SHIFT = 0xe000;
+	const MASK_ESCAPED = /\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g;
+	const MASK_CHARS = /[\ue000-\ue0ff]/g;
+	const maskChar = (char) => String.fromCharCode(MASK_SHIFT + char.charCodeAt(0));
+	const unmaskText = (value) => String(value === undefined || value === null ? '' : value).replace(MASK_CHARS, (char) => String.fromCharCode(char.charCodeAt(0) - MASK_SHIFT));
+	const unmaskNode = (node) => {
+		if (typeof node === 'string') return unmaskText(node);
+		if (Array.isArray(node)) return node.map(unmaskNode);
+		if (!node || typeof node !== 'object') return node;
+		const props = Object.assign({}, node.props);
+		Object.keys(props).forEach((key) => {
+			if (key === 'key') return;
+			if (key === 'children') return;
+			if (typeof props[key] === 'string') props[key] = unmaskText(props[key]);
+		});
+		if (props.children !== undefined) props.children = unmaskNode(props.children);
+		return Object.assign({}, node, { props });
+	};
+	/* 代码片段 / 行内公式 / 块级公式: 里面的反斜杠是原文, 不参与转义解析 */
+	const LITERAL_SPAN = /(`[^`]+`)|(\$\$[^$\n]{1,300}\$\$)|(\$(?!\s)[^$\n]{1,300}?(?<!\s)\$(?!\d))|(\\\([^)\n]{1,300}?\\\))/g;
+	function maskEscapes(line) {
+		const text = String(line === undefined || line === null ? '' : line);
+		if (text.indexOf('\\') < 0) return text;
+		let out = '';
+		let index = 0;
+		let match = LITERAL_SPAN.exec(text);
+		while (match) {
+			out += text.slice(index, match.index).replace(MASK_ESCAPED, (whole, char) => maskChar(char));
+			out += match[0];
+			index = match.index + match[0].length;
+			match = LITERAL_SPAN.exec(text);
+		}
+		out += text.slice(index).replace(MASK_ESCAPED, (whole, char) => maskChar(char));
+		return out;
+	}
+
 	function renderInline(source, keyPrefix) {
-		const text = String(source === undefined || source === null ? '' : source);
+		const text = maskEscapes(source);
 		const nodes = [];
 		let index = 0;
 		let counter = 0;
-		const pattern = /(\$\$[^$\n]{1,300}\$\$)|(\$(?!\s)[^$\n]{1,300}?(?<!\s)\$(?!\d))|(\\\([^)\n]{1,300}?\\\))|(`[^`]+`)|(!\[[^\]]*\]\([^)]*\))|(\[[^\]]+\]\([^)]*\))|(\*\*[^*]+\*\*)|(__[^_]+__)|(~~[^~]+~~)|(\*[^*\n]+\*)|(_[^_\n]+_)/;
+		const pattern = /(\$\$[^$\n]{1,300}\$\$)|(\$(?!\s)[^$\n]{1,300}?(?<!\s)\$(?!\d))|(\\\([^)\n]{1,300}?\\\))|(`[^`]+`)|(!\[[^\]]*\]\([^)]*\))|(\[[^\]]+\]\([^)]*\))|(\*\*[^*]+\*\*)|((?<![0-9A-Za-z_])__[^_]+__(?![0-9A-Za-z_]))|(~~[^~]+~~)|(\*[^*\n]+\*)|((?<![0-9A-Za-z_])_[^_\n]+_(?![0-9A-Za-z_]))/;
 		const nextKey = () => keyPrefix + '-' + (counter += 1);
 		while (index < text.length) {
 			const rest = text.slice(index);
@@ -43,7 +82,7 @@ export function createMd(deps) {
 			else nodes.push(h('em', { key: nextKey() }, token.slice(1, -1)));
 			index += match.index + token.length;
 		}
-		return nodes;
+		return nodes.map(unmaskNode);
 	}
 
 	function renderFlow(text, key) {
@@ -259,6 +298,88 @@ export function createMd(deps) {
 		return rest.slice(end).replace(/^\r?\n---\s*\r?\n?/, '');
 	}
 
+	/* Milkdown 用的 remark 序列化器是"防御性转义"的: 纯文本里出现 * _ ~ & [ ` | 或行首
+	 * 标点, 回吐的 markdown 就会多一个反斜杠(snake_case → snake\_case、a&b → a\&b、
+	 * 行首的 - 变成 \-), 原文根本没有这个字符, 预览里却看得见。
+	 * 能不能去掉一个反斜杠, 用我们自己的渲染器当裁判: 去掉前后渲染出来的元素/文本/公式
+	 * 完全一样才去掉; a\*b\*c、行首 \- 这类"反斜杠真在当语法用"的原样保留。 */
+	/* 只有这些标点的反斜杠才考虑去掉: & < > 在别的 markdown 实现里有实体 / HTML 语义,
+	 * 去掉可能改变它们在别处的渲染, 一律不动 */
+	const ESCAPABLE = '\\`*_{}[]()#+-.!~|';
+
+	function fingerprintNode(node, out) {
+		if (node === null || node === undefined || node === false || node === true) return out;
+		if (Array.isArray(node)) {
+			node.forEach((item) => fingerprintNode(item, out));
+			return out;
+		}
+		const kind = typeof node;
+		if (kind === 'string' || kind === 'number') {
+			out.push('t' + String(node));
+			return out;
+		}
+		if (kind !== 'object') return out;
+		const type = node.type;
+		const name = typeof type === 'string' ? type : (type && (type.displayName || type.name)) || 'frag';
+		const props = node.props || {};
+		const marks = [];
+		Object.keys(props).forEach((key) => {
+			if (key === 'children' || key === 'key') return;
+			const value = props[key];
+			const valueType = typeof value;
+			if (valueType === 'string' || valueType === 'number' || valueType === 'boolean') marks.push(key + '=' + String(value));
+		});
+		out.push('<' + name + (marks.length ? ' ' + marks.join(' ') : '') + '>');
+		fingerprintNode(props.children, out);
+		out.push('</' + name + '>');
+		return out;
+	}
+
+	/* 渲染指纹: 只看结构、文本与公式/代码内容(函数型 type 是元素身份, 必须转成名字) */
+	function renderFingerprint(markdown) {
+		return fingerprintNode(renderMarkdown(markdown, 'fp'), []).join('\u0001');
+	}
+
+	/* 按"字符类"分开试: 一次只去掉某一个字符的全部反斜杠, 渲染指纹不变才采用。
+	 * 不能一次性全去掉 —— 文档里只要有一处反斜杠真在当语法用(a\*b\*c 是强调),
+	 * 别的字符(snake\_case 的 _、a\~b 的 ~)就会被连坐保住。 */
+	const ESCAPE_CLASSES = ESCAPABLE.split('');
+	const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
+	const escapeForRegExp = (char) => char.replace(REGEX_SPECIAL, '\\$&');
+	/* \& 只在不构成实体时才没有语义: \&amp; 去掉会变成实体引用, 渲染就变了 */
+	const ENTITY_HEAD = /^(?:#[0-9]{1,7}|[A-Za-z][A-Za-z0-9]{0,31});/;
+
+	function unescapeRedundant(markdown) {
+		const text = String(markdown === undefined || markdown === null ? '' : markdown);
+		if (text.indexOf('\\') < 0) return text;
+		const want = renderFingerprint(text);
+		let out = text;
+		const tryDrop = (pattern, replace) => {
+			const next = out.replace(pattern, replace);
+			if (next === out) return false;
+			if (renderFingerprint(next) !== want) return false;
+			out = next;
+			return true;
+		};
+		/* 走两轮: 去掉某一类后, 先前被它挡住的另一类可能又能去掉了 */
+		for (let round = 0; round < 2; round += 1) {
+			let changed = false;
+			ESCAPE_CLASSES.forEach((char) => {
+				if (out.indexOf('\\' + char) < 0) return;
+				if (tryDrop(new RegExp('\\\\' + escapeForRegExp(char), 'g'), char)) changed = true;
+			});
+			if (out.indexOf('\\&') >= 0) {
+				const next = out.replace(/\\&/g, (whole, offset) => (ENTITY_HEAD.test(out.slice(offset + 2)) ? whole : '&'));
+				if (next !== out && renderFingerprint(next) === want) {
+					out = next;
+					changed = true;
+				}
+			}
+			if (!changed) break;
+		}
+		return out;
+	}
+
 	/* 实时预览：输入停顿 ~280ms 后重新渲染(公式/流程图都走同一套渲染器) */
 	function LivePreview({ t, value, className }) {
 		const [text, setText] = useState(() => String(value || ''));
@@ -281,5 +402,5 @@ export function createMd(deps) {
 		);
 	}
 
-		return { renderInline, renderFlow, parseTable, parseBlocks, renderBlock, renderMarkdown, stripFrontmatter, LivePreview };
+		return { renderInline, renderFlow, parseTable, parseBlocks, renderBlock, renderMarkdown, stripFrontmatter, unescapeRedundant, renderFingerprint, LivePreview };
 }

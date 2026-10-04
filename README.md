@@ -24,7 +24,7 @@
 | **思维导图** | 同一份笔记切换成「章 → 小节 → 知识点 → 正文」的左→右树；正文按小标题拆成小知识点卡片，同一时刻只展开一个（手风琴） |
 | **多画布** | 一级画布上每张卡 = 磁盘上一个笔记根目录（软考、别的考试、工作笔记各放一个，互不干扰）；画布清单 / 移出记录 / 字号配色主题跨浏览器同步 |
 | **题目与自测** | 一个知识点配一个题目文件，一个文件可放任意多道（每道一个 `## 题目 N`）；答案默认折叠成「▸ 答案已遮挡」，点开自测；选择题 / 案例题两种题型可视化录入 |
-| **富文本编辑** | 编辑器抽屉默认所见即所得（Milkdown：`/` 斜杠菜单、选区工具条），一键切回「markdown 源码 + 实时预览」；文件开头的 YAML 头不会被富文本碰坏 |
+| **富文本编辑** | 编辑器抽屉默认所见即所得（Milkdown：`/` 斜杠菜单、选区工具条），一键切回「markdown 源码 + 实时预览」；文件开头的 YAML 头不会被富文本碰坏；Milkdown 回吐 markdown 时会**防御性转义**（把正文里的 `_ ~ & [ \` \|`、行首标点写成 `\_ \~ …`），插件写回前会逐字验证「去掉后渲染完全一样」再去掉，`a\*b\*c`、行首 `\-` 这类真在当语法用的原样保留 |
 | **公式与流程图** | 正文里直接写 LaTeX 与 mermaid，本地渲染；语法写错只在原地报错，不弹引擎那层关不掉的遮罩 |
 | **输入助手** | 44 条公式模板 + 8 条结构 / 笔记 / 题目模板（模板本身就是两个可编辑的 markdown 文件），工具栏按钮 + 快捷键，外加一套自己实现的编辑键 |
 | **配色与主题** | **插件配色**（默认，自带 15 套皮肤：科技蓝 + 14 套 Material Design）/ **跟随主题**（直接吃当前 DeepSeek Harness 主题的底色 / 文字 / 强调色，不覆盖平台主题）两档；还能让每张卡各用一色；整体字号 85% ~ 160%；全屏专注模式 |
@@ -489,8 +489,8 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 > ```sh
 > # 1) host 半跨模块 import 的 ?v=N（当前 ?v=68）
 > sed -i '' 's/?v=67/?v=68/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 147）
-> sed -i '' 's/MODULE_VERSION = 153;/MODULE_VERSION = 154;/' plugin/dsh-kp-notes/client.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 155）
+> sed -i '' 's/MODULE_VERSION = 154;/MODULE_VERSION = 155;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
@@ -512,11 +512,11 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 | `client/canvas.js` | 492 | 画布视口与导图几何：视野（缩放 / 拖拽 / 自动铺满）、舞台尺寸与测量、导图树布局 `mind` / `positions` / `rootCards` / `extent`、指针与检索命中 `hits`、右键菜单状态；几何助手由入口注入 | React |
 | `client/view.js` | 394 | 渲染层：右键菜单、一级画布卡片、导图（含思维导图模式）、小节、知识点详情、正文 `body` / `detailBody`；只读面板状态与各域动作，生成 vdom | React |
 | `client/vendor.js` | 282 | KaTeX / mermaid 按需加载、公式与流程图组件（流程图配色跟着主题走，换主题自动重画） | React |
-| `client/md.js` | 285 | markdown 渲染器（表格 / 引用 / 代码 / 公式 / 流程图）+ 实时预览 | React、vendor |
+| `client/md.js` | 406 | markdown 渲染器（表格 / 引用 / 代码 / 公式 / 流程图）+ 实时预览；`\X` 按字面量渲染（代码 / 公式里的反斜杠原样保留），另导出 `unescapeRedundant` / `renderFingerprint` 给编辑器做「去冗余转义」 | React、vendor |
 | `client/cards.js` | 450 | 章节卡 / 知识点卡 / 答案遮挡 / 删除按钮 / 侧栏图标；**`renderPointBody`**（引子 + 小知识点分组，详情面板与思维导图共用） | React、md、util |
 | `client/dialogs.js` | 677 | 章节名、题目表单、知识点表单、Git 提交四个弹窗（题目 / 知识点表单里的 markdown 字段默认是 Milkdown 富文本，切「源码」回落到 markdown 源码框 + 输入助手） | React、md、snippets、milkdown |
 | `client/milkdown.js` | 95 | zt-react-milkdown 的小加载器（注入样式 → fetch CJS → 自写 `require` 只映射 react 家族 → 导出 `useMilkdown()`；失败返回 `failed`，调用方回退源码模式） | React |
-| `client/editor.js` | 264 | 编辑器抽屉（默认 Milkdown 富文本，可切「源码」回落到 markdown 源码框 + 实时预览 + 输入助手工具栏；富文本**只编辑正文**，文件开头的 YAML 头单独摘出来按原样拼回） | React、md、cards、snippets、milkdown |
+| `client/editor.js` | 267 | 编辑器抽屉（默认 Milkdown 富文本，可切「源码」回落到 markdown 源码框 + 实时预览 + 输入助手工具栏；富文本**只编辑正文**，文件开头的 YAML 头单独摘出来按原样拼回；写回前用 `unescapeRedundant` 清掉 Milkdown 防御性多加的 `\`） | React、md、cards、snippets、milkdown |
 | `client/mindmap.js` | 266 | 思维导图模式：`buildMindmapTree`（建树，知识点 = 标题节点 + 默认收起的内容子节点）/ `layoutMindmap`（左→右分层排布，支持实测高度）/ `MindMap`（svg 连线 + 绝对定位节点 + 渲染整篇 markdown（小知识点成卡片）+ 量高回填） | React、md、cards |
 | `client/snippets.js` | 479 | markdown 输入助手：工具栏按钮 / 快捷键（加粗、公式、表格、流程图…）、自己实现的编辑键（撤销 / 重做 / 复制 / 剪切 / Ctrl+V）、模板库解析与插入、公式 / 模板两个下拉菜单的分组归类、模板文件读写 | React |
 
