@@ -40,13 +40,21 @@
 dsh plugin --profile <profile 名> add link:/绝对路径/rk-study/plugin/dsh-kp-notes
 ```
 
-装好后在「插件」面板里把 **`dsh-kp-notes`**（内部名 `rk-study`）打开 —— `plugin/dsh-kp-notes/package.json` 里声明了 `dsh.bundle.patch`（Node 半）与 `dsh.client`（浏览器半），宿主会把两半一起挂上；入口是**左侧边栏面板列表里的「知识点笔记」**（英文界面下是 `Knowledge Notes`，图标 `plugin/dsh-kp-notes/icon.svg`）。
+**从 GitHub 直装（不用克隆）**：
+
+```sh
+dsh plugin --profile <profile 名> add github:UnitySirx/dsh-kp-notes#path:plugin/dsh-kp-notes
+```
+
+> pnpm ≥10 会提示 `The git-hosted package … has to be built but the build scripts were ignored` —— 这个包没有构建步骤（没声明 `prepare` / `build`，也没装任何依赖），忽略这条警告即可。
 
 **从 npm 安装**（包尚未发布；发布后把 `link:` 那段换成包名即可）：
 
 ```sh
 dsh plugin --profile <profile 名> add dsh-kp-notes
 ```
+
+装好后在「插件」面板里把 **`dsh-kp-notes`**（内部名 `rk-study`）打开 —— `plugin/dsh-kp-notes/package.json` 里声明了 `dsh.bundle.patch`（Node 半）与 `dsh.client`（浏览器半），宿主会把两半一起挂上；入口是**左侧边栏面板列表里的「知识点笔记」**（英文界面下是 `Knowledge Notes`，图标 `plugin/dsh-kp-notes/icon.svg`）。三种装法装完都一样。
 
 **改完代码怎么生效**：改 `plugin/dsh-kp-notes/client/` 或 `client.js` 后刷新页面（`⌘R`）即可；改 `host.js` / `lib/` 下任何文件要把 `?v=N` 与 `client.js` 的 `MODULE_VERSION` 一起 +1，见「五、插件实现」开头。`cordis.patch.yml` 现在是发布形态的包名 `dsh-kp-notes`（没有 `?entry=N` 缓存戳）⇒ **关开 bundle 不会重新 import 宿主模块，宿主半的改动要重启 DeepSeek Harness 才生效**；客户端那半关开一次 bundle（或改个按钮文案）就生效。
 
