@@ -24,7 +24,7 @@
  * 这里不碰 node:fs —— 也就没有越界写盘的可能。
  */
 
-import { readLibConfig, writeLibConfig } from './libconfig.js?v=47';
+import { readLibConfig, writeLibConfig } from './libconfig.js?v=48';
 
 /** 五类实体; 前缀既是类型标记, 也方便 grep(比如找出所有 h0007 的引用) */
 export const UID_PREFIX = { canvas: 'c', chapter: 'h', section: 's', point: 'p', question: 'q' };
@@ -178,6 +178,69 @@ export async function adoptUids(ctx, lib, mapping) {
 }
 
 /** 当前路径表(绝对路径 -> uid)的副本; 给扫描/画布列表一次性取用 */
+/** 从 markdown 文本的 frontmatter 里读 uid（限定 kind；认不出来返回空串）。 */
+export function uidFromText(text, kind) {
+	const raw = typeof text === 'string' ? text : '';
+	if (raw === '') return '';
+	const lines = raw.split(/\r?\n/);
+	if (lines.length === 0 || lines[0].trim() !== '---') return '';
+	for (let i = 1; i < lines.length && i < 400; i += 1) {
+		const line = lines[i].trim();
+		if (line === '---') break;
+		const match = /^uid\s*[:：]\s*(.*)$/.exec(line);
+		if (match) {
+			const value = match[1].trim().replace(/^["']|["']$/g, '');
+			return isUid(value, kind) ? value : '';
+		}
+	}
+	return '';
+}
+
+/** 把 uid 写进 markdown 的 frontmatter（已经有了就替换；没有 frontmatter 就在开头补一个）。 */
+export function withUidText(text, uid) {
+	const raw = typeof text === 'string' ? text : String(text ?? '');
+	if (!isUid(uid)) return raw;
+	const lines = raw.split(/\r?\n/);
+	if (lines.length > 0 && lines[0].trim() === '---') {
+		let end = -1;
+		for (let i = 1; i < lines.length; i += 1) {
+			if (lines[i].trim() === '---') {
+				end = i;
+				break;
+			}
+			if (/^uid\s*[:：]/.test(lines[i].trim())) {
+				lines[i] = `uid: ${uid}`;
+				return lines.join('\n');
+			}
+		}
+		if (end > 0) {
+			lines.splice(end, 0, `uid: ${uid}`);
+			return lines.join('\n');
+		}
+	}
+	const body = raw.replace(/^\n+/, '');
+	return body === '' ? `---\nuid: ${uid}\n---\n` : `---\nuid: ${uid}\n---\n\n${body}`;
+}
+
+/** 只发一个号、不记路径 —— 给写进文件 frontmatter 的小节/知识点用（章节/画布仍用 ensureUids 记路径）。 */
+export async function takeUid(ctx, lib, kind) {
+	if (!UID_PREFIX[kind]) throw new Error(`bad-uid-kind: ${kind}`);
+	const config = await readLibConfig(ctx, lib, true);
+	const next = Math.max(0, Math.min(MAX_SEQ, Math.floor(Number((config.seq || {})[kind]) || 0))) + 1;
+	await writeLibConfig(ctx, lib, { seq: { [kind]: next } });
+	return formatUid(kind, next);
+}
+
+/** 认一个已经写在文件里的号：把计数器抬到它之上，保证以后不会再发同一个号。 */
+export async function adoptUid(ctx, lib, kind, uid) {
+	if (!isUid(uid, kind)) return '';
+	const number = uidNumber(uid);
+	const config = await readLibConfig(ctx, lib, true);
+	const current = Math.max(0, Math.min(MAX_SEQ, Math.floor(Number((config.seq || {})[kind]) || 0)));
+	if (number > current) await writeLibConfig(ctx, lib, { seq: { [kind]: number } });
+	return uid;
+}
+
 export async function uidTable(ctx, lib) {
 	const config = await readLibConfig(ctx, lib);
 	const out = {};

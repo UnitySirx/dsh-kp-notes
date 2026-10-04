@@ -286,7 +286,7 @@ D. 非风险点
 
 **插件里的每个「删除」都是移动**：目标被 `rename` 到**当前一级画布根目录下的 `.remove/`**，**一次删除 = 在这里新建一个日期桶目录**（名字就是当天的 `YYYYMMDD`，例如 `20261004`），桶里保留原来的相对路径结构（删掉章节 `notes/01-第一章`，桶里就是 `notes/01-第一章/` 与 `questions/01-第一章/`）。桶与桶互不相干，所以**删两次就留两份，谁也不覆盖谁**（同一个章节删两次，第二次进的是新桶，第一次那份原样还在），也**不会把不同次的删除混进同一条路径**（先删整个章节、之后又删重建章节里的某个知识点 —— 后者进它自己那个新桶，不会落进上次那份章节备份里）。同一天里再删一次，名字往后排成 `20261004-2`、`20261004-3`（桶名只到「天」，一天里删几次就有几个桶；文件本身的修改时间由 `rename` 原样保留，想知道具体几点几分看它就行）。`.remove` 以点开头，扫描时跳过，所以它不会出现在画布、思维导图或搜索里。要找回：在画布根目录下打开 `.remove/`，挑日期对得上的那个桶，把东西移回原位即可；`rm -rf .remove` 就等于真正清空回收站。
 
-**编号（uid）：每个一级画布与章节都有一个自己的、永不复用的编号**，形如 `c0001`（画布）/ `h0007`（章节），后面还会有 `s0012`（小节）/ `p0031`（知识点）。编号**不写进文件名或目录名**（文件怎么排、卡片长什么样一个字都没变），只当身份用：目录类实体（画布 / 章节）的号记在**学习库**的 `.config/rk-study.json` 里（`uids` 表 + `seq` 计数），跟画布放在哪个目录、叫什么名字无关。删掉之后号**不回收**：把同名的章节/画布在原地重建，拿到的是**新号**（旧号只留在它自己的备份里），所以「先删 02 再建一个」不会让两个不同时期的东西共用一个身份。号会跟着实体走 —— 章节改名、画布改名（重命名目录）都是**搬号**，身份不变；章节被删除或画布被「移出列表」时，被带走的号会连同文件一起写进那个桶里的 `.rk-uids.json`（`{"at": …, "uids": {绝对路径: 编号}}`），想恢复时认得回来。老笔记不用迁移：第一次扫描到没有号的章节就会自动补上。
+**编号（uid）：每个一级画布与章节都有一个自己的、永不复用的编号**，形如 `c0001`（画布）/ `h0007`（章节）/ `s0012`（小节）/ `p0031`（知识点）。编号**不写进文件名或目录名**（文件怎么排、卡片长什么样一个字都没变），只当身份用：目录类实体（画布 / 章节）的号记在**学习库**的 `.config/rk-study.json` 里（`uids` 表 + `seq` 计数），跟画布放在哪个目录、叫什么名字无关。删掉之后号**不回收**：把同名的章节/画布在原地重建，拿到的是**新号**（旧号只留在它自己的备份里），所以「先删 02 再建一个」不会让两个不同时期的东西共用一个身份。号会跟着实体走 —— 章节改名、画布改名（重命名目录）都是**搬号**，身份不变；章节被删除或画布被「移出列表」时，被带走的号会连同文件一起写进那个桶里的 `.rk-uids.json`（`{"at": …, "uids": {绝对路径: 编号}}`），想恢复时认得回来。老笔记不用迁移：第一次扫描到没有号的章节就会自动补上；小节与知识点另走一条更省事的路 —— 号就写在 markdown 的 frontmatter 里（`uid: s0012`），跟着文件内容走，所以改标题、挪位置、连文件名一起改都不丢，插件保存时会先认文件里/盘上已有的号、认不出来才发新号（前端重建头部把 `uid` 弄丢也会被补回来）；题目文件不发号。
 
 | 位置 | 按钮 | 移到 `.remove/<桶>/` 里的是什么 |
 | --- | --- | --- |
@@ -445,14 +445,14 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 | `constants.js` | 103 | 路由/资源路径、默认值与上限、路径与标题的正则 |
 | `util.js` | 283 | 目录名归一化、路径换算、标题与标签清洗、frontmatter、摘要、模板/库路径（`templateDirOf` / `sharedTemplateDirOf` / `libraryDirOf`）、`validateRoot` |
 | `libconfig.js` | 241 | 学习库级 `.config/rk-study.json` 的读写：键清洗（`ui` / `zoom` / `canvases` / `removed` / `uid` / `seq` / `uids`）、深合并（`null` 删键）、1 秒缓存，`/rk-study/config` 与 uid 发号器共用 |
-| `uid.js` | 198 | 编号发号器：`ensureUids`（批量发号，一次调用只写一次配置）/ `uidsFor`（只读）/ `moveUid`（改名搬号）/ `dropUids`（摘号，计数器不回退）/ `adoptUids`（恢复时认回）/ `formatUid` / `isUid`；号池就是上面那份 `uid` / `seq` / `uids` |
+| `uid.js` | 261 | 编号发号器：`ensureUids`（按路径批量发号，一次调用只写一次配置）/ `uidsFor`（只读）/ `moveUid`（改名搬号）/ `dropUids`（摘号，计数器不回退）/ `adoptUids`（恢复时认回）/ `takeUid`（只发号不记路径，给小节 / 知识点写进 frontmatter）/ `adoptUid`（认下文件里已有的号并把计数器抬上去）/ `uidFromText` 与 `withUidText`（从 markdown 里读号 / 把号写进 frontmatter）/ `formatUid` / `isUid`；号池就是上面那份 `uid` / `seq` / `uids` |
 | `headings.js` | 156 | 扫标题（跳过代码围栏）、建标题树、子树范围、节点正文 |
 | `parse.js` | 224 | 一个 markdown 文件 → 小节/知识点/题目 的结构 |
 | `questions.js` | 74 | `## 题目 N` 的识别、定位、替换、重排 |
 | `points.js` | 118 | 单个知识点的读写（file 模式重建头部、node 模式只换那一段） |
 | `templates.js` | 547 | 小节 / 知识点 / 题目文件 / 题目的模板与题目计数 + 内置的「公式与结构模板」默认库 |
 | `fsguard.js` | 69 | 路径边界：`insideRoot`（经 `ctx.fs.resolve` 复核，符号链接指向外面也挡得住）、`writePolicyOf`（写操作的沙箱策略）、`denyOutsideRoot`；`mkdir` 的边界由调用方给 —— 新建画布 / 导入学习库 / 移出列表的目标本来就在请求 root 之外（父目录才是这几件事的边界）。取舍见文件头 |
-| `write.js` | 54 | 路径校验与写文件（经 `ctx.fs.writeText`，必要时 `mkdir` 兜底） |
+| `write.js` | 96 | 路径校验与写文件（经 `ctx.fs.writeText`，必要时 `mkdir` 兜底）；写盘前给小节 / 知识点补 frontmatter 里的 `uid`（认文件里 / 盘上已有的号，认不出来才发新号；失败只当这次没补，不挡写盘） |
 | `delete.js` | 296 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `bucketNameIn` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`；「移出列表」用同一个 `bucketNameIn` 在**同层** `.remove/` 下开桶）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段）/ `stashUids` 与 `readStashedUids`（把这次删掉的目录带走了哪个编号记进桶里的 `.rk-uids.json`），以及排除判断 |
 | `scan.js` | 326 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存 |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
@@ -461,10 +461,10 @@ host 半边（`plugin/rk-study/lib/`，按依赖从下往上）：
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**两个版本号（`?v=N` 与 `client.js` 的 `MODULE_VERSION`）要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=47）
-> sed -i '' 's/?v=46/?v=47/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 133）
-> sed -i '' 's/MODULE_VERSION = 132;/MODULE_VERSION = 133;/' plugin/rk-study/client.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=48）
+> sed -i '' 's/?v=47/?v=48/g' plugin/rk-study/host.js plugin/rk-study/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 134）
+> sed -i '' 's/MODULE_VERSION = 133;/MODULE_VERSION = 134;/' plugin/rk-study/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
