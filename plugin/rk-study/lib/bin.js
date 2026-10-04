@@ -10,8 +10,8 @@
  * 搬回去以后按桶里的 .rk-uids.json 认回原来的号，桶空了就把桶目录（连空掉的 .remove）清掉。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs';
-import { removeBoxFor } from './delete.js?v=57';
-import { adoptUids } from './uid.js?v=57';
+import { removeBoxFor } from './delete.js?v=58';
+import { adoptUids } from './uid.js?v=58';
 
 const REMOVE_DIR = '.remove';
 const MAX_BUCKETS = 200;
@@ -42,6 +42,50 @@ function bucketLabel(name) {
 	if (date) return `${date[1]}-${date[2]}-${date[3]}${date[4] || ''}`;
 	const full = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})/.exec(text);
 	return full ? `${full[1]}-${full[2]}-${full[3]} ${full[4]}:${full[5]}:${full[6]}` : text;
+}
+
+/** 新格式的桶名：删东西那天的日期（同一天再来带 -2），也容得下带时分秒的老写法 */
+function isBucketName(name) {
+	const text = String(name ?? '');
+	return /^\d{8}(-\d+)?$/.test(text) || /^\d{4}-\d{2}-\d{2}_\d{6}/.test(text);
+}
+
+/**
+ * 老格式的 .remove（2025 年那阵子）里一条记录的「影子树」：.remove/<相对路径> 就是被搬走的那条记录本身，
+ * 名字不是日期而是它当时的相对路径。原位没有它 ⇒ 整条可以搬回去；原位还在 ⇒ 它只是路径上的容器，
+ * 钻进去接着找真正被搬走的那些（例如 .remove/notes/01-甲 里的 01-甲）。
+ */
+function collectLegacy(box, root, rel, depth, stashed, out) {
+	if (out.length >= MAX_ITEMS) return;
+	const target = `${root}/${rel}`;
+	const parent = rel.includes('/') ? `${root}/${rel.slice(0, rel.lastIndexOf('/'))}` : root;
+	if (!existsSync(target)) {
+		if (!existsSync(parent)) return;
+		let kind = 'file';
+		let size = 0;
+		let mtime = 0;
+		try {
+			const info = statSync(`${box}/${rel}`);
+			kind = info.isDirectory() ? 'dir' : 'file';
+			size = info.isDirectory() ? 0 : info.size;
+			mtime = Math.round(info.mtimeMs);
+		} catch {
+			return;
+		}
+		out.push({ item: rel, kind, size, mtime, target, uid: stashed[target] || '' });
+		return;
+	}
+	if (depth + 1 >= MAX_DEPTH) return;
+	let entries = [];
+	try {
+		entries = readdirSync(`${box}/${rel}`, { withFileTypes: true });
+	} catch {
+		return;
+	}
+	for (const entry of entries) {
+		if (entry.name.startsWith('.')) continue;
+		collectLegacy(box, root, `${rel}/${entry.name}`, depth + 1, stashed, out);
+	}
 }
 
 /** 这个目录对应的回收站目录 */
@@ -94,9 +138,22 @@ export function listBin(config, box) {
 		return { box: useBox, root, boxes: [useBox], buckets: [] };
 	}
 	const buckets = [];
+	const legacy = { items: [] };
 	for (const name of names) {
 		if (buckets.length >= MAX_BUCKETS) break;
 		const dir = `${useBox}/${name}`;
+		let isDir = false;
+		try {
+			isDir = statSync(dir).isDirectory();
+		} catch {
+			isDir = false;
+		}
+		if (!isDir) continue;
+		/* 老格式：名字不是日期 ⇒ 它自己就是那条记录，别把它的内容拆成一堆假条目 */
+		if (!isBucketName(name)) {
+			collectLegacy(useBox, root, name, 0, readBoxUids(useBox, name), legacy.items);
+			continue;
+		}
 		const stashed = readBoxUids(useBox, name);
 		const items = [];
 		const walk = (rel, depth) => {
@@ -141,6 +198,7 @@ export function listBin(config, box) {
 		walk('', 0);
 		buckets.push({ name, at: bucketLabel(name), count: items.length, box: useBox, root, items });
 	}
+	if (legacy.items.length > 0) buckets.push({ name: '', at: '旧格式', legacy: true, count: legacy.items.length, box: useBox, root, items: legacy.items });
 	return { box: useBox, root, boxes: [useBox], buckets };
 }
 
@@ -318,13 +376,15 @@ function tidyBox(box) {
 /** 把桶里的一条搬回原位；原位已经有东西就拒绝（不覆盖）。box 省略 = config.root 那只 */
 export async function restoreItem(ctx, config, lib, bucket, item, box) {
 	const useBox = cleanBoxPath(box) || boxOf(config.root);
-	const cleanBox = cleanBucket(bucket);
+	const asked = String(bucket ?? '');
+	const cleanBox = asked === '' ? '' : cleanBucket(asked);
 	const rel = cleanRel(item);
 	const root = rootOfBox(useBox);
-	if (cleanBox === '' || rel === '' || useBox === '' || root === '') {
+	if ((cleanBox === '' && asked !== '') || rel === '' || useBox === '' || root === '') {
 		return { ok: false, error: 'bad-path', message: '这条回收站记录不合法' };
 	}
-	const from = `${useBox}/${cleanBox}/${rel}`;
+	/* bucket === '' = 老格式：记录直接躺在 .remove 下，item 就是它当时的相对路径 */
+	const from = cleanBox === '' ? `${useBox}/${rel}` : `${useBox}/${cleanBox}/${rel}`;
 	const target = `${root}/${rel}`;
 	if (!existsSync(from)) return { ok: false, error: 'not-found', message: '这条记录已经不在了' };
 	if (existsSync(target)) return { ok: false, error: 'target-exists', message: '原位已经有同名的东西，先给它改名或删掉再恢复' };
@@ -424,12 +484,23 @@ export async function restoreChapter(ctx, config, lib, box, chapter) {
 	}
 	const restored = [];
 	const skipped = [];
+	let legacy = false;
 	for (const name of names) {
-		if (cleanBucket(name) === '') continue;
+		/* 老格式的记录直接躺在 .remove 下，下面那次「整只盒」的合并会一起处理 */
+		if (!isBucketName(name)) {
+			legacy = true;
+			continue;
+		}
 		const result = await mergeTree(ctx, config, lib, useBox, name, root, chapterPrefixes(rel));
 		restored.push(...result.restored);
 		skipped.push(...result.skipped);
 		pruneTree(useBox, name);
+	}
+	if (legacy) {
+		const result = await mergeTree(ctx, config, lib, useBox, '', root, chapterPrefixes(rel));
+		restored.push(...result.restored);
+		skipped.push(...result.skipped);
+		pruneTree(useBox, '');
 	}
 	tidyBox(useBox);
 	return { ok: true, chapter: rel, box: useBox, root, restored, skipped };

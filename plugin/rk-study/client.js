@@ -511,10 +511,28 @@ window.__ModuleLoader__.load({
 				}
 			}
 
+			/* 老格式的 .remove 里没有「桶」: 直接躺在 .remove 下的每条记录都是一整份,
+			 * 一条一条搬回去, 汇总成跟宿主同一个形状。 */
+			async function restoreLegacyRows(bucket) {
+				const restored = [];
+				const skipped = [];
+				for (const item of bucket.items || []) {
+					try {
+						const one = await postAction({ action: 'restore', bucket: '', item: item.item, box: bucket.box || '' });
+						restored.push({ target: (one && one.target) || item.target });
+					} catch (problem) {
+						skipped.push({ item: item.item, error: String((problem && problem.message) || problem) });
+					}
+				}
+				return { restored, skipped };
+			}
+
 			async function restoreWholeBin(bucket) {
 				setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
 				try {
-					const result = await postAction({ action: 'restoreBucket', bucket: bucket.name, box: bucket.box || '' });
+					const result = bucket.legacy
+						? await restoreLegacyRows(bucket)
+						: await postAction({ action: 'restoreBucket', bucket: bucket.name, box: bucket.box || '' });
 					const done = (result.restored || []).length;
 					const skipped = (result.skipped || []).length;
 					(result.restored || []).forEach((row) => {
@@ -3120,7 +3138,7 @@ window.__ModuleLoader__.load({
 															h(
 																'div',
 																{ className: 'rk-bin-head' },
-																h('span', { className: 'rk-bin-when' }, bucket.at || bucket.name),
+																h('span', { className: 'rk-bin-when', title: bucket.legacy ? t('binLegacyHint') : '' }, bucket.at || bucket.name),
 																h('span', { className: 'rk-bin-count' }, String(bucket.count || 0) + ' ' + t('binItems')),
 																(binDialog.data.boxes || []).length > 1 && bucket.root
 																	? h('span', { className: 'rk-bin-src', title: bucket.root }, t('binFrom') + ' ' + bucket.root)
@@ -3130,6 +3148,7 @@ window.__ModuleLoader__.load({
 																	{
 																		className: 'rk-btn rk-bin-btn',
 																		type: 'button',
+																		title: bucket.legacy ? t('binLegacyHint') : '',
 																		disabled: binDialog.busy,
 																		onClick: () => restoreWholeBin(bucket),
 																	},
@@ -3259,7 +3278,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 143;
+		const MODULE_VERSION = 144;
 		const CLIENT_MODULES = ['dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
