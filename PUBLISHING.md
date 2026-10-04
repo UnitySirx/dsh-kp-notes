@@ -60,7 +60,7 @@ description:
 
 ### 已提交的 PR（2026-10-04）
 
-**<https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6525>** —— 标题 `Add dsh-kp-notes`，**草稿状态**，1 个文件变更。
+**<https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/6525>** —— 标题 `Add dsh-kp-notes`，先以草稿创建，2026-10-04 22:07 CST 由作者点 **Ready for review** 转正式；1 个文件变更。
 
 - fork：`UnitySirx/awesome-dsh-plugin`；分支 `add-dsh-kp-notes`（从上游 `main` 的 `bb8496e` 切出）；条目提交 `c0a7dd8`。
 - 到点后在 PR 页面点 **Ready for review** 即算正式提交；也可以直接让助手调 API 把 draft 转正式（`PATCH /pulls/6525` 传 `draft: false` 需走 GraphQL `markPullRequestReadyForReview`）。
@@ -86,6 +86,26 @@ https://github.com/UnitySirx/dsh-kp-notes/tree/main/plugin/dsh-kp-notes
 
 → 条目内容、`dsh.bundle`、`url`、`category`、描述全部已通过，只差仓库年龄。另外 `pr-guard.yml` / `regate.yml` 里都有 `if (pr.isDraft) continue`，所以草稿状态不会被定时巡检盯上。
 
+### 闸门转绿（2026-10-04 22:24 CST）
+
+`regate.yml:222-224` 的重扫规则要三条同时成立才重跑：gate 结论是 `failure` + summary 里含 `days old` + **距上次判定满 24 小时**。我们那次判定完成于 `2026-10-04T04:49:51Z`，所以**自然重扫最早要到 `2026-10-05T06:19Z`（北京时间 14:19）**——「仓库满 1 天」和「变绿」之间隔着这个 24 小时冷却，不看代码会以为 21:47 就该自己绿。
+
+为了不等，在 fork 分支上造了一个**内容零变更**的空提交 `8a25fc3`（`POST /git/commits` 复用父提交的 tree，再 `PATCH /git/refs/heads/add-dsh-kp-notes`），靠 `pull_request` 的 `synchronize` 事件把链路重跑一遍：
+
+| 环节 | 结果 |
+| --- | --- |
+| `pr-check.yml` | ✅ success（14:21:28Z），16 步 + Stale-fork guard 全过（空提交不删任何条目） |
+| `pr-gate.yml` → `Submission gate` | ✅ **success**（14:24:34Z），标题 `Entries look good` |
+| PR 状态 | `mergeable: true`、`mergeable_state: clean`、0 评论 0 评审 |
+
+`Submission gate` 转绿时的正文：
+
+```
+All 1 submitted entry passes: `dsh.bundle` declared, repo old enough, enough commits.
+```
+
+→ 至此提交侧全部完成，**剩下只等维护者合并**，作者无需再做任何事。
+
 ## 三、已经满足的检查项（对照 awesome 的 `scripts/check-submission.mjs`）
 
 | 检查项 | 状态 |
@@ -99,8 +119,8 @@ https://github.com/UnitySirx/dsh-kp-notes/tree/main/plugin/dsh-kp-notes
 | `files` / `engines` / `publishConfig` | ✅ |
 | 有真实可用代码、目录结构正常 | ✅ |
 | topic `dsh-plugin` | ✅ `topics: ["dsh-plugin"]` |
-| 仓库满 1 天（`MIN_AGE_DAYS = 1`） | ⏳ 自动恢复，不用重提 |
-| 清单条目（一个 `data/plugins/*.yml`） | ✅ PR #6525（草稿） |
+| 仓库满 1 天（`MIN_AGE_DAYS = 1`） | ✅ 2026-10-04T14:24Z 闸门转绿 |
+| 清单条目（一个 `data/plugins/*.yml`） | ✅ PR #6525（已转正式、闸门全绿、等待合并） |
 
 ## 四、备注
 
