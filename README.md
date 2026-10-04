@@ -40,7 +40,7 @@
 dsh plugin --profile <profile 名> add link:/绝对路径/rk-study/plugin/dsh-kp-notes
 ```
 
-装好后在「插件」面板里把 **`dsh-kp-notes`**（内部名 `rk-study`）打开 —— `plugin/dsh-kp-notes/package.json` 里声明了 `dsh.bundle.patch`（Node 半）与 `dsh.client`（浏览器半），宿主会把两半一起挂上；入口是**左侧边栏面板列表里的「知识点笔记」**（英文界面下是 `Architect Notes`，图标 `plugin/dsh-kp-notes/icon.svg`）。
+装好后在「插件」面板里把 **`dsh-kp-notes`**（内部名 `rk-study`）打开 —— `plugin/dsh-kp-notes/package.json` 里声明了 `dsh.bundle.patch`（Node 半）与 `dsh.client`（浏览器半），宿主会把两半一起挂上；入口是**左侧边栏面板列表里的「知识点笔记」**（英文界面下是 `Knowledge Notes`，图标 `plugin/dsh-kp-notes/icon.svg`）。
 
 **从 npm 安装**（包尚未发布；发布后把 `link:` 那段换成包名即可）：
 

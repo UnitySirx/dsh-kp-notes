@@ -6,7 +6,7 @@
 export function createDict(deps) {
 	const zh = {
 		panel: '知识点笔记',
-		title: '卡片知识点 · 学习画布',
+		title: '知识点笔记 · 学习画布',
 		subtitle: '目录 = 大章节 · 文件 = 小节 · 知识点 + 题目',
 		search: '搜索知识点、小节、标签…',
 		all: '全部',
@@ -321,7 +321,7 @@ export function createDict(deps) {
 	};
 
 	const en = {
-		panel: 'Architect Notes',
+		panel: 'Knowledge Notes',
 		title: 'Knowledge Point Notes · Study Canvas',
 		subtitle: 'folder = chapter · file = section · knowledge points + questions',
 		search: 'Search knowledge points, sections, tags…',

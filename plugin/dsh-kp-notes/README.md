@@ -2,7 +2,7 @@
 
 > 基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 开发的知识点(Knowledge Point)笔记插件 —— 把一整个目录的 Markdown 笔记变成一张可平移、缩放的卡片画布：**一个目录 = 一章，一章 = 一张卡**，知识点是卡片，题目自带答案遮挡，随手自测。
 
-左侧边栏「全局面板」里叫 **知识点笔记**（英文界面 `Architect Notes`）。完整文档、开发说明与全部截图见仓库：<https://github.com/UnitySirx/dsh-kp-notes>
+左侧边栏「全局面板」里叫 **知识点笔记**（英文界面 `Knowledge Notes`）。完整文档、开发说明与全部截图见仓库：<https://github.com/UnitySirx/dsh-kp-notes>
 
 ![多画布](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/dsh-kp-notes/screenshots/01-canvases.jpg)
 ![知识点详情：表格 + KaTeX 公式](https://raw.githubusercontent.com/UnitySirx/dsh-kp-notes/main/plugin/dsh-kp-notes/screenshots/03-point-detail.jpg)
