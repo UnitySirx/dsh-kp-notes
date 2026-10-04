@@ -65,6 +65,25 @@ export function createCss(deps) {
 		})
 		.join('\n');
 
+	/* 回收站面板: 全部用插件自己的 token, 跟随宿主主题时自动换色 */
+	const BIN_CSS = `
+.rk-modal-card.rk-bin { width:min(620px, 94%); max-height:76vh; display:flex; flex-direction:column; }
+.rk-bin-hint { margin-bottom:10px; font-size:11.5px; line-height:1.6; color:var(--rk-muted); word-break:break-all; }
+.rk-bin-error { margin-bottom:10px; padding:7px 10px; border-radius:8px; border:1px solid var(--rk-danger, #e5484d); color:var(--rk-danger, #e5484d); font-size:11.5px; }
+.rk-bin-empty { padding:22px 0; text-align:center; font-size:12px; color:var(--rk-muted); }
+.rk-bin-bucket { margin-bottom:12px; border:1px solid var(--rk-line-2); border-radius:10px; background:var(--rk-bg-2); overflow:hidden; }
+.rk-bin-head { display:flex; align-items:center; gap:10px; padding:8px 11px; border-bottom:1px solid var(--rk-line-1, var(--rk-line-2)); background:var(--rk-bg-3, var(--rk-bg-2)); }
+.rk-bin-when { flex:1; font-family:var(--rk-mono); font-size:12px; color:var(--rk-text); }
+.rk-bin-count { font-size:11px; color:var(--rk-muted); }
+.rk-bin-list { margin:0; padding:0; list-style:none; max-height:44vh; overflow:auto; }
+.rk-bin-item { display:flex; align-items:center; gap:9px; padding:6px 11px; border-top:1px solid var(--rk-line-1, transparent); }
+.rk-bin-item:first-child { border-top:none; }
+.rk-bin-item:hover { background:rgba(var(--rk-a2),.07); }
+.rk-bin-path { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--rk-mono); font-size:11.5px; color:var(--rk-text); }
+.rk-bin-uid { font-family:var(--rk-mono); font-size:10.5px; color:var(--rk-accent); }
+.rk-btn.rk-bin-btn { padding:3px 9px; font-size:11px; }
+.rk-bin-foot { display:flex; justify-content:flex-end; margin-top:6px; }
+`;
 	const HOST_CSS = `
 /* ===================== 跟随主题: 只加 .rk-follow 一层映射 =====================
  * 插件自己的配色(默认那套深色 + 15 套皮肤)一行没改: 这一档只是把插件的底色 / 文字 / 线条
@@ -724,6 +743,7 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 	.rk-h1 { font-size:14px; }
 	.rk-stage { padding:12px 12px 40px; }
 }
+${BIN_CSS}
 ${SKIN_CSS}
 ${HOST_CSS}
 `;

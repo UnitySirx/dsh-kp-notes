@@ -304,6 +304,15 @@ export function createDict(deps) {
 		gitMsgLibrary: '更新学习库: 全部改动一次提交',
 		gitHint: '只暂存所选范围里的改动, 推送发往 origin',
 		gitEmptyMessage: '先写一句提交信息',
+		binTrash: '回收站',
+		binHint: '删掉的东西都先收在这儿, 点「恢复」搬回原位; 原位已经有同名的会拒绝, 绝不覆盖',
+		binAt: '这个回收站属于',
+		binItems: '项',
+		binRestore: '恢复',
+		binRestoreAll: '整桶恢复',
+		binRestored: '已恢复',
+		binSkipped: '项被跳过（原位已有同名文件）',
+		binEmpty: '回收站是空的',
 		deleteHint: '',
 	};
 
@@ -607,6 +616,15 @@ export function createDict(deps) {
 		gitMsgLibrary: 'update the whole library at once',
 		gitHint: 'stages only the selected scope; push goes to origin',
 		gitEmptyMessage: 'Write a commit message first',
+		binTrash: 'Recycle bin',
+		binHint: 'Removed things wait here. Restore puts them back where they were; a name clash is refused, never overwritten',
+		binAt: 'This bin belongs to',
+		binItems: 'item(s)',
+		binRestore: 'Restore',
+		binRestoreAll: 'Restore all',
+		binRestored: 'Restored',
+		binSkipped: 'skipped (same name already there)',
+		binEmpty: 'The bin is empty',
 		deleteHint: '',
 	};
 

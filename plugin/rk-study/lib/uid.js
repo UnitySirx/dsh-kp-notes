@@ -24,7 +24,7 @@
  * 这里不碰 node:fs —— 也就没有越界写盘的可能。
  */
 
-import { readLibConfig, writeLibConfig } from './libconfig.js?v=53';
+import { readLibConfig, writeLibConfig } from './libconfig.js?v=54';
 
 /** 五类实体; 前缀既是类型标记, 也方便 grep(比如找出所有 h0007 的引用) */
 export const UID_PREFIX = { canvas: 'c', chapter: 'h', section: 's', point: 'p', question: 'q' };

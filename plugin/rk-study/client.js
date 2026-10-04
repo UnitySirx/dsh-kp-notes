@@ -313,6 +313,67 @@ window.__ModuleLoader__.load({
 			return data;
 		}
 
+		/* 回收站: 这个根目录的 .remove 里收着什么 —— 删掉的章节/小节/知识点, 或者「移出列表」的画布。
+		 * 宿主已经把「原位还在不在」「原来的号是多少」算好了, 前端只负责显示和点按钮。 */
+		async function readBin() {
+			const response = await fetch(routeUrl({ bin: 1 }), { headers: { accept: 'application/json' } });
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok || data.ok === false) throw new Error(data.message || data.error || 'HTTP ' + response.status);
+			return data;
+		}
+
+		async function openBin() {
+			setBinDialog({ busy: true, data: null, error: '' });
+			try {
+				setBinDialog({ busy: false, data: await readBin(), error: '' });
+			} catch (problem) {
+				setBinDialog({ busy: false, data: null, error: String((problem && problem.message) || problem) });
+			}
+		}
+
+		async function reloadBin() {
+			try {
+				const data = await readBin();
+				setBinDialog((current) => (current ? { busy: false, data, error: '' } : current));
+			} catch (problem) {
+				setBinDialog((current) => (current ? { busy: false, data: current.data, error: String((problem && problem.message) || problem) } : current));
+			}
+		}
+
+		/* 恢复一条: 搬回原位, 号跟着回去; 被移出列表的画布顺手把墓碑放开, 让它重新出现在画布列表里。
+		 * 原位已经有同名的东西时宿主会拒绝（绝不覆盖）, 这里把原话提示给用户。 */
+		async function restoreBinItem(bucket, item) {
+			setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
+			try {
+				await postAction({ action: 'restore', bucket, item: item.item });
+				unmarkRemoved(String(item.target || ''));
+				flash(t('binRestored') + ' · ' + item.item);
+				if (level1) setRootTick((value) => value + 1);
+				else reload(true);
+				await reloadBin();
+			} catch (problem) {
+				const message = String((problem && problem.message) || problem);
+				setBinDialog((current) => (current ? { ...current, busy: false, error: message } : current));
+			}
+		}
+
+		async function restoreWholeBin(bucket) {
+			setBinDialog((current) => (current ? { ...current, busy: true, error: '' } : current));
+			try {
+				const result = await postAction({ action: 'restoreBucket', bucket });
+				const done = (result.restored || []).length;
+				const skipped = (result.skipped || []).length;
+				(result.restored || []).forEach((row) => unmarkRemoved(String(row.target || '')));
+				flash(t('binRestored') + ' · ' + done + (skipped > 0 ? ' · ' + skipped + ' ' + t('binSkipped') : ''));
+				if (level1) setRootTick((value) => value + 1);
+				else reload(true);
+				await reloadBin();
+			} catch (problem) {
+				const message = String((problem && problem.message) || problem);
+				setBinDialog((current) => (current ? { ...current, busy: false, error: message } : current));
+			}
+		}
+
 		async function fetchGit(root, scope) {
 			const response = await fetch(withRootFor(GIT_ROUTE + '?scope=' + (scope === 'all' ? 'all' : 'notes'), root), { headers: { accept: 'application/json' } });
 			const data = await response.json().catch(() => ({}));
@@ -440,6 +501,7 @@ window.__ModuleLoader__.load({
 			const [rootTick, setRootTick] = useState(0);
 			const [rootDialog, setRootDialog] = useState(null);
 			const [libraryDialog, setLibraryDialog] = useState(null);
+			const [binDialog, setBinDialog] = useState(null); /* 回收站面板: { busy, data, error } */
 
 			/* 设置一律只留在浏览器 localStorage 里(画布目录里不写配置文件):
 			 * 画布列表 / 上次停在哪张画布 / 移出列表的墓碑 / 字号 / 配色 / 画布还是导图 / 逐项配色 / 导图折叠。
@@ -2630,6 +2692,7 @@ window.__ModuleLoader__.load({
 				level1
 					? h('button', { key: 'import', className: 'rk-btn', type: 'button', title: t('libHint'), onClick: openImportLib }, '⇪ ' + t('libImport'))
 					: null,
+				h('button', { key: 'bin', className: 'rk-btn', type: 'button', title: t('binHint'), onClick: openBin }, '♻ ' + t('binTrash')),
 				h(
 					'button',
 					{ key: 'scan', className: 'rk-btn', type: 'button', onClick: () => (level1 ? setRootTick((value) => value + 1) : reload(true)) },
@@ -2962,6 +3025,68 @@ window.__ModuleLoader__.load({
 								onCancel: () => setGitOpen(false),
 							})
 						: null,
+					binDialog
+						? h(
+								'div',
+								{ className: 'rk-modal', onClick: () => setBinDialog(null) },
+								h(
+									'div',
+									{ className: 'rk-modal-card rk-bin', onClick: (event) => event.stopPropagation() },
+									h('div', { className: 'rk-modal-title' }, '♻ ' + t('binTrash')),
+									h('div', { className: 'rk-bin-hint' }, binDialog.data && binDialog.data.root ? t('binAt') + ' ' + binDialog.data.root : t('binHint')),
+									binDialog.error ? h('div', { className: 'rk-bin-error' }, binDialog.error) : null,
+									binDialog.busy && !binDialog.data
+										? h('div', { className: 'rk-bin-empty' }, t('loading'))
+										: !binDialog.data || (binDialog.data.buckets || []).length === 0
+											? h('div', { className: 'rk-bin-empty' }, t('binEmpty'))
+											: (binDialog.data.buckets || []).map((bucket) =>
+													h(
+														'div',
+														{ key: bucket.name, className: 'rk-bin-bucket' },
+														h(
+															'div',
+															{ className: 'rk-bin-head' },
+															h('span', { className: 'rk-bin-when' }, bucket.at || bucket.name),
+															h('span', { className: 'rk-bin-count' }, String(bucket.count || 0) + ' ' + t('binItems')),
+															h(
+																'button',
+																{
+																	className: 'rk-btn rk-bin-btn',
+																	type: 'button',
+																	disabled: binDialog.busy,
+																	onClick: () => restoreWholeBin(bucket.name),
+																},
+																'↩ ' + t('binRestoreAll'),
+															),
+														),
+														h(
+															'ul',
+															{ className: 'rk-bin-list' },
+															(bucket.items || []).map((item) =>
+																h(
+																	'li',
+																	{ key: item.item, className: 'rk-bin-item' },
+																	h('span', { className: 'rk-bin-path', title: item.target || item.item }, (item.kind === 'dir' ? '▸ ' : '· ') + item.item),
+																	item.uid ? h('span', { className: 'rk-bin-uid' }, item.uid) : null,
+																	h(
+																		'button',
+																		{
+																			className: 'rk-btn rk-bin-btn',
+																			type: 'button',
+																			disabled: binDialog.busy,
+																			onClick: () => restoreBinItem(bucket.name, item),
+																		},
+																		'↩ ' + t('binRestore'),
+																	),
+																),
+															),
+														),
+													),
+												),
+									h('div', { className: 'rk-bin-foot' }, h('button', { className: 'rk-btn', type: 'button', onClick: () => setBinDialog(null) }, t('cancel'))),
+								),
+							)
+						: null,
 					libraryDialog ? renderLibraryDialog() : null,
 					rootDialog
 						? h(
@@ -3057,7 +3182,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 139;
+		const MODULE_VERSION = 140;
 		const CLIENT_MODULES = ['dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
