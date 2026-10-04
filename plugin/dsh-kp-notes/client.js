@@ -99,6 +99,8 @@ window.__ModuleLoader__.load({
 				buildMindmapTree,
 				layoutMindmap,
 				useStore,
+				useTheme,
+				setMermaidTheme,
 				/* 数据层(client/api.js): 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook */
 				baseNameOf,
 				defaultGitMessage,
@@ -129,6 +131,7 @@ window.__ModuleLoader__.load({
 			} = props.mods;
 			const { data, error, loading, reload } = useCatalog();
 			/* 本机 localStorage 与学习库配置的持久化都在 client/store.js 里 */
+			const storeBag = useStore();
 			const {
 				roots,
 				setRoots,
@@ -159,7 +162,12 @@ window.__ModuleLoader__.load({
 				setToast,
 				flash,
 				loadRootStats,
-			} = useStore();
+			} = storeBag;
+			/* 配色 / 主题 / 跟随宿主明暗 / 卡片各一色都在 client/theme.js 里 */
+			const {
+				skin, setSkin, skinOpen, setSkinOpen, skinBoxRef, skinList, skinHex,
+				theme, setTheme, hostDark, follow, mdTheme, cardColors, setCardColors,
+			} = useTheme({ libTick: storeBag.libTick, saveLib: storeBag.saveLib, setMermaidTheme });
 			/* 一级画布: 多个「学习画布」(各自一个根目录); rootPath 为空 = 停在全部画布 */
 			const [rootPath, setRootPath] = useState(() => getActiveRoot());
 			/* 一级画布上 git 查的是整个学习库(库目录 + scope=all), 画布上查的是这张画布自己的 notes/ */
@@ -312,99 +320,6 @@ window.__ModuleLoader__.load({
 			const [pointDialog, setPointDialog] = useState(null);
 			const [questionDialog, setQuestionDialog] = useState(null);
 			const [saving, setSaving] = useState(false);
-			/* 配色: 参考 Material Design 色板, 点色块即换(整套变量换掉, 布局不动) */
-			const [skin, setSkin] = useState(() => {
-				try {
-					return window.localStorage.getItem(SKIN_KEY) || 'tech';
-				} catch (problem) {
-					return 'tech';
-				}
-			});
-			const [skinOpen, setSkinOpen] = useState(false);
-			/* 宿主(DeepSeek Harness)现在是深色还是浅色: body[data-ds-dark-theme] 是权威标记,
-			 * 其次是 html[data-ds-theme-source], 都没有就退到 color-scheme / 系统偏好。 */
-			function readHostDark() {
-				try {
-					if (document.body && document.body.hasAttribute('data-ds-dark-theme')) return true;
-					const source = document.documentElement ? document.documentElement.getAttribute('data-ds-theme-source') : null;
-					if (source === 'dark') return true;
-					if (source === 'light') return false;
-					const scheme = (window.getComputedStyle(document.documentElement).colorScheme || '').trim();
-					const first = scheme.split(/\s+/)[0];
-					if (first === 'dark') return true;
-					if (first === 'light') return false;
-					return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-				} catch (problem) {
-					return true;
-				}
-			}
-			/* 把宿主的 brand 主色拆成 "r g b" 三元组: 插件里到处是 rgba(var(--rk-a1), x) 这种淡色,
-			 * 这样它们也跟着平台的强调色走, 而不是插件自己的色相。 */
-			function hostBrandTriplet() {
-				try {
-					const brand = (window.getComputedStyle(document.body).getPropertyValue('--dsw-alias-brand-primary') || '').trim();
-					if (brand === '') return null;
-					const probe = document.createElement('span');
-					probe.style.color = brand;
-					probe.style.display = 'none';
-					document.body.appendChild(probe);
-					const rgb = window.getComputedStyle(probe).color;
-					document.body.removeChild(probe);
-					const found = /rgba?\(([^)]+)\)/.exec(rgb);
-					if (!found) return null;
-					const nums = found[1].split(',').slice(0, 3).map((n) => Math.round(parseFloat(n)));
-					if (nums.length !== 3 || nums.some((n) => !isFinite(n))) return null;
-					return nums.join(' ');
-				} catch (problem) {
-					return null;
-				}
-			}
-			/* 主题: 插件配色(默认, 就是原来那套深色) / 跟随主题。跟随主题 = 底色 / 文字 / 线条全部用
-			 * 当前 DeepSeek Harness 的主题 token, 强调色取宿主的 brand 色, 插件不再自己上色;
-			 * 宿主切明暗(或系统外观变化)时立刻跟着换, 不用刷新页面。 */
-			const [theme, setTheme] = useState(() => {
-				try {
-					const saved = window.localStorage.getItem(THEME_KEY);
-					return saved === 'follow' || saved === 'light' || saved === 'auto' ? 'follow' : 'plugin';
-				} catch (problem) {
-					return 'plugin';
-				}
-			});
-			const [hostDark, setHostDark] = useState(() => readHostDark());
-			useEffect(() => {
-				const sync = () => setHostDark(readHostDark());
-				sync();
-				let watcher = null;
-				if (window.MutationObserver) {
-					watcher = new window.MutationObserver(sync);
-					watcher.observe(document.documentElement, { attributes: true, attributeFilter: ['data-ds-theme-source', 'class', 'style'] });
-					if (document.body) watcher.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'class', 'style'] });
-				}
-				let media = null;
-				const onMedia = () => sync();
-				if (window.matchMedia) {
-					media = window.matchMedia('(prefers-color-scheme: dark)');
-					if (media.addEventListener) media.addEventListener('change', onMedia);
-					else if (media.addListener) media.addListener(onMedia);
-				}
-				return () => {
-					if (watcher) watcher.disconnect();
-					if (media) {
-						if (media.removeEventListener) media.removeEventListener('change', onMedia);
-						else if (media.removeListener) media.removeListener(onMedia);
-					}
-				};
-			}, []);
-			const follow = theme === 'follow';
-			const mdTheme = follow ? (hostDark ? 'dark' : 'light') : 'dark';
-			/* 卡片各用一色: 章节卡 / 小节行 / 知识点卡各自带一个强调色, 免得一屏全是一个颜色 */
-			const [cardColors, setCardColors] = useState(() => {
-				try {
-					return window.localStorage.getItem(ITEM_KEY) !== '0';
-				} catch (problem) {
-					return true;
-				}
-			});
 			/* 画布 / 思维导图: 模式与导图里折叠的节点都记在本地 */
 			const [mode, setMode] = useState(() => {
 				try {
@@ -452,51 +367,6 @@ window.__ModuleLoader__.load({
 					/* 存储不可用就算了 */
 				}
 			}, [opened]);
-			const skinBoxRef = useRef(null);
-			const skinList = SKINS || [];
-			const skinHex = (skinList.find((item) => item.id === skin) || skinList[0] || { hex: '#3fb6ff' }).hex;
-			useEffect(() => {
-				try {
-					window.localStorage.setItem(SKIN_KEY, skin);
-				} catch (problem) {
-					/* 存不上就算了, 不影响使用 */
-				}
-				saveLib({ ui: { skin } });
-			}, [skin, libTick, saveLib]);
-			useEffect(() => {
-				try {
-					window.localStorage.setItem(THEME_KEY, theme);
-				} catch (problem) {
-					/* 存不上就算了, 不影响使用 */
-				}
-				saveLib({ ui: { theme } });
-			}, [theme, libTick, saveLib]);
-			/* 图表(mermaid)配色也跟主题走: 设置一次, 已经画出来的图会自己重画 */
-			useEffect(() => {
-				const mods = props.mods;
-				if (mods && typeof mods.setMermaidTheme === 'function') mods.setMermaidTheme(mdTheme);
-			}, [mdTheme, props.mods]);
-			/* 跟随主题时, 把宿主 brand 色填进插件的 --rk-a1..a3; 切回插件配色就把这几个变量撤掉 */
-			useEffect(() => {
-				const root = document.documentElement;
-				if (!root || !root.style) return;
-				const keys = ['--rk-a1', '--rk-a2', '--rk-a3'];
-				if (!follow) {
-					keys.forEach((key) => root.style.removeProperty(key));
-					return;
-				}
-				const triplet = hostBrandTriplet();
-				if (triplet === null) return;
-				keys.forEach((key) => root.style.setProperty(key, triplet));
-			}, [follow, hostDark]);
-			useEffect(() => {
-				try {
-					window.localStorage.setItem(ITEM_KEY, cardColors ? '1' : '0');
-				} catch (problem) {
-					/* 存不上就算了, 不影响使用 */
-				}
-				saveLib({ ui: { cardColors } });
-			}, [cardColors, libTick, saveLib]);
 			/* 读一次学习库的配置: 视野缩放 / 字号 / 配色 / 画布列表 / 移出列表。
 			 * 一级画布列表会 await 这个 promise(libLoadRef); 视野恢复会用到 libZoomRef。 */
 			useEffect(() => {
@@ -618,21 +488,7 @@ window.__ModuleLoader__.load({
 					});
 				}, 900);
 				return () => window.clearInterval(timer);
-			}, []);			useEffect(() => {
-				if (!skinOpen) return undefined;
-				const onDown = (event) => {
-					if (skinBoxRef.current && !skinBoxRef.current.contains(event.target)) setSkinOpen(false);
-				};
-				const onKey = (event) => {
-					if (event.key === 'Escape') setSkinOpen(false);
-				};
-				window.addEventListener('pointerdown', onDown, true);
-				window.addEventListener('keydown', onKey, true);
-				return () => {
-					window.removeEventListener('pointerdown', onDown, true);
-					window.removeEventListener('keydown', onKey, true);
-				};
-			}, [skinOpen]);
+			}, []);
 
 			/* ---- 全屏专注: 藏掉宿主的左右侧栏, 画布占满整个窗口 ---- */
 			const [focused, setFocused] = useState(() => readFocus());
@@ -2853,12 +2709,12 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 148;
-		const CLIENT_MODULES = ['api', 'store', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
+		const MODULE_VERSION = 149;
+		const CLIENT_MODULES = ['api', 'store', 'theme', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
 		async function apply(ctx) {
-			const [api, store, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
+			const [api, store, theme, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
 			/* api: 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook(见 client/api.js) */
 			const apiMods = api.createApi({ React });
 			/* store: 本机 localStorage + 学习库配置文件(<库>/.config/rk-study.json)的读写(见 client/store.js) */
@@ -2870,6 +2726,8 @@ window.__ModuleLoader__.load({
 			});
 			const dictMods = dict.createDict();
 			const cssMods = css.createCss();
+			/* theme: 配色 / 主题 / 跟随宿主明暗 / 卡片各一色(见 client/theme.js) */
+			const themeMods = theme.createTheme({ React, KEYS: { FONT_KEY, SKIN_KEY, ITEM_KEY, THEME_KEY }, SKINS: cssMods.SKINS });
 			const utilMods = util.createUtil();
 			const vendorMods = vendor.createVendor({ React });
 			/* milkdown: 把 vendor 里的 zt-react-milkdown 包跑起来(编辑界面用); 加载失败由调用方回退 textarea */
@@ -2890,7 +2748,7 @@ window.__ModuleLoader__.load({
 			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods });
 			/* mindmap: 思维导图模式(左→右的章节 / 小节 / 知识点树), 知识点节点里渲染整篇 markdown 正文 */
 			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody });
-			const mods = Object.assign({}, apiMods, storeMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
+			const mods = Object.assign({}, apiMods, storeMods, themeMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
 
 			ensureStyles(ctx, cssMods.CSS);
 			ctx.effect(() => ctx.locale.register(NS, { zh: dictMods.zh, en: dictMods.en }), 'rk-study: dictionaries');
