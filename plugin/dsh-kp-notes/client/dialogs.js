@@ -7,7 +7,7 @@ export function createDialogs(deps) {
 	const React = deps.React;
 	const h = React.createElement;
 	const { useState, useRef } = React;
-	const { LivePreview, MarkdownToolbar, snippetKeyDown } = deps || {};
+	const { LivePreview, MarkdownToolbar, snippetKeyDown, unescapeRedundant } = deps || {};
 	/* 富文本编辑: 用 vendor 里的 zt-react-milkdown(和知识点编辑器抽屉同一套); 包没起来就自动回退源码框 */
 	const milkdownMods = (deps && deps.milkdown) || null;
 	const useMd = (milkdownMods && milkdownMods.useMilkdown) || (() => ({ status: 'failed', Editor: null }));
@@ -16,14 +16,17 @@ export function createDialogs(deps) {
 		const lang = (typeof document !== 'undefined' && document.documentElement.getAttribute('lang')) || (typeof navigator !== 'undefined' && navigator.language) || '';
 		return /^zh/i.test(lang) ? 'zh-CN' : 'en-US';
 	};
-	/* Milkdown 把空段落序列化成单独一行的 <br />, 存文件前清掉(和知识点编辑器抽屉同一处理) */
-	const squeeze = (text) =>
-		String(text || '')
+	/* Milkdown 把空段落序列化成单独一行的 <br />, 存文件前清掉(和知识点编辑器抽屉同一处理);
+	 * 再把 Milkdown 的"防御性转义"(snake\_case / a\&b / \*A\_i\*)清掉, 和抽屉走同一个判官 */
+	const squeeze = (text) => {
+		const tidy = String(text || '')
 			.split('\n')
 			.filter((line) => !/^\s*<br\s*\/?>\s*$/i.test(line))
 			.map((line) => line.replace(/[ \t]+$/, ''))
 			.join('\n')
 			.replace(/\n{3,}/g, '\n\n');
+		return typeof unescapeRedundant === 'function' ? unescapeRedundant(tidy) : tidy;
+	};
 	/* 章节名称弹窗: 新建章节 / 给已有章节改名 */
 	function NameDialog({ t, title, value, placeholder, onCancel, onSubmit }) {
 		const [name, setName] = useState(value || '');

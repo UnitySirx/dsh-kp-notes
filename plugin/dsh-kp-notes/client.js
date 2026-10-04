@@ -1233,7 +1233,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 155;
+		const MODULE_VERSION = 156;
 		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
@@ -1278,7 +1278,7 @@ window.__ModuleLoader__.load({
 			const cardMods = cards.createCards({ React, renderInline: mdMods.renderInline, renderMarkdown: mdMods.renderMarkdown, formatCount: utilMods.formatCount, pathLabel: utilMods.pathLabel, countExamples: utilMods.countExamples, SKINS: cssMods.SKINS });
 			/* snippets 只要 React: markdown 输入助手(小工具栏 + 公式/结构模板 + 快捷键) */
 			const snippetsMods = snippets.createSnippets({ React, rootQuery: apiMods.withRootQuery });
-			const dialogMods = dialogs.createDialogs({ React, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods });
+			const dialogMods = dialogs.createDialogs({ React, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, unescapeRedundant: mdMods.unescapeRedundant, milkdown: milkdownMods });
 			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods, unescapeRedundant: mdMods.unescapeRedundant });
 			/* mindmap: 思维导图模式(左→右的章节 / 小节 / 知识点树), 知识点节点里渲染整篇 markdown 正文 */
 			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody });

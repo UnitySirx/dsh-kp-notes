@@ -31,18 +31,30 @@ export function createMd(deps) {
 		if (props.children !== undefined) props.children = unmaskNode(props.children);
 		return Object.assign({}, node, { props });
 	};
-	/* 代码片段 / 行内公式 / 块级公式: 里面的反斜杠是原文, 不参与转义解析 */
+	/* 代码片段 / 行内公式 / 块级公式: 里面的反斜杠是原文, 不参与转义解析。
+	 * 定界符自己也可能被转义(\$A_i\$、\`code\`): 那不是真的公式/代码段, 跳过它继续找。 */
 	const LITERAL_SPAN = /(`[^`]+`)|(\$\$[^$\n]{1,300}\$\$)|(\$(?!\s)[^$\n]{1,300}?(?<!\s)\$(?!\d))|(\\\([^)\n]{1,300}?\\\))/g;
 	function maskEscapes(line) {
 		const text = String(line === undefined || line === null ? '' : line);
 		if (text.indexOf('\\') < 0) return text;
 		let out = '';
 		let index = 0;
+		LITERAL_SPAN.lastIndex = 0;
 		let match = LITERAL_SPAN.exec(text);
 		while (match) {
+			const span = match[0];
+			const opener = span.charAt(0);
+			/* 定界符被前面的反斜杠转义 ⇒ 这只是一段普通正文, 按转义规则处理 */
+			const openEscaped = match.index > 0 && text.charAt(match.index - 1) === '\\';
+			const closeEscaped = opener !== '(' && text.charAt(match.index + span.length - 2) === '\\';
+			if (openEscaped || closeEscaped) {
+				LITERAL_SPAN.lastIndex = match.index + 1;
+				match = LITERAL_SPAN.exec(text);
+				continue;
+			}
 			out += text.slice(index, match.index).replace(MASK_ESCAPED, (whole, char) => maskChar(char));
-			out += match[0];
-			index = match.index + match[0].length;
+			out += span;
+			index = match.index + span.length;
 			match = LITERAL_SPAN.exec(text);
 		}
 		out += text.slice(index).replace(MASK_ESCAPED, (whole, char) => maskChar(char));
@@ -304,24 +316,54 @@ export function createMd(deps) {
 	 * 能不能去掉一个反斜杠, 用我们自己的渲染器当裁判: 去掉前后渲染出来的元素/文本/公式
 	 * 完全一样才去掉; a\*b\*c、行首 \- 这类"反斜杠真在当语法用"的原样保留。 */
 	/* 只有这些标点的反斜杠才考虑去掉: & < > 在别的 markdown 实现里有实体 / HTML 语义,
-	 * 去掉可能改变它们在别处的渲染, 一律不动 */
-	const ESCAPABLE = '\\`*_{}[]()#+-.!~|';
+	 * 去掉可能改变它们在别处的渲染, 一律不动; $ 算在内, 但只有"去掉后渲染成公式"时才去 */
+	const ESCAPABLE = '\\`*_{}[]()#+-.!~|$';
 
-	function fingerprintNode(node, out) {
+	/* 宽松模式下把相邻的"文本片段"接成一条: 去掉一个反斜杠可能让原本的 MathNode 退回文本
+	 * (或反过来), 分段方式会变但拼出来的文本一样 ⇒ 也算没变 */
+	function appendRelaxedText(out, bare) {
+		const last = out.length ? out[out.length - 1] : '';
+		if (typeof last === 'string' && last.charAt(0) === 't') out[out.length - 1] = last + bare;
+		else out.push('t' + bare);
+	}
+
+	function fingerprintNode(node, out, relax, literal) {
 		if (node === null || node === undefined || node === false || node === true) return out;
 		if (Array.isArray(node)) {
-			node.forEach((item) => fingerprintNode(item, out));
+			node.forEach((item) => fingerprintNode(item, out, relax, literal));
 			return out;
 		}
 		const kind = typeof node;
 		if (kind === 'string' || kind === 'number') {
+			if (relax && !literal) {
+				/* 宽松模式: 反斜杠只是转义残留, 当成看不见; 只剩反斜杠的文本节点直接消失。
+				 * 代码块/行内代码里不是转义, 一律严格比较(literal) */
+				const bare = String(node).replace(/\\/g, '');
+				if (!bare) return out;
+				appendRelaxedText(out, bare);
+				return out;
+			}
 			out.push('t' + String(node));
 			return out;
 		}
 		if (kind !== 'object') return out;
 		const type = node.type;
+		const props0 = node.props || {};
+		/* 宽松模式: 公式节点按"原文里的 $tex$"算 —— 用来认定"原本当字面量的 $tex$ 变成
+		 * 真公式"这一种变化(用户手写内联公式就是要这个效果), 严格模式仍然按公式节点算 */
+		if (relax && type === MathNode && props0.tex !== undefined) {
+			const tex = String(props0.tex).replace(/\\/g, '');
+			appendRelaxedText(out, props0.display ? '$$' + tex + '$$' : '$' + tex + '$');
+			return out;
+		}
 		const name = typeof type === 'string' ? type : (type && (type.displayName || type.name)) || 'frag';
 		const props = node.props || {};
+		/* 宽松模式下 frag 是透明的: 内容直接接进上层的文本流(空 frag 自然什么也不留),
+		 * 免得 frag 边界挡住"文本 ↔ 公式"这一种本该被接受的变化 */
+		if (relax && name === 'frag') {
+			fingerprintNode(props.children, out, relax, literal);
+			return out;
+		}
 		const marks = [];
 		Object.keys(props).forEach((key) => {
 			if (key === 'children' || key === 'key') return;
@@ -330,14 +372,15 @@ export function createMd(deps) {
 			if (valueType === 'string' || valueType === 'number' || valueType === 'boolean') marks.push(key + '=' + String(value));
 		});
 		out.push('<' + name + (marks.length ? ' ' + marks.join(' ') : '') + '>');
-		fingerprintNode(props.children, out);
+		fingerprintNode(props.children, out, relax, literal || name === 'code' || name === 'pre');
 		out.push('</' + name + '>');
 		return out;
 	}
 
-	/* 渲染指纹: 只看结构、文本与公式/代码内容(函数型 type 是元素身份, 必须转成名字) */
-	function renderFingerprint(markdown) {
-		return fingerprintNode(renderMarkdown(markdown, 'fp'), []).join('\u0001');
+	/* 渲染指纹: 只看结构、文本与公式/代码内容(函数型 type 是元素身份, 必须转成名字)
+	 * relax = true 时把公式当成原文里的 $tex$、把反斜杠当看不见(见 fingerprintNode) */
+	function renderFingerprint(markdown, relax) {
+		return fingerprintNode(renderMarkdown(markdown, 'fp'), [], relax).join('\u0001');
 	}
 
 	/* 按"字符类"分开试: 一次只去掉某一个字符的全部反斜杠, 渲染指纹不变才采用。
@@ -353,11 +396,17 @@ export function createMd(deps) {
 		const text = String(markdown === undefined || markdown === null ? '' : markdown);
 		if (text.indexOf('\\') < 0) return text;
 		const want = renderFingerprint(text);
+		const wantMath = renderFingerprint(text, true);
 		let out = text;
-		const tryDrop = (pattern, replace) => {
+		const tryDrop = (pattern, replace, mathTolerant) => {
 			const next = out.replace(pattern, replace);
 			if (next === out) return false;
-			if (renderFingerprint(next) !== want) return false;
+			if (renderFingerprint(next) !== want) {
+				/* $ 这一类: Milkdown 会把正文里成对的 $ 转义成 \$(unsafe: after:'\$'), 而
+				 * 我们自己的渲染器把 $tex$ 当内联公式 —— 去掉后确实渲染成公式就算对。
+				 * 别的字符(在当强调/列表/表格语法用的 \* \- \|)没有这个宽松通道。 */
+				if (!mathTolerant || renderFingerprint(next, true) !== wantMath) return false;
+			}
 			out = next;
 			return true;
 		};
@@ -366,7 +415,7 @@ export function createMd(deps) {
 			let changed = false;
 			ESCAPE_CLASSES.forEach((char) => {
 				if (out.indexOf('\\' + char) < 0) return;
-				if (tryDrop(new RegExp('\\\\' + escapeForRegExp(char), 'g'), char)) changed = true;
+				if (tryDrop(new RegExp('\\\\' + escapeForRegExp(char), 'g'), char, char === '$')) changed = true;
 			});
 			if (out.indexOf('\\&') >= 0) {
 				const next = out.replace(/\\&/g, (whole, offset) => (ENTITY_HEAD.test(out.slice(offset + 2)) ? whole : '&'));
