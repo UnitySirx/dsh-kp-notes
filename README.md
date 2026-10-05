@@ -489,6 +489,7 @@ D. 非风险点
 - **画布目录里除了 `notes/` 与 `questions/`，只有一个 `.config/`**（老画布可能还有 `notes/.templates/`）：模板是给人编辑的 markdown（见上面「模板共用规则」），统一放**学习库根目录**的 `.templates/`；画布自己的 `.config/` 里就是上面那两张表里的画布那份 —— `rk-study.json`（这张画布的视野 / 字号 / `seq`）与 `rk-study-uids.json`（号池）。库根目录下另有一份 `.config/`：`rk-study.json`（画布清单 / 库级字号配色 / 一级画布视野）、`rk-study-uids.json`（库这一级与各画布的号池）、`rk-study-removed.json`（移出列表的墓碑）。点开头的目录扫描会跳过、也不会被当成一章。`⎇ Git 提交` 现在只在一级画布上、范围是整个学习库，所以这两样（以及库根目录下别的改动）都会在「仅提交」时一起进版本库 —— 除非 `.gitignore` 排除。
 - **想覆盖插件配置**（目录名 / 排除 / 扫描深度 / AI 模型）：改插件自己的 `plugin/dsh-kp-notes/cordis.patch.yml`，不再支持「按画布覆盖」。
 - **视野（平移 / 缩放）两级各写一份**：**一级画布的视野**写进库的 `.config`（`zoom.roots`，跨浏览器保持），**单张画布内的视野**写进这张画布自己的 `<画布>/.config/rk-study.json`（键是画布路径，跟着画布走）；两者在浏览器里都还有一份即时的 `localStorage`（`rk-canvas:roots` / `rk-canvas:<画布路径>`，刷新先用本机这份）。本机那条只有在 `v` 对得上、且真能解析出 `view` 时才作数，否则退回配置文件里那份（老版本条目 / 坏条目不再当成「本机有」）。**重进面板不会把视野洗掉**：视野只要是「本机存过的 / 配置里的 / 用户自己拖过缩过的」（`userMoved`），面板挂载时的尺寸测量与切模式的复位都不再触发自动铺满，「离开插件再进来画布缩放被重置」就是这个病。只有**全屏开关**不落盘。
+- **「配置读不到」不等于「这个库没有配置」**：`GET /rk-study/config` 的失败（宿主刚重启、插件半还没激活完、网络抖一下）以前被当成空的配置 —— 于是字号退回本机默认 `100`、视野退回「没存过」，接着**自动铺满一次 + 把这一版写进文件**，库里真正那份字号与一级画布视野就被盖掉了（现象正是「重启 DeepSeek Harness 后根画布的缩放与字号被重置，进到某张画布里的却没事」）。现在：①`readConfig` 只有真读到（宿主的成功响应里必带 `exists` / `isCanvas` / `hasConfig` / `hasTemplates` 探针字段，所以「对象非空」= 读到了）才算数，否则给 `null` 并**最多重试 6 次**（700 ms 一次，靠踢 `libRev` 重跑读配置的 effect）；②读不到时这一轮**什么都不认**：不改字号、不覆盖视野、不自动铺满、不设 `libReadyRef`；③`libReadyRef`（= 真正的库配置读回来了）是**自动铺满与库级写盘的前提**，本机还没认下学习库目录时也不再硬置真；画布那一级的「首次进入画布自动铺满」同样等它。代价：连学习库都没有的极少数情形下不再自动铺满（宁可不动，也不拿没读到的配置去盖文件），手动拖 / 缩照旧、`复位` 按钮照旧。
 
 ## 五、插件实现
 
@@ -496,7 +497,7 @@ D. 非风险点
 | --- | --- |
 | `plugin/dsh-kp-notes/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
 | `plugin/dsh-kp-notes/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
-| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（1407 行，含回收站面板与那块 `panelRoot` JSX）；数据层 / 持久化 / 配色主题 / Git 面板 / 画布目录与导入 / 编辑动作 / 画布视口与导图几何 / 渲染层分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` / `client/roots.js` / `client/editing.js` / `client/canvas.js` / `client/view.js` |
+| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（1448 行，含回收站面板与那块 `panelRoot` JSX）；数据层 / 持久化 / 配色主题 / Git 面板 / 画布目录与导入 / 编辑动作 / 画布视口与导图几何 / 渲染层分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` / `client/roots.js` / `client/editing.js` / `client/canvas.js` / `client/view.js` |
 | `plugin/dsh-kp-notes/client/*.js` | Client 半的实现，按职责拆成 20 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
 | `plugin/dsh-kp-notes/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
 | `plugin/dsh-kp-notes/package.json` | 包清单（`dsh.bundle.patch`、`dsh.client`、图标） |
@@ -521,15 +522,15 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 | `scan.js` | 357 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存（`*.assestfiles` 图片素材目录跳过；新布局的 `.media/` 那层是点开头的，扫描本来就不看，直接进 `skipped`；老布局的 `media/` 那层也跳过，不然会被当成一章 —— 判据 `isMediaHome` 是「里面除点开头的东西外全是 `*.assestfiles` 目录」，`.DS_Store` 不算数，而真有 `.md` 的 `media` 目录照旧是章节）；顺带把号带出来 —— 文件记录读 frontmatter 里的 `uid`（小节 / 知识点），知识点文件自己的号挂到它那条知识点上 |
 | `bin.js` | 507 | 回收站（只有两层有它）：根画布那层 `listRootBins`（把当前根、它上一层、画布列表里每张画布父目录的 `.remove` 合起来列，只留「顶层整条」= 整只画布，`notes` / `questions` 这类画布内部结构不算），一级画布那层 `listChapterBin`（只看这张画布自己的 `.remove`，按章把 `notes/<章>/…` 与平行的 `questions/<章>/…` 聚成一条）；恢复是 `restoreItem` / `restoreBucket` / `restoreChapter`（按记录所在的 `box` 落回对应目录、原位已有同名**文件**时跳过或拒绝、章级恢复是「原位缺什么补什么」的合并、号按那只桶里记的认回、空桶与空掉的 `.remove` 一起收掉）；`listBin` 是底座 —— 只列「影子树的根」（原位已经没有、父目录还在的那一层，所以恢复它就是把整棵子树搬回去），并且按 `isBucketName`（`YYYYMMDD` / `YYYYMMDD-2` / `YYYY-MM-DD_HHmmss`）区分新旧：不是日期桶的目录是**老格式**（`.remove/<相对路径>` 就是那条记录本身），交给 `collectLegacy` 收进一只 `at=旧格式`、桶名为空字符串的分组，`restoreItem` 也支持空的 `bucket`（记录直接躺在 `.remove` 下） |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
-| `routes.js` | 2062 | `apply`：注册 8 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/media` 图片素材（GET 取字节（按后缀在根 + 一二级子目录里兜底找，所以正文里老布局的 `media/…` 也认得到）、POST 落盘到 `.media/<小节编号>.assestfiles/`，落盘前先 `migrateLegacyMedia` 把老布局那层搬过来并 `rewriteLegacyMediaRefs` 改正文里的路径）、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
+| `routes.js` | 2060 | `apply`：注册 8 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/media` 图片素材（GET 取字节（按后缀在根 + 一二级子目录里兜底找，所以正文里老布局的 `media/…` 也认得到）、POST 落盘到 `.media/<小节编号>.assestfiles/`，落盘前先 `migrateLegacyMedia` 把老布局那层搬过来并 `rewriteLegacyMediaRefs` 改正文里的路径）、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
 
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/` 下的文件时**必须把 `?v=N` +1**（碰了客户端模块的行为再一起 +1 `client.js` 的 `MODULE_VERSION`），不然会出现「改了文件却还是老代码」的静默错配：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=86）
-> sed -i '' 's/?v=85/?v=86/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 172；只改注释 / 只动宿主时不必动）
-> sed -i '' 's/MODULE_VERSION = 171;/MODULE_VERSION = 172;/' plugin/dsh-kp-notes/client.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=87）
+> sed -i '' 's/?v=86/?v=87/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 174；只改注释 / 只动宿主时不必动）
+> sed -i '' 's/MODULE_VERSION = 173;/MODULE_VERSION = 174;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
@@ -549,7 +550,7 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 | `client/git.js` | 109 | Git 提交面板的状态与动作：未提交改动的角标数字（`gitPending` / `gitOutside`）、提交（可选顺手推送）/ 仅推送 / 拉取、让模型写候选 commit message（`gitAi`） | React、api |
 | `client/roots.js` | 253 | 学习画布目录管理：新建 / 改名（= 重命名磁盘目录）/ 移出列表（搬进同层 `.remove/` + 记墓碑）、扫盘核对 `probeRoot`、导入学习库（输入框 + 宿主原生选目录窗体）以及两个弹窗的状态 | React、api |
 | `client/editing.js` | 401 | 打开 / 编辑 / 新建 / 删除：小节与知识点的打开与编辑、新建小节 / 章节、章节改名、题目片段的新增与编辑、删除小节 / 章节 / 题目、舞台与卡片的右键菜单项（写盘一律 `postAction` 后 `reload(true)`） | React、api |
-| `client/canvas.js` | 507 | 画布视口与导图几何：视野（缩放 / 拖拽 / 自动铺满）、舞台尺寸与测量、导图树布局 `mind` / `positions` / `rootCards` / `extent`、指针与检索命中 `hits`、右键菜单状态；几何助手由入口注入 | React |
+| `client/canvas.js` | 508 | 画布视口与导图几何：视野（缩放 / 拖拽 / 自动铺满）、舞台尺寸与测量、导图树布局 `mind` / `positions` / `rootCards` / `extent`、指针与检索命中 `hits`、右键菜单状态；几何助手由入口注入 | React |
 | `client/view.js` | 394 | 渲染层：右键菜单、一级画布卡片、导图（含思维导图模式）、小节、知识点详情、正文 `body` / `detailBody`；只读面板状态与各域动作，生成 vdom | React |
 | `client/vendor.js` | 282 | KaTeX / mermaid 按需加载、公式与流程图组件（流程图配色跟着主题走，换主题自动重画） | React |
 | `client/md.js` | 461 | markdown 渲染器（表格 / 引用 / 代码 / 公式 / 流程图 / **图片**：`![]()` 渲染成真的 `<img>`，相对 src 由面板根那层 `watchImages` 换成路由地址）+ 实时预览；`\X` 按字面量渲染（代码 / 公式里的反斜杠原样保留；定界符自己被转义的 `\$A_i\$` 不算公式段），另导出 `unescapeRedundant` / `renderFingerprint` 给编辑器与弹窗做「去冗余转义」（`$` 另有宽松指纹：只放过「字面量 `$tex$` → 真公式」这一种变化） | React、vendor |

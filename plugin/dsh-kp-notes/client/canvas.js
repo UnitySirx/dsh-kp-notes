@@ -317,12 +317,13 @@ export function createCanvas({ React }) {
 			});
 		}, [extent, mind, level1]);
 
-		/* 首次进入画布(没有存过视图)自动铺满一次 */
+		/* 首次进入画布(没有存过视图)自动铺满一次 —— 但要等学习库 / 画布那份配置读完:
+		 * 配置还没读回来时铺满, 会把铺满结果当成「本机存过的视野」写进本机与文件, 文件里那份真值就没了 */
 		useEffect(() => {
-			if (!mapReady || didFit.current || measureTick === 0 || extent.w <= 0 || mind || level1) return;
+			if (!mapReady || !libReadyRef.current || didFit.current || measureTick === 0 || extent.w <= 0 || mind || level1) return;
 			didFit.current = true;
 			fitView();
-		}, [mapReady, measureTick, extent, fitView, mind, level1]);
+		}, [mapReady, measureTick, extent, fitView, mind, level1, libTick]);
 
 		/* 一级画布: 卡片是定高的, 没有「量高」这一步, 所以列表一变(0 → N)就重新铺满一次
 		 * 但要等学习库配置读完: 文件里存过视野就照它恢复(见上面的读 effect), 没存过才铺满;

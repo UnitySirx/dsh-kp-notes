@@ -374,6 +374,8 @@ window.__ModuleLoader__.load({
 			}, [opened]);
 			/* 学习库目录没了时最多自愈一次(见过哪个路径就记下来, 免得两边都报不存在时来回弹) */
 			const healTriedRef = useRef('');
+			/* 「配置读不到」的重试计数: 宿主刚重启 / 网络抖一下时读失败, 不能当成「这个库没有配置」 */
+			const libRetryRef = useRef(0);
 			/* 读一次配置: 学习库那份 + 当前画布自己那份(视野缩放 / 字号 / 配色 / 画布列表 / 移出列表)。
 			 * 视野与字号「按画布各存一份」, 所以进 / 出一张画布要重读一次; 画布那份盖在库那份上面。
 			 * 一级画布列表会 await 这个 promise(libLoadRef); 视野恢复会用到 libZoomRef。 */
@@ -394,20 +396,41 @@ window.__ModuleLoader__.load({
 			useEffect(() => {
 				const lib = readDefaultRoot();
 				libReadyRef.current = false;
+				let alive = true;
+				/* 读配置: 只有真读到了才算数 —— 宿主回的成功响应里永远带探针字段(exists/isCanvas/hasConfig/hasTemplates),
+				 * 所以「对象非空」= 读到了; 请求失败 / 宿主还没起来 / 返回不像配置 ⇒ null(= 读不到, 绝不等于「没存过」)。 */
+				const readConfig = (root) => fetchLibConfig(root).then((saved) => (saved && typeof saved === 'object' && Object.keys(saved).length > 0 ? saved : null)).catch(() => null);
+				/* 读不到就过一会儿重读(宿主刚重启时前端可能比插件先起来), 但别无限重试; 返回「还安排了重试吗」 */
+				const retryRead = () => {
+					if (libRetryRef.current >= 6) return false;
+					libRetryRef.current += 1;
+					window.setTimeout(() => {
+						if (alive) setLibRev((value) => value + 1);
+					}, 700);
+					return true;
+				};
 				if (!lib) {
-					libReadyRef.current = true;
+					/* 这里**不能**把 libReadyRef 置真: 它是「真正的库配置读回来了」的意思。置真会让一级画布
+					 * 立刻自动铺满, 并把这一版默认视野 / 字号写进本机与文件 —— 而文件里那份真值还没读到。
+					 * 认回目录之前: 字号只落本机、库级补丁由 store.flushLib 攒着、铺满等 libReady。 */
 					libLoadRef.current = Promise.resolve({});
 					/* 也要踢一次, 否则一级画布那个「首次铺满」effect 等不到信号 */
 					setLibTick((value) => value + 1);
 					/* 本机没记着学习库目录: 拿画布列表的共同上一层认一把。认回来之前库这一级的
 					 * 改动都会被 store.flushLib 攒着(不再静默丢掉), 目录一认回来就写盘。 */
-					let alive = true;
 					(async () => {
 						const candidate = rootCandidateOf();
 						if (candidate === '' || healTriedRef.current === candidate) return;
-						healTriedRef.current = candidate;
-						const probe = await fetchLibConfig(candidate).then((saved) => (saved && typeof saved === 'object' ? saved : {})).catch(() => ({}));
+						const probe = await readConfig(candidate);
 						if (!alive) return;
+						if (probe === null) {
+							/* 这一问本身没问到(宿主还没起来 / 网络抖一下): 不能当成「它不是学习库」把路堵死,
+							 * 稍后重读一次; 重试次数用完还是问不到才按「认不回来」提醒。 */
+							if (!retryRead()) flash(t('libUnset'));
+							return;
+						}
+						/* 真问到结果了才记「试过了」, 免得一次失败就把这条候选钉死 */
+						healTriedRef.current = candidate;
 						if (looksLikeLib(probe)) {
 							writeDefaultRoot(candidate);
 							flash(t('libHealed').split('{path}').join(candidate));
@@ -421,20 +444,33 @@ window.__ModuleLoader__.load({
 						alive = false;
 					};
 				}
-				let alive = true;
-				const readConfig = (root) => fetchLibConfig(root).then((saved) => (saved && typeof saved === 'object' ? saved : {})).catch(() => ({}));
 				libLoadRef.current = (async () => {
 					const file = await readConfig(lib);
 					if (!alive) return file;
+					if (file === null) {
+						/* 读不到配置: 这一轮什么都不认 —— 不改字号、不覆盖视野、不自动铺满, 稍后重读。
+						 * (以前把读失败当「这个库没有配置」, 于是拿默认字号 + 一次自动铺满把文件里真值盖掉了) */
+						retryRead();
+						return file;
+					}
+					libRetryRef.current = 0;
 					/* 学习库目录本身不见了(被删 / 移动硬盘没挂上 / 临时目录被系统清了):
 					 * 别再把库这一级的视野、字号、画布清单往那个路径上写 —— 宿主那边现在也会
 					 * 直接挡掉(400 no-such-root), 所以这里先认路: 拿画布列表的共同上一层当候选,
 					 * 它还得真的在、不是画布自己、并且像学习库(有 .config 或 .templates)才算。 */
 					if (file.exists === false && healTriedRef.current !== lib) {
-						healTriedRef.current = lib;
 						const candidate = rootCandidateOf();
 						const probe = candidate === '' ? {} : await readConfig(candidate);
 						if (!alive) return file;
+						if (probe === null) {
+							/* 候选这一问没问到(宿主还没起来): 先不认路, 稍后重读一次 —— 别把「读不到」当成「不是学习库」 */
+							if (!retryRead()) {
+								healTriedRef.current = lib;
+								flash(t('libGone').split('{path}').join(lib));
+							}
+							return file;
+						}
+						healTriedRef.current = lib;
 						if (candidate !== '' && looksLikeLib(probe)) {
 							writeDefaultRoot(candidate);
 							flash(t('libHealed').split('{path}').join(candidate));
@@ -449,6 +485,11 @@ window.__ModuleLoader__.load({
 					/* 画布自己那份: 它自己的视野(键就是这张画布的路径) + 字号 */
 					const own = rootPath && rootPath !== lib ? await readConfig(rootPath) : {};
 					if (!alive) return file;
+					if (own === null) {
+						/* 画布自己那份读不到: 也别拿库那份去盖它(字号 / 视野会写到错的地方), 稍后重读 */
+						retryRead();
+						return file;
+					}
 					const zoom = Object.assign({}, file.zoom && typeof file.zoom === 'object' ? file.zoom : {});
 					const ownZoom = own.zoom && typeof own.zoom === 'object' ? own.zoom : null;
 					if (rootPath && ownZoom) {
@@ -1324,7 +1365,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 172;
+		const MODULE_VERSION = 174;
 		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 

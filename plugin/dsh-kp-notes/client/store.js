@@ -175,15 +175,15 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 		const zoomRef = useRef(1);
 		zoomRef.current = fontScale / 100;
 		useEffect(() => {
-			/* 还没读过一次库配置时先不写: 这一发写的可能只是启动默认值(100), 它会盖掉文件里那份,
-			 * 而且先落进 localStorage 就被当成「本机存过」, 之后再也纠正不回来 —— 用户看到的就是
-			 * 「离开插件再进来, 字号被重置」。 */
-			if (!libReadyRef.current) return;
+			/* 本机这份一直写(纯本机兜底; 不会污染判断: hadLocalUiRef 是挂载时一次性读的)。
+			 * 文件那份要等「真正的库配置读回来」才写: 之前那一发可能只是启动默认值(100),
+			 * 它会盖掉文件里那份 —— 用户看到的就是「离开插件再进来 / 重启后, 字号被重置」。 */
 			try {
 				window.localStorage.setItem(FONT_KEY, String(fontScale));
 			} catch (problem) {
 				/* 存不上就算了, 不影响使用 */
 			}
+			if (!libReadyRef.current) return;
 			saveLib({ ui: { fontScale } });
 		}, [fontScale, libTick, saveLib]);
 		const stepFont = useCallback((direction) => {
