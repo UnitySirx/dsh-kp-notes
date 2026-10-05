@@ -178,6 +178,8 @@ window.__ModuleLoader__.load({
 			} = useTheme({ libTick: storeBag.libTick, saveLib: storeBag.saveLib, setMermaidTheme });
 			/* 一级画布: 多个「学习画布」(各自一个根目录); rootPath 为空 = 停在全部画布 */
 			const [rootPath, setRootPath] = useState(() => getActiveRoot());
+			/* 根目录(所有画布都在它下面): 就是学习库目录; 画布 = 根目录的自己或它的下一层(见 lib/routes.js 的 scanLibrary) */
+			const inLib = (path, lib) => !!(lib && path) && (path === lib || path.indexOf(lib + '/') === 0);
 			/* 一级画布上 git 查的是整个学习库(库目录 + scope=all), 画布上查的是这张画布自己的 notes/ */
 			const libPath = readDefaultRoot();
 			const level1 = rootPath === null;
@@ -190,11 +192,11 @@ window.__ModuleLoader__.load({
 				gitOpen, setGitOpen, gitBusy, gitResult, gitForm, setGitForm, gitAi, setGitAi,
 				openGit, generateGitMessage, submitGit, pullGit, pushOnlyGit,
 			} = useGitPanel({ t, gitRoot, gitScope, level1, reload, flash, setRootTick });
-			/* 学习画布目录与新画布/导入学习库的弹窗状态都在 client/roots.js 里 */
+			/* 学习画布目录(根目录)与新画布弹窗的状态都在 client/roots.js 里 */
 			const {
-				rootInfo, setRootInfo, rootDialog, setRootDialog, libraryDialog, setLibraryDialog,
+				rootInfo, setRootInfo, rootDialog, setRootDialog, rootDirDialog,
 				enterRoot, leaveRoot, openNewRoot, openRenameRoot, canvasParent, probeRoot, forgetRoot,
-				submitRootDialog, openImportLib, chooseLibraryDir, runImportLib, renderLibraryDialog,
+				submitRootDialog, openRootDir, chooseRootDir, runSetRoot, renderRootDirDialog,
 			} = useRoots({ t, storeBag, setRootPath, rootPath, dirPicker });
 			/* 视野 / 字号按画布各存一份: 告诉 store 现在停在哪张画布(null = 一级画布 ⇒ 记进学习库那份配置)。
 			 * 这条 effect 得排在下面「读配置」那条前面, 免得进画布后第一次写入还按上一张画布的落点算。 */
@@ -229,16 +231,21 @@ window.__ModuleLoader__.load({
 			}
 
 			/* 一级画布那层恢复的可能是「被移出列表」的画布: 除了放开墓碑, 还要把它重新登记进画布列表,
-			 * 否则放过墓碑了、列表里也看不见它。 */
+			 * 否则放过墓碑了、列表里也看不见它。根目录定了之后, 不在根目录下的不再进列表(列表就是根目录的子目录)。 */
 			const noteRestoredCanvas = (target) => {
 				const item = String(target || '');
 				if (!level1 || item === '' || item.charAt(0) !== '/') return;
+				unmarkRemoved(item);
+				const lib = readDefaultRoot();
+				if (lib && !inLib(item, lib)) {
+					setRootTick((value) => value + 1);
+					return;
+				}
 				const list = readRoots().slice();
 				if (!list.some((entry) => entry.path === item)) {
 					list.push({ path: item, name: baseNameOf(item) || item });
 					saveRoots(list);
 				}
-				unmarkRemoved(item);
 				setRoots(list);
 				loadRootStats(list);
 				setRootTick((value) => value + 1);
@@ -384,6 +391,8 @@ window.__ModuleLoader__.load({
 			 * 宿主刚起来那会儿连着两三次探针都说不在也算不上「真的不在」。 */
 			const goneSinceRef = useRef(0);
 			const CONFIRM_MS = 2500;
+			/* 「本机列表里有根目录外的旧画布」这个提示只弹一次(换根目录后第一次扫盘时) */
+			const outsideNoticeRef = useRef(false);
 			/* 读一次配置: 学习库那份 + 当前画布自己那份(视野缩放 / 字号 / 配色 / 画布列表 / 移出列表)。
 			 * 视野与字号「按画布各存一份」, 所以进 / 出一张画布要重读一次; 画布那份盖在库那份上面。
 			 * 一级画布列表会 await 这个 promise(libLoadRef); 视野恢复会用到 libZoomRef。 */
@@ -564,8 +573,9 @@ window.__ModuleLoader__.load({
 					if (!had.cardColors && typeof ui.cardColors === 'boolean') setCardColors(ui.cardColors);
 					libReadyRef.current = true;
 					setLibTick((value) => value + 1);
-					/* 顺手把这个库当前的画布列表写回去(文件不存在就建出来) */
-					postLibConfig(lib, { canvases: readRoots() }).catch(() => {});
+					/* 顺手把根目录下当前的画布列表写回去(文件不存在就建出来): 列表 = 根目录的子目录, 根目录外的条目不进文件 */
+					const keep = readRoots().filter((entry) => inLib(entry && entry.path, lib));
+					postLibConfig(lib, { canvases: keep }).catch(() => {});
 					return file;
 				})();
 				return () => {
@@ -598,11 +608,14 @@ window.__ModuleLoader__.load({
 						stateReadyRef.current = true;
 						if (!saved || typeof saved !== 'object') return;
 						let touched = false;
-						const local = readRoots();
+						const lib = readDefaultRoot();
+						/* 根目录定了以后, 列表 = 根目录的子目录: 镜像里那些根目录外的旧画布不再并进来(磁盘不动, 只是不列出) */
+						const local = lib ? readRoots().filter((entry) => inLib(entry && entry.path, lib)) : readRoots();
 						const merged = local.slice();
 						for (const item of Array.isArray(saved.roots) ? saved.roots : []) {
 							const path = typeof item === 'string' ? item : item && item.path;
 							if (typeof path !== 'string' || path.charAt(0) !== '/') continue;
+							if (lib && !inLib(path, lib)) continue;
 							if (merged.some((entry) => entry.path === path)) continue;
 							merged.push({ path, name: String((item && item.name) || '').trim() || baseNameOf(path) });
 						}
@@ -730,7 +743,7 @@ window.__ModuleLoader__.load({
 
 			/* 每个画布卡片的统计: 各带自己的 root 读一次目录(host 的缓存是按 root 分桶的) */
 
-			/* 停在全部画布时: 问 host 要默认根目录 / 建议父目录, 把默认画布并进列表, 再逐个读统计 */
+			/* 停在全部画布时: 问 host 要默认根目录 / 建议父目录, 按根目录扫出画布列表, 再逐个读统计 */
 			useEffect(() => {
 				if (!level1) return undefined;
 				let alive = true;
@@ -739,49 +752,65 @@ window.__ModuleLoader__.load({
 						const info = await fetchRoots();
 						if (!alive) return;
 						setRootInfo(info);
-						/* 列表 = localStorage 记着的 + 学习库目录扫出来的(跳过被手动移出的墓碑), 合并去重。
+						/* 列表 = 根目录的子目录(扫盘得到), 跳过被手动移出的墓碑。
 						 * 先到先得: 本地记着的名字(用户改过名)优先于扫盘得到的目录名。 */
-						const list = readRoots().filter((entry) => !isRemoved(entry.path));
+						const local = readRoots();
 						const library = readDefaultRoot();
+						/* 根目录定了以后, 列表就是根目录下那一层: 不在它下面的条目一律不列(磁盘上什么都不动) */
+						const inside = (path) => (library ? inLib(path, library) : true);
+						const list = local.filter((entry) => !isRemoved(entry.path) && inside(entry.path));
+						const outside = local.filter((entry) => entry.path && !inside(entry.path));
 						/* 学习库的配置里也记着画布列表(换台机器时照它恢复) */
 						const file = (await libLoadRef.current) || {};
 						const fromFile = [];
 						for (const item of Array.isArray(file.canvases) ? file.canvases : []) {
 							const itemPath = typeof item === 'string' ? item : item && item.path;
 							if (typeof itemPath !== 'string' || itemPath.charAt(0) !== '/') continue;
+							if (!inside(itemPath)) continue;
 							if (list.some((entry) => entry.path === itemPath)) continue;
 							if (fromFile.some((entry) => entry.path === itemPath)) continue;
 							fromFile.push({ path: itemPath, name: String((item && item.name) || '').trim() || baseNameOf(itemPath) });
 						}
-						let base = list.concat(fromFile);
+						/* 有根目录就先扫盘: 扫出什么列什么; 扫不动/目录不在时保留本机与配置那份, 绝不清空列表 */
+						let scanned = null;
 						if (library) {
 							try {
 								const scan = await fetchLibrary(library);
-								const found = (scan && Array.isArray(scan.canvases) ? scan.canvases : []).map((item) => ({ path: item.path, name: item.name }));
-								const merged = [];
-								for (const item of [...list, ...found]) {
-									if (!item || typeof item.path !== 'string' || item.path.charAt(0) !== '/') continue;
-									if (isRemoved(item.path)) continue;
-									if (merged.some((entry) => entry.path === item.path)) continue;
-									merged.push({ path: item.path, name: String(item.name || '').trim() || baseNameOf(item.path) });
+								if (scan && scan.exists !== false) {
+									const seen = {};
+									scanned = [];
+									for (const item of list.concat(Array.isArray(scan.canvases) ? scan.canvases : [])) {
+										const itemPath = typeof item === 'string' ? item : item && item.path;
+										if (typeof itemPath !== 'string' || itemPath.charAt(0) !== '/' || !inside(itemPath)) continue;
+										if (isRemoved(itemPath) || seen[itemPath]) continue;
+										seen[itemPath] = true;
+										scanned.push({ path: itemPath, name: String((item && item.name) || '').trim() || baseNameOf(itemPath) });
+									}
 								}
-								base = merged;
 							} catch (problem) {
-								base = list;
+								scanned = null;
 							}
 						}
 						if (!alive) return;
-						/* 重新扫描: 磁盘上已经不在的画布直接从列表里拿掉(只改列表, 一个文件都不动) */
-						const probes = await Promise.all(base.map((entry) => probeRoot(entry.path)));
-						if (!alive) return;
-						const gone = base.filter((entry, index) => probes[index] === false);
-						const kept = base.filter((entry, index) => probes[index] !== false);
-						saveRoots(kept); /* 扫盘结果同步到 localStorage 与学习库配置 */
-						setRoots(kept);
-						loadRootStats(kept);
+						let base = scanned;
+						let gone = [];
+						if (base === null) {
+							/* 没有根目录 / 扫不动: 退回逐个探测的老办法, 只把「确定不在」的从列表里拿掉 */
+							base = library ? list.concat(fromFile) : local.concat(fromFile);
+							const probes = await Promise.all(base.map((entry) => probeRoot(entry.path)));
+							if (!alive) return;
+							gone = base.filter((entry, index) => probes[index] === false);
+							base = base.filter((entry, index) => probes[index] !== false);
+						}
+						saveRoots(base); /* 扫盘结果同步到 localStorage 与根目录的配置文件 */
+						setRoots(base);
+						loadRootStats(base);
 						if (gone.length > 0) {
 							flash(t('rootGone').split('{n}').join(String(gone.length)));
-						} else if (rootTick > 0) {
+						} else if (scanned !== null && outside.length > 0 && !outsideNoticeRef.current) {
+							outsideNoticeRef.current = true;
+							flash(t('rootDirOutside').split('{n}').join(String(outside.length)));
+						} else if (scanned === null && rootTick > 0) {
 							flash(t('rootRescanned'));
 						}
 					} catch (error) {
@@ -881,7 +910,7 @@ window.__ModuleLoader__.load({
 					? h('button', { key: 'new', className: 'rk-btn rk-primary', type: 'button', onClick: openNewRoot }, '＋ ' + t('rootNew'))
 					: h('button', { key: 'new', className: 'rk-btn', type: 'button', onClick: startNewChapter }, '＋ ' + t('newChapter')),
 				level1
-					? h('button', { key: 'import', className: 'rk-btn', type: 'button', title: t('libHint'), onClick: openImportLib }, '⇪ ' + t('libImport'))
+					? h('button', { key: 'rootdir', className: 'rk-btn', type: 'button', title: t('rootDirHint'), onClick: openRootDir }, '⌂ ' + t('rootDirBtn'))
 					: null,
 				h('button', { key: 'bin', className: 'rk-btn', type: 'button', title: t('binHint'), onClick: openBin }, '♻ ' + t('binTrash')),
 				h(
@@ -954,7 +983,7 @@ window.__ModuleLoader__.load({
 							)
 						: null,
 					level1
-						? h('span', { className: 'rk-toolbar-hint' }, t('rootHint') + (readDefaultRoot() ? '　' + t('rootHintUnder') + ' ' + readDefaultRoot() : ''))
+						? h('span', { className: 'rk-toolbar-hint' }, libPath ? t('rootHintUnder') + ' ⌂ ' + libPath : t('rootHint'))
 						: h('input', {
 								className: 'rk-input',
 								value: query,
@@ -1312,7 +1341,7 @@ window.__ModuleLoader__.load({
 								),
 							)
 						: null,
-					libraryDialog ? renderLibraryDialog() : null,
+					rootDirDialog ? renderRootDirDialog() : null,
 					rootDialog
 						? h(
 								'div',
@@ -1357,26 +1386,28 @@ window.__ModuleLoader__.load({
 											},
 										}),
 									),
+									rootDialog.mode !== 'rename' && !libPath
+										? h(
+											'div',
+											{ className: 'rk-rootdialog-row' },
+											h('span', { className: 'rk-rootdialog-label' }, t('rootPathLabel')),
+											h('input', {
+												className: 'rk-input',
+												value: rootDialog.path,
+												placeholder: (rootDialog.name ? canvasParent() + '/' + rootDialog.name : '绝对路径'),
+												onChange: (event) => setRootDialog({ ...rootDialog, path: event.target.value, error: null }),
+												onKeyDown: (event) => {
+													if (event.key === 'Enter') submitRootDialog();
+													if (event.key === 'Escape') setRootDialog(null);
+												},
+											}),
+										)
+										: null,
 									rootDialog.mode === 'rename'
-										? null
-										: h(
-												'div',
-												{ className: 'rk-rootdialog-row' },
-												h('span', { className: 'rk-rootdialog-label' }, t('rootPathLabel')),
-												h('input', {
-													className: 'rk-input',
-													value: rootDialog.path,
-													placeholder: (rootDialog.name ? canvasParent() + '/' + rootDialog.name : '/绝对路径'),
-													onChange: (event) => setRootDialog({ ...rootDialog, path: event.target.value, error: null }),
-													onKeyDown: (event) => {
-														if (event.key === 'Enter') submitRootDialog();
-														if (event.key === 'Escape') setRootDialog(null);
-													},
-												}),
-											),
-									rootDialog.mode === 'rename'
-						? h('div', { className: 'rk-rootdialog-hint' }, t('rootRenameHint'))
-						: h('div', { className: 'rk-rootdialog-hint' }, t('rootPathHint')),
+										? h('div', { className: 'rk-rootdialog-hint' }, t('rootRenameHint'))
+										: libPath
+											? h('div', { className: 'rk-rootdialog-hint' }, t('rootNewUnder') + ' ⌂ ' + libPath)
+											: h('div', { className: 'rk-rootdialog-hint' }, t('rootPathHint')),
 									rootDialog.error ? h('div', { className: 'rk-rootdialog-error' }, rootDialog.error) : null,
 									h(
 										'div',
@@ -1407,7 +1438,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 178;
+		const MODULE_VERSION = 179;
 		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 

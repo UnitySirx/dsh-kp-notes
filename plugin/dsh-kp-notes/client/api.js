@@ -246,10 +246,12 @@ export function createApi({ React }) {
 		if (!response.ok) throw new Error('HTTP ' + response.status);
 		return response.json().catch(() => ({}));
 	}
-	/* 扫一个目录下的一级画布(带 notes/ 或 questions/ 的子目录) —— 导入 / 重新扫描都用它 */
-	async function fetchLibrary(path) {
+	/* 扫一个目录下的一级画布(带 notes/ 或 questions/ 的子目录) —— 根目录的设置 / 重新扫描都用它。
+	 * options.uids === false 加 ?uids=0: 只预览, 不让宿主在别人目录里写号池(.config)。 */
+	async function fetchLibrary(path, options) {
 		const url = new URL(ROOTS_ROUTE, window.location.origin);
 		url.searchParams.set('path', path);
+		if (options && options.uids === false) url.searchParams.set('uids', '0');
 		const response = await fetch(url.toString(), { headers: { accept: 'application/json' } });
 		const data = await response.json().catch(() => ({}));
 		if (!response.ok || data.ok === false) throw new Error(data.message || data.error || 'HTTP ' + response.status);

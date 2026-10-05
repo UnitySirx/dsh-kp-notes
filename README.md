@@ -61,7 +61,7 @@ dsh plugin --profile <profile 名> add dsh-kp-notes
 ## 快速开始
 
 1. **准备一个目录当画布**（放插件目录外面，例如 `~/Notes/系统架构师/`）。面板右上角的 `＋ 新建学习画布` 会帮你建好 `notes/` 与 `questions/` 两个子目录，也可以自己手工建。
-   - 想一次管多张画布：先建一个空目录（比如 `~/Notes/`），用面板右上角的 `⇪ 导入目录` 把它当成**学习库**，之后新建的画布都挂在它下面。
+   - 想一次管多张画布：先建一个空目录（比如 `~/Notes/`），用面板右上的 `⌂ 根目录` 把它设成**根目录**（列表里就是它下面那一层子目录），之后新建的画布都挂在它下面。
 2. **写笔记**：在 `notes/` 下按约定建目录与 markdown 文件（见下一节），或者直接在面板里点 `＋ 新建章节` / `＋ 新建小节` / `＋ 新建知识点` / `＋ 添加题目`。
 3. **看画布**：章节卡 → 点小节 → 右侧知识点卡片墙 → 点知识点看说明与题目；答案默认遮挡，点一下展开。
 
@@ -361,8 +361,8 @@ D. 非风险点
 
 | 操作 | 说明 |
 | --- | --- |
-| 左上 `← 全部画布` | 只在某个学习画布里出现：回到**一级画布**（多个学习画布的总览）。一级画布上一张卡片 = 一个笔记根目录（磁盘上任意目录），点卡片上的 `进入画布 ›` 进入它的画布（卡片空白处是**穿透**的：按住可以直接拖动画布，也不会选中卡片上的文字）；`＋ 新建学习画布` 建目录骨架，卡片上可**改名** / **移出列表**（移出 = 把画布目录**移到同一层的 `.remove/` 里**存着，想恢复就手工移回上一层；同时记一个**墓碑**，重新扫描 / 导入都不会再把它加回来，在同一个路径新建画布或重新导入这个库时解除）。列表与墓碑记在 `localStorage` 的 `rk-study:roots` / `rk-study:removed-roots`（**「当前在哪张画布」不落盘**：打开面板 / 刷新都停在「全部画布」这一级，想进哪张自己点进去），并同步写一份到学习库的 `<库>/.config/rk-study.json` |
-| 右上 `⇪ 导入目录` | 就一个**输入框 + 一个 `📁 选择…` 按钮**：点按钮弹**宿主的目录选择窗体**（跟宿主「打开文件夹」用的是同一个 —— 桌面版是系统「选择文件夹」框，网页版是内置目录浏览器），选完路径自动填进输入框；也可以直接把绝对路径粘进去按 Enter。点 `导入` 就把这个目录当成**学习库**：库下面每个子目录都算一个画布（带 `notes/` 或 `questions/` 的会被自动识别），一次把里面的画布全部加载进一级画布列表；导入时在库里建好 `.templates`（缺哪个内置模板补哪个），一级画布上的视角 / 字号 / 配色与画布清单也会写进库里那份 `.config/rk-study.json`（见「设置存在哪」）；**库本身不会被当成画布**。如果这个目录自己就是一张画布（有 `notes/` 或 `questions/`），就只把它这一张加进画布列表、**磁盘上什么都不写**，也不改默认父目录。宿主没提供目录选择器的环境里按钮会置灰并提示手填绝对路径。导入后这个目录成为**新画布的默认父目录**（`＋ 新建学习画布` 不填路径就建在它下面），记在 `localStorage` 的 `rk-study:default-root`；已手动删掉的画布目录会在点右上 `重新扫描` 时从列表里自动移出 |
+| 左上 `← 全部画布` | 只在某个学习画布里出现：回到**一级画布**（多个学习画布的总览）。一级画布上一张卡片 = 一个笔记根目录（磁盘上任意目录），点卡片上的 `进入画布 ›` 进入它的画布（卡片空白处是**穿透**的：按住可以直接拖动画布，也不会选中卡片上的文字）；`＋ 新建学习画布` 建目录骨架，卡片上可**改名** / **移出列表**（移出 = 把画布目录**移到同一层的 `.remove/` 里**存着，想恢复就手工移回上一层；同时记一个**墓碑**，重新扫描 / 设根目录都不会再把它加回来，在同一个路径新建画布或把它设回根目录时解除）。列表与墓碑记在 `localStorage` 的 `rk-study:roots` / `rk-study:removed-roots`（**「当前在哪张画布」不落盘**：打开面板 / 刷新都停在「全部画布」这一级，想进哪张自己点进去），并同步写一份到学习库的 `<库>/.config/rk-study.json` |
+| 右上 `⌂ 根目录` | 就一个**输入框 + 一个 `📁 选择…` 按钮**：输入绝对路径，或点按钮弹**宿主的目录选择窗体**（跟宿主「打开文件夹」用的是同一个 —— 桌面版是系统「选择文件夹」框，网页版是内置目录浏览器）；输入时**防抖 350ms 预览**这个目录 —— 认出几张画布（子目录里带 `notes/` 或 `questions/` 的）、还有哪些别的子目录、目录在不在，自己就是一张画布时会提示「根目录得选它的上一层」并给一个 `用上一层` 按钮。点 `设为根目录` 就把它定成**根目录**：画布列表**替换**成它下面那一层的子目录（扫盘得到的清单，同时写进库里的 `.config/rk-study.json`），库里缺的 `.templates` 内置模板补上；**不在根目录下的旧画布就不再列出来**（磁盘上一个字节都不动），第一次扫盘时会提示一句「有 N 张画布不在根目录下」。之后这个目录就是**新画布的默认父目录**（`＋ 新建学习画布` 有根目录时只填名字，建在它下面），记在 `localStorage` 的 `rk-study:default-root`；已手动删掉的画布目录会在点右上 `重新扫描` 时从列表里自动移出 |
 | 左上 `画布` / `思维导图` | 两种看同一份笔记的方式：**画布**是章节卡 + 小节行 + 知识点卡（默认）；**思维导图**把「章节 → 小节 → 知识点」画成一棵从左往右的树，知识点的正文放在它下面**默认收起**的子节点里，进导图会**自动缩放到整棵树可见**。切换记在 `localStorage` 的 `rk-study:mode`，刷新后保持 |
 | 导图模式下的 `↻ 刷新导图` | 只在**某张画布的思维导图**里出现（一级画布永远是卡片，不显示它）：重新扫描笔记、把量到的高度清空重算，再按新尺寸铺满一次 |
 | 在空白处按住拖动 | 平移画布（光标变抓手） |
@@ -415,23 +415,23 @@ D. 非风险点
 插件不再只服务一个笔记目录：**一级画布**上每张卡片就是一个「学习画布」，也就是磁盘上一个笔记根目录 —— 软考笔记、别的考试、工作笔记可以各放一个目录，互不干扰。
 
 - 点卡片上的 `进入画布 ›` 进入它的画布（章节卡、小节、思维导图都在里面），左上角 `← 全部画布` 回到总览。
-- `＋ 新建学习画布`：填名字 + 根目录（默认 `<导入的学习库>/<名字>`，没导入过就是 `<桌面上级目录>/<名字>`；名字一改默认路径就跟着变，也可以自己改成任何绝对路径）。创建时在该目录建好 `notes/`、`questions/`，再把内置的「公式模板」「Markdown模板」写进**模板目录**：只要这个画布建在导入的学习库里（或父目录下已经有别的画布 / 已经有 `.templates`），就写进**库里那一份** `<库>/.templates/`，库里的画布共用、自己不再各存一份；只有自带根目录的画布才在它自己的 `.templates/` 里存。**同一层目录里不允许有同名画布**：名字撞上已有目录会被拦下（提示「已经有同名的画布了，换个名字」），既不覆盖也不合并。
-- **学习库（新画布的父目录）**：右上 `⇪ 导入目录` 导入的那个目录就是它 —— 之后 `＋ 新建学习画布` 不填路径就建在它下面（**它自己不会被当成画布**；列表为空时也只是空着等你新建，不会拿它顶上）。记在 `localStorage` 的 `rk-study:default-root`，同时在这个库目录下维护一个 `.config/rk-study.json`（画布清单 / 移出记录 / 字号配色 / 一级画布视野，见「设置存在哪」）。没有单独的「设置」弹窗（已移除），想换库就再 `⇪ 导入目录` 一次。**把库设到插件目录以外，插件的笔记就和插件本身分开了。**
+- `＋ 新建学习画布`：**设过根目录时只填名字**（就建在 `<根目录>/<名字>`）；还没设根目录时才多出一行路径输入（默认 `<桌面上级目录>/<名字>`，名字一改默认路径就跟着变，也可以自己改成任何绝对路径）。创建时在该目录建好 `notes/`、`questions/`，再把内置的「公式模板」「Markdown模板」写进**模板目录**：只要这个画布建在导入的学习库里（或父目录下已经有别的画布 / 已经有 `.templates`），就写进**库里那一份** `<库>/.templates/`，库里的画布共用、自己不再各存一份；只有自带根目录的画布才在它自己的 `.templates/` 里存。**同一层目录里不允许有同名画布**：名字撞上已有目录会被拦下（提示「已经有同名的画布了，换个名字」），既不覆盖也不合并。
+- **根目录（新画布的父目录）**：右上 `⌂ 根目录` 设的那个目录就是它 —— **画布列表 = 它下面那一层的子目录**（扫盘得到），`＋ 新建学习画布` 不填路径就建在它下面（**它自己不会被当成画布**；列表为空时也只是空着等你新建，不会拿它顶上）。记在 `localStorage` 的 `rk-study:default-root`，同时在这个库目录下维护一个 `.config/rk-study.json`（画布清单 / 移出记录 / 字号配色 / 一级画布视野，见「设置存在哪」）。没有单独的「设置」弹窗（已移除），想换根目录就再点一次 `⌂ 根目录`。**把库设到插件目录以外，插件的笔记就和插件本身分开了。**
 - 右上 `重新扫描`：按磁盘**实际状态**刷新列表 —— 你已经手动删掉的画布目录会自动从列表里移出（提示「已移出 N 个磁盘上已经不存在的画布」），其余卡片重新统计；没有任何变化时提示「已重新扫描」。探测请求失败的目录不会误删。
-- 右上 `⇪ 导入目录`：**一个输入框 + 一个 `📁 选择…` 按钮** —— 点按钮弹宿主的目录选择窗体（桌面版 = 系统「选择文件夹」框，网页版 = 宿主内置的目录浏览器）选好目录，路径自动填进输入框（也可以手打/粘贴绝对路径，按 Enter 或点 `导入`）。这个目录就成了**学习库**：例如 `/Users/你/Desktop/RootNotes` 下面有 `xxx学习笔记/`、`软考学习笔记/`（各自带 `notes/`、`questions/`），导入后这两张卡就进了一级画布列表，同时在该库里建好共用的 `.templates/`（以及库级的 `.config/rk-study.json`）。空目录也能导入（只是暂时没有画布）；目录本身已经是一张画布时（有 `notes/` 或 `questions/`）只把这一张登记进列表，**磁盘上什么都不写**，也不会把它的子目录（`notes/`）当成画布。
+- 右上 `⌂ 根目录`：**一个输入框 + 一个 `📁 选择…` 按钮** —— 点按钮弹宿主的目录选择窗体（桌面版 = 系统「选择文件夹」框，网页版 = 宿主内置的目录浏览器）选好目录，路径自动填进输入框（也可以手打/粘贴绝对路径，按 Enter 或点 `设为根目录`）。这个目录就成了**根目录**：例如 `/Users/你/Desktop/RootNotes` 下面有 `xxx学习笔记/`、`软考学习笔记/`（各自带 `notes/`、`questions/`），设好之后这两张卡就进了一级画布列表（列的就是这个根目录下那一层的子目录），同时在该库里建好共用的 `.templates/`（以及库级的 `.config/rk-study.json`）。空目录也能导入（只是暂时没有画布）；目录本身已经是一张画布时（有 `notes/` 或 `questions/`）会被弹窗拦下并建议「用上一层」，**磁盘上什么都不写**，也不会把它的子目录（`notes/`）当成画布。
 - **模板共用规则**（一个画布的模板目录按顺序找）：① 父目录是**学习库**就用库根目录的 `.templates`（判据：那一层已经有 `.templates`，或者父目录下还有别的画布）—— 库里所有画布共用这一份，**画布自己不再各建一份**；库里那份被删掉后，再从画布改模板也只会重建在库根目录，不会在画布里冒出来；② 自带根目录的画布才用**画布根目录的 `.templates`**；③ 老画布原来放在 `<画布>/notes/.templates` 的继续认（那里有文件就用那里）。所以现在新建的画布，`notes/` 里不会再出现 `.templates`。
-- **没有「内置画布」**：一级画布列表以 `localStorage` 为即时来源、同时和学习库的 `<库>/.config/rk-study.json` 双向同步 —— 插件配置（`cordis.patch.yml`）里的 `root` 只是「没带 `?root=` 时的兜底根」，不会自动变成一张卡片（那张带「内置」标签的卡已取消）。所以插件仓库里不需要 `notes/`、`questions/`：笔记放在你自己的目录里（例如 `~/Notes/系统架构师/`），仓库只管插件代码。
-- 卡片上还能**改名**与**移出列表**。改名 = **直接重命名磁盘上的那个目录**（目录名就是画布名，笔记与题目跟着目录一起走）；改成同层已有的名字会被拦下（`name-taken`），弹窗不关、磁盘不动。移出列表会把画布目录**移到同一层的 `.remove/` 里**（排布跟画布内删除章节 / 知识点是同一套：**同一层的 `.remove/` 下按天开桶** —— `<同层>/.remove/20261004/<画布名>`，同一天里移出多个就往后排 `20261004-2`、`20261004-3`，从不覆盖；想恢复就把目录从桶里移回上一层）。移出还会记一个**墓碑**：之后再 `重新扫描`、刷新、重新导入同一个库都不会把它加回来 —— 只有在**同一个路径** `＋ 新建学习画布`、或重新 `⇪ 导入目录` 这个库时才解除。
+- **列表就是根目录的子目录**：设了根目录之后，一级画布列的那一层 = **扫盘结果**（只列根目录下、且没被手动移出的），本机 `localStorage` 只用来记住名字；扫不动（宿主刚起来 / 目录不在）时**保留本机与配置文件里那份，绝不清空**。一级画布列表与根目录的 `<库>/.config/rk-study.json` 双向同步 —— 插件配置（`cordis.patch.yml`）里的 `root` 只是「没带 `?root=` 时的兜底根」，不会自动变成一张卡片（那张带「内置」标签的卡已取消）。所以插件仓库里不需要 `notes/`、`questions/`：笔记放在你自己的目录里（例如 `~/Notes/系统架构师/`），仓库只管插件代码。
+- 卡片上还能**改名**与**移出列表**。改名 = **直接重命名磁盘上的那个目录**（目录名就是画布名，笔记与题目跟着目录一起走）；改成同层已有的名字会被拦下（`name-taken`），弹窗不关、磁盘不动。移出列表会把画布目录**移到同一层的 `.remove/` 里**（排布跟画布内删除章节 / 知识点是同一套：**同一层的 `.remove/` 下按天开桶** —— `<同层>/.remove/20261004/<画布名>`，同一天里移出多个就往后排 `20261004-2`、`20261004-3`，从不覆盖；想恢复就把目录从桶里移回上一层）。移出还会记一个**墓碑**：之后再 `重新扫描`、刷新、重新导入同一个库都不会把它加回来 —— 只有在**同一个路径** `＋ 新建学习画布`、或重新 `⌂ 根目录` 设回这个库时才解除。
 - 画布卡片是**穿透**的：卡片空白处按住鼠标 = 直接拖动画布（`pointer-events:none`，指针事件落到 canvas 上），卡片上的文字也不可选中（`user-select:none`）；只有真正要执行事件的部件（`进入画布 ›` 与 `改名` / `移出列表` 按钮）照旧接收鼠标（`pointer-events:auto`）。`＋ 新建学习画布` 那张虚线卡本身就是按钮，仍然整块可点。
 - 列表、手动移出的墓碑、以及一级画布上的字号 / 配色，都记在 `localStorage`（`rk-study:roots` / `rk-study:removed-roots` / `rk-study:font-scale` / `rk-study:skin`）；「当前在哪张画布」只活在这一个页面会话里，打开 / 刷新都从**一级画布**（全部画布总览）开始；**学习库那一级**的这些状态还会写进 `<库>/.config/rk-study.json`（`canvases` / `ui` / `zoom`；移出记录单独放同目录的 `.config/rk-study-removed.json`），所以换浏览器、换机器、重装插件，导入同一个库就能把画布列表与移出记录读回来；每个画布的统计与 Git 范围都只算当前这个根目录。
 
-实现上，客户端把当前根目录加在所有请求上（`?root=<绝对路径>`），Host 半按 root 落配置文件分两级 —— **学习库那一级**是 `<库>/.config/rk-study.json`（画布清单 / 移出记录 / 库级字号配色 / 一级画布视野），**每张画布自己**那一级是 `<画布>/.config/rk-study.json`（只放这张画布的视野与字号 + 发号计数器；笔记目录 `notes/` 里一个字节都不写，见「设置存在哪」一节）：`plugin/dsh-kp-notes/lib/routes.js` 用 `node:async_hooks` 的 `AsyncLocalStorage` 做**请求级 root** —— 每个请求进来先算出它自己的 `{...基础配置, root}`，配置对象与 1 秒缓存都按 root 分桶（同一秒里读两个画布不会串），其余逻辑一行没改。新增四个接口：`GET /rk-study/roots`（默认根、建议父目录 `suggestParent`、宿主常用的 `home` / `desktop`、某个目录自己是不是画布 `isCanvas`，以及 `notes`/`questions`/模板目录约定）与 `POST /rk-study/roots`（建目录骨架 / 导入 / 改名，返回 `created` / `templates`），以及 `GET` / `POST /rk-study/config`（读写那一级的 `.config/rk-study.json`：`GET` 除了配置本身还回四个探针 `exists` / `isCanvas` / `hasConfig` / `hasTemplates`（客户端靠它判断这个库目录还在不在），`POST` 在目标根目录不存在时回 400 `no-such-root` 且**不会**把目录建出来；学习库那一级照单全收；请求的 root 自己有 `notes/` 时按**画布**对待，只收 `ui` / `zoom` 两个键，`canvases` / `seq` 这类库级键一律丢掉，免得画布那份把库级状态写歪 —— 见 `routes.js` 的 `canvasConfigPatch`；`removed` 移出列表另存同目录的 `rk-study-removed.json`，读写仍走这个接口），还有 `GET` / `POST /rk-study/state`（插件级状态的镜像文件 `<DSH_HOME>/rk-study/state.json`：`GET` 读回 `roots` / `defaultRoot` / `removed`，`POST` 清洗这三项后与旧文件**合并**再落盘（老版本存过的 `activeRoot` 一律忽略，并在写盘时删掉），返回写进去的 `keys`）。路径会校验：必须是绝对路径、不含 `..`、长度受限，不合法的 `root` 参数回退到默认根。
+实现上，客户端把当前根目录加在所有请求上（`?root=<绝对路径>`），Host 半按 root 落配置文件分两级 —— **学习库那一级**是 `<库>/.config/rk-study.json`（画布清单 / 移出记录 / 库级字号配色 / 一级画布视野），**每张画布自己**那一级是 `<画布>/.config/rk-study.json`（只放这张画布的视野与字号 + 发号计数器；笔记目录 `notes/` 里一个字节都不写，见「设置存在哪」一节）：`plugin/dsh-kp-notes/lib/routes.js` 用 `node:async_hooks` 的 `AsyncLocalStorage` 做**请求级 root** —— 每个请求进来先算出它自己的 `{...基础配置, root}`，配置对象与 1 秒缓存都按 root 分桶（同一秒里读两个画布不会串），其余逻辑一行没改。新增四个接口：`GET /rk-study/roots`（默认根、建议父目录 `suggestParent`、宿主常用的 `home` / `desktop`、某个目录自己是不是画布 `isCanvas`，以及 `notes`/`questions`/模板目录约定）与 `POST /rk-study/roots`（建目录骨架 / 设根目录（导入）/ 改名，返回 `created` / `templates`；`?path=&uids=0` 只预览不发号），以及 `GET` / `POST /rk-study/config`（读写那一级的 `.config/rk-study.json`：`GET` 除了配置本身还回四个探针 `exists` / `isCanvas` / `hasConfig` / `hasTemplates`（客户端靠它判断这个库目录还在不在），`POST` 在目标根目录不存在时回 400 `no-such-root` 且**不会**把目录建出来；学习库那一级照单全收；请求的 root 自己有 `notes/` 时按**画布**对待，只收 `ui` / `zoom` 两个键，`canvases` / `seq` 这类库级键一律丢掉，免得画布那份把库级状态写歪 —— 见 `routes.js` 的 `canvasConfigPatch`；`removed` 移出列表另存同目录的 `rk-study-removed.json`，读写仍走这个接口），还有 `GET` / `POST /rk-study/state`（插件级状态的镜像文件 `<DSH_HOME>/rk-study/state.json`：`GET` 读回 `roots` / `defaultRoot` / `removed`，`POST` 清洗这三项后与旧文件**合并**再落盘（老版本存过的 `activeRoot` 一律忽略，并在写盘时删掉），返回写进去的 `keys`）。路径会校验：必须是绝对路径、不含 `..`、长度受限，不合法的 `root` 参数回退到默认根。
 
 ### 设置存在哪
 
 **单张画布的笔记目录（`notes/` 那一层）里不写任何配置文件**。设置分四处存：**即时状态**在浏览器 `localStorage`（打开就立刻生效）；**画布清单 / 移出记录 / 库级字号配色 / 一级画布视野**写一份到**学习库目录**下的 `.config/rk-study.json`；**某张画布自己的视野与字号**（跟着画布走）写进**这张画布目录**下的 `.config/rk-study.json`；「画布列表 / 学习库（新画布的父目录）/ 移出墓碑」三项再由插件镜像到宿主侧的 `<DSH_HOME>/rk-study/state.json`（`DSH_HOME` 默认 `~/.dsh`）。
 
-第三份（`state.json`）解决的是「重启系统后要重新导入目录」：浏览器 `localStorage` 是空的（清过缓存 / 换了浏览器 / 宿主换了端口），客户端启动时会先读这份文件，**只补齐 `localStorage` 里缺的键**（画布列表与墓碑取并集），补齐后再走原来的恢复链，所以画布列表会自己回来，不用手动 `⇪ 导入目录`。之后客户端每 900ms 比对一次这三项的快照，变了才 `POST /rk-study/state` 写回（Host 端是**合并写**：只覆盖这三个键 + `updatedAt`，不动文件里别的字段）。
+第三份（`state.json`）解决的是「重启系统后要重新导入目录」：浏览器 `localStorage` 是空的（清过缓存 / 换了浏览器 / 宿主换了端口），客户端启动时会先读这份文件，**只补齐 `localStorage` 里缺的键**（画布列表与墓碑取并集），补齐后再走原来的恢复链，所以画布列表会自己回来，不用手动再设一次根目录。之后客户端每 900ms 比对一次这三项的快照，变了才 `POST /rk-study/state` 写回（Host 端是**合并写**：只覆盖这三个键 + `updatedAt`，不动文件里别的字段）。
 
 **学习库目录找不到时怎么办**（目录被删 / 移动盘没挂上 / `/tmp` 被系统清掉）：客户端每次读配置都会看宿主回的上面那四个探针 —— 库目录不在了就先把它认回**画布列表的共同上一层**（该层必须真的在、不是画布自己、且像学习库：有 `.config/rk-study.json` 或 `.templates/`），认回来提示一句「学习库目录已经不在了，按画布的上一层认回 <路径>」并改写本机那份 `rk-study:default-root`，画布列表原样不动；认不回来只提示「学习库目录 <路径> 已经不在了：视野和字号先只留在本机」，而且**不会**把记着的路径清掉（目录哪天回来还能接着用）。这一轮往库级的写入会被宿主挡成 400 `no-such-root`，所以不会再把配置写进一个幽灵目录、把它重新造出来（老版本会）。
 
@@ -441,12 +441,12 @@ D. 非风险点
 | --- | --- | --- |
 | `rk-study:roots` | 画布列表 | 这台机器上要看哪些画布 |
 | `rk-study:removed-roots` | 移出列表的墓碑 | 移出的目录已经在同层 `.remove/` 里，墓碑保证重新扫描 / 导入也不会再加回来 |
-| `rk-study:default-root` | 学习库（新画布的父目录） | `⇪ 导入目录` 写入 |
+| `rk-study:default-root` | 根目录（新画布的父目录，画布列表 = 它下面那一层的子目录） | `⌂ 根目录` 写入 |
 | `rk-study:font-scale` / `rk-study:skin` / `rk-study:card-colors` / `rk-study:theme` | 字号 / 配色 / 卡片各用一色 / 主题（`plugin` 插件配色 / `follow` 跟随 DeepSeek Harness 主题） | 全局一套，所有画布共用 |
 | `rk-study:mode` / `rk-study:map-fold` / `rk-study:map-open` | 画布还是导图 / 导图折叠 / 知识点展开 | 同样全局一套 |
 | `rk-study:focus` | 是否全屏专注（`1` / `0`） | —— |
 
-**学习库那一级**（`⇪ 导入目录` 导入的那个目录，例如 `~/Notes`）还有一个插件维护的配置文件：
+**根目录那一级**（`⌂ 根目录` 设的那个目录，例如 `~/Notes`）还有一个插件维护的配置文件：
 
 ```
 <学习库>/
@@ -485,7 +485,7 @@ D. 非风险点
 写入是**深合并**：`POST /rk-study/config` 只带要改的键（例如 `{"ui":{"fontScale":130}}`），值给 `null` 就删掉那个键；文件不存在会自动连 `.config/` 一起建。**写哪一级由目标根决定**：目标根自己有 `notes/`（说明它是张画布）时就只收 `ui` / `zoom` 两类键 —— `routes.js` 的 `canvasConfigPatch` 会把 `canvases` / `removed` / `seq` 这些库级键滤掉，所以画布那份 `.config` 只会长它自己的视野与字号，发号器写在里面的 `seq` 与号池文件 `rk-study-uids.json` 原样保留（老版本对画布回 400 `not-a-library`，现在放开了）。**目标根目录本身不存在时**直接回 400 `no-such-root`（body 的 `error` 就是这个字符串，`message` 是 `目录不存在: <路径>`）：`writeLibConfig` 会顺带把不存在的目录 `mkdir` 出来，不挡的话「库已经删了、老客户端还拿着老路径」就会把那个幽灵目录重新造出来。
 
 - **为什么库级与画布级各写一份**：库目录是**你自己选的项目根**，「这个库有哪些画布 / 移出过哪些 / 库这一级习惯多大多小」记在它下面最自然 —— 换浏览器、换机器、重装插件，导入同一个库就全都回来了。而**某张画布**的视野与字号记在**它自己**目录下：把这张画布拷到别的库 / 别的机器上，视野与字号跟着它走（`localStorage` 的键名带着工作区路径，换台机器就对不上，所以配置文件才是它的「真身」）。无论哪一级，**笔记目录**（`notes/` 那一层）与笔记文件本身一个字节都不写：笔记进 git 时不会因为字号、视野这类状态变化而互相冲突。
-- **画布名就是目录名，不写进配置**：名字只有一个来源，就是磁盘上的目录名。卡片上「改名」走的是 `POST /rk-study/roots {action:"rename"}`：Host 半直接把目录 `rename` 掉再返回新路径，客户端把列表里的路径换成新的。所以换浏览器 / 换机器 / 重新 `⇪ 导入目录`，显示的都是目录名；直接改目录名也一样有效。名字会校验（不能为空、不能含 `/`、不能以 `.` 开头）与查重（同一层已有同名目录就报 `name-taken`，弹窗不关、磁盘不动）。
+- **画布名就是目录名，不写进配置**：名字只有一个来源，就是磁盘上的目录名。卡片上「改名」走的是 `POST /rk-study/roots {action:"rename"}`：Host 半直接把目录 `rename` 掉再返回新路径，客户端把列表里的路径换成新的。所以换浏览器 / 换机器 / 重新 `⌂ 根目录`，显示的都是目录名；直接改目录名也一样有效。名字会校验（不能为空、不能含 `/`、不能以 `.` 开头）与查重（同一层已有同名目录就报 `name-taken`，弹窗不关、磁盘不动）。
 - **画布目录里除了 `notes/` 与 `questions/`，只有一个 `.config/`**（老画布可能还有 `notes/.templates/`）：模板是给人编辑的 markdown（见上面「模板共用规则」），统一放**学习库根目录**的 `.templates/`；画布自己的 `.config/` 里就是上面那两张表里的画布那份 —— `rk-study.json`（这张画布的视野 / 字号 / `seq`）与 `rk-study-uids.json`（号池）。库根目录下另有一份 `.config/`：`rk-study.json`（画布清单 / 库级字号配色 / 一级画布视野）、`rk-study-uids.json`（库这一级与各画布的号池）、`rk-study-removed.json`（移出列表的墓碑）。点开头的目录扫描会跳过、也不会被当成一章。`⎇ Git 提交` 现在只在一级画布上、范围是整个学习库，所以这两样（以及库根目录下别的改动）都会在「仅提交」时一起进版本库 —— 除非 `.gitignore` 排除。
 - **想覆盖插件配置**（目录名 / 排除 / 扫描深度 / AI 模型）：改插件自己的 `plugin/dsh-kp-notes/cordis.patch.yml`，不再支持「按画布覆盖」。
 - **视野（平移 / 缩放）两级各写一份**：**一级画布的视野**写进库的 `.config`（`zoom.roots`，跨浏览器保持），**单张画布内的视野**写进这张画布自己的 `<画布>/.config/rk-study.json`（键是画布路径，跟着画布走）；两者在浏览器里都还有一份即时的 `localStorage`（`rk-canvas:roots` / `rk-canvas:<画布路径>`，刷新先用本机这份）。本机那条只有在 `v` 对得上、且真能解析出 `view` 时才作数，否则退回配置文件里那份（老版本条目 / 坏条目不再当成「本机有」）。**重进面板不会把视野洗掉**：视野只要是「本机存过的 / 配置里的 / 用户自己拖过缩过的」（`userMoved`），面板挂载时的尺寸测量与切模式的复位都不再触发自动铺满，「离开插件再进来画布缩放被重置」就是这个病。只有**全屏开关**不落盘。
@@ -497,7 +497,7 @@ D. 非风险点
 | --- | --- |
 | `plugin/dsh-kp-notes/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
 | `plugin/dsh-kp-notes/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
-| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（1490 行，含回收站面板与那块 `panelRoot` JSX）；数据层 / 持久化 / 配色主题 / Git 面板 / 画布目录与导入 / 编辑动作 / 画布视口与导图几何 / 渲染层分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` / `client/roots.js` / `client/editing.js` / `client/canvas.js` / `client/view.js` |
+| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（1521 行，含回收站面板与那块 `panelRoot` JSX）；数据层 / 持久化 / 配色主题 / Git 面板 / 画布目录与根目录 / 编辑动作 / 画布视口与导图几何 / 渲染层分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` / `client/roots.js` / `client/editing.js` / `client/canvas.js` / `client/view.js` |
 | `plugin/dsh-kp-notes/client/*.js` | Client 半的实现，按职责拆成 20 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
 | `plugin/dsh-kp-notes/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
 | `plugin/dsh-kp-notes/package.json` | 包清单（`dsh.bundle.patch`、`dsh.client`、图标） |
@@ -522,15 +522,15 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 | `scan.js` | 357 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存（`*.assestfiles` 图片素材目录跳过；新布局的 `.media/` 那层是点开头的，扫描本来就不看，直接进 `skipped`；老布局的 `media/` 那层也跳过，不然会被当成一章 —— 判据 `isMediaHome` 是「里面除点开头的东西外全是 `*.assestfiles` 目录」，`.DS_Store` 不算数，而真有 `.md` 的 `media` 目录照旧是章节）；顺带把号带出来 —— 文件记录读 frontmatter 里的 `uid`（小节 / 知识点），知识点文件自己的号挂到它那条知识点上 |
 | `bin.js` | 507 | 回收站（只有两层有它）：根画布那层 `listRootBins`（把当前根、它上一层、画布列表里每张画布父目录的 `.remove` 合起来列，只留「顶层整条」= 整只画布，`notes` / `questions` 这类画布内部结构不算），一级画布那层 `listChapterBin`（只看这张画布自己的 `.remove`，按章把 `notes/<章>/…` 与平行的 `questions/<章>/…` 聚成一条）；恢复是 `restoreItem` / `restoreBucket` / `restoreChapter`（按记录所在的 `box` 落回对应目录、原位已有同名**文件**时跳过或拒绝、章级恢复是「原位缺什么补什么」的合并、号按那只桶里记的认回、空桶与空掉的 `.remove` 一起收掉）；`listBin` 是底座 —— 只列「影子树的根」（原位已经没有、父目录还在的那一层，所以恢复它就是把整棵子树搬回去），并且按 `isBucketName`（`YYYYMMDD` / `YYYYMMDD-2` / `YYYY-MM-DD_HHmmss`）区分新旧：不是日期桶的目录是**老格式**（`.remove/<相对路径>` 就是那条记录本身），交给 `collectLegacy` 收进一只 `at=旧格式`、桶名为空字符串的分组，`restoreItem` 也支持空的 `bucket`（记录直接躺在 `.remove` 下） |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
-| `routes.js` | 2114 | `apply`：注册 8 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/media` 图片素材（GET 取字节（按后缀在根 + 一二级子目录里兜底找，所以正文里老布局的 `media/…` 也认得到）、POST 落盘到 `.media/<小节编号>.assestfiles/`，落盘前先 `migrateLegacyMedia` 把老布局那层搬过来并 `rewriteLegacyMediaRefs` 改正文里的路径）、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
+| `routes.js` | 2116 | `apply`：注册 8 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 设根目录（导入；`?path=&uids=0` 只预览不发号）、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/media` 图片素材（GET 取字节（按后缀在根 + 一二级子目录里兜底找，所以正文里老布局的 `media/…` 也认得到）、POST 落盘到 `.media/<小节编号>.assestfiles/`，落盘前先 `migrateLegacyMedia` 把老布局那层搬过来并 `rewriteLegacyMediaRefs` 改正文里的路径）、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
 
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/` 下的文件时**必须把 `?v=N` +1**（碰了客户端模块的行为再一起 +1 `client.js` 的 `MODULE_VERSION`），不然会出现「改了文件却还是老代码」的静默错配：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=89）
-> sed -i '' 's/?v=88/?v=89/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 178；只改注释 / 只动宿主时不必动）
-> sed -i '' 's/MODULE_VERSION = 177;/MODULE_VERSION = 178;/' plugin/dsh-kp-notes/client.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=90）
+> sed -i '' 's/?v=89/?v=90/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 179；只改注释 / 只动宿主时不必动）
+> sed -i '' 's/MODULE_VERSION = 178;/MODULE_VERSION = 179;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
@@ -540,15 +540,15 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 
 | 模块 | 行数 | 职责 | 依赖 |
 | --- | --- | --- | --- |
-| `client/dict.js` | 648 | 中英文词典（`zh` / `en`） | — |
+| `client/dict.js` | 664 | 中英文词典（`zh` / `en`） | — |
 | `client/css.js` | 754 | 全部样式（`const CSS` + 末尾的 `HOST_CSS` 宿主主题映射层：`.rk-root.rk-follow` 把 `--rk-*` 指到宿主 `--dsw-alias-*`） | — |
 | `client/util.js` | 94 | 缩放取整、字数、路径标签、小节 / 知识点查找、编辑器状态 | — |
-| `client/api.js` | 451 | 数据层：宿主路由的 fetch/post 包装（画布目录、roots、库配置、`state`、git；`fetchLibConfig` 会把宿主回的 `exists` / `isCanvas` / `hasConfig` / `hasTemplates` 四个探针挂到配置对象上，其中 **`exists` 是三态**（`true` / `false` / `null`，`null` = 问不出来，客户端只有 `true` 才算「读到了配置」），`isCanvas` / `hasConfig` / `hasTemplates` 仍按 `=== true` 认；老宿主不带这几个字段时按「在」处理，免得被误判成库目录丢了）+ `useCatalog` / `useGit` 两个轮询 hook + `activeRoot`（只活在本页面会话的当前根目录，面板通过 `getActiveRoot()` / `setActiveRoot()` 读写） | React |
+| `client/api.js` | 453 | 数据层：宿主路由的 fetch/post 包装（画布目录、roots、库配置、`state`、git；`fetchLibConfig` 会把宿主回的 `exists` / `isCanvas` / `hasConfig` / `hasTemplates` 四个探针挂到配置对象上，其中 **`exists` 是三态**（`true` / `false` / `null`，`null` = 问不出来，客户端只有 `true` 才算「读到了配置」），`isCanvas` / `hasConfig` / `hasTemplates` 仍按 `=== true` 认；老宿主不带这几个字段时按「在」处理，免得被误判成库目录丢了）+ `useCatalog` / `useGit` 两个轮询 hook + `activeRoot`（只活在本页面会话的当前根目录，面板通过 `getActiveRoot()` / `setActiveRoot()` 读写） | React |
 | `client/media.js` | 230 | 图片素材：插图**两步**（`upload(file, notePath)` **同步**交回一条 `blob:` 本地引用（`URL.createObjectURL(file)`）并把文件记进内存 —— 选文件阶段不写盘；`settleText(text)` 在图片真进正文（markdown 里带 `blob:`）之后才把字节 POST 到 `/rk-study/media` 落到 `.media/<小节uid>.assestfiles/`，`flush()` 供保存前等一等）+ 显示换算（`mediaUrl(src)` / `watchImages(rootEl)`：用 `MutationObserver` 盯住面板里所有 `<img>`，把相对 `src` 就地换成路由地址；只改 DOM，markdown 里那份相对路径原样不动）+ 写盘收口（`toMarkdownSrc(text, strict)`：把显示地址与没落盘的 `blob:` 换回相对路径，strict 时把落盘失败的图整段去掉）+ `maxFileSize`（16 MB）与 `allowedProtocols`（`['blob:']`，两个都喂给 vendor 的 `imageUpload`，不传它默认只让 5 MB、且不认 `blob:` 会把图从 markdown 里静默丢掉） | api |
 | `client/store.js` | 267 | 持久化 + 本机状态：画布列表与统计（`roots` / `rootStats`）、「移出列表」墓碑（`isRemoved` / `markRemoved` / `unmarkRemoved`）、配置的 500ms 合并写盘（`saveLib` / `saveRoots` / `flushLib` —— 库级那份收 `canvases` / `ui.skin|cardColors|theme` / `zoom.roots` / `seq`，**视野与字号按画布各存一份**：`ui.fontScale` 与 `zoom[<画布绝对路径>]` 写进那张画布自己的 `<画布>/.config/rk-study.json`）、字号（`fontScale` / `stepFont` / `zoomRef`）、闪信（`flash`）；`useStore()` 把这一整包一次性返回给面板，函数名与原来一致 | React、api |
 | `client/theme.js` | 176 | 配色与主题：配色皮肤（`skin` / `skinList` / `skinHex`）、主题（`theme`：插件配色 / 跟随宿主明暗，`follow` / `hostDark` / `mdTheme`）、卡片各一色（`cardColors`）；跟随主题时把宿主 brand 色搬进 `--rk-a1..a3`，主题变化用 `MutationObserver` 跟住，三样都同时写 localStorage 与库配置 | React、store |
 | `client/git.js` | 109 | Git 提交面板的状态与动作：未提交改动的角标数字（`gitPending` / `gitOutside`）、提交（可选顺手推送）/ 仅推送 / 拉取、让模型写候选 commit message（`gitAi`） | React、api |
-| `client/roots.js` | 253 | 学习画布目录管理：新建 / 改名（= 重命名磁盘目录）/ 移出列表（搬进同层 `.remove/` + 记墓碑）、扫盘核对 `probeRoot`、导入学习库（输入框 + 宿主原生选目录窗体）以及两个弹窗的状态 | React、api |
+| `client/roots.js` | 342 | 画布目录与根目录管理：新建 / 改名（= 重命名磁盘目录）/ 移出列表（搬进同层 `.remove/` + 记墓碑）、扫盘核对 `probeRoot`、`⌂ 根目录` 弹窗（350ms 防抖预览 + `用上一层` + `设为根目录`，列表按扫盘结果**替换**）以及两个弹窗的状态 | React、api |
 | `client/editing.js` | 401 | 打开 / 编辑 / 新建 / 删除：小节与知识点的打开与编辑、新建小节 / 章节、章节改名、题目片段的新增与编辑、删除小节 / 章节 / 题目、舞台与卡片的右键菜单项（写盘一律 `postAction` 后 `reload(true)`） | React、api |
 | `client/canvas.js` | 508 | 画布视口与导图几何：视野（缩放 / 拖拽 / 自动铺满）、舞台尺寸与测量、导图树布局 `mind` / `positions` / `rootCards` / `extent`、指针与检索命中 `hits`、右键菜单状态；几何助手由入口注入 | React |
 | `client/view.js` | 394 | 渲染层：右键菜单、一级画布卡片、导图（含思维导图模式）、小节、知识点详情、正文 `body` / `detailBody`；只读面板状态与各域动作，生成 vdom | React |

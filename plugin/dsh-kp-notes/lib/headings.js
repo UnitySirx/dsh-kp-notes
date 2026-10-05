@@ -1,6 +1,6 @@
 /* rk-study · host/headings —— 从 host.js 第 250-401 行原样切出 */
-import { ANSWER_LINE_RE, ANSWER_TITLE_RE, EXAMPLE_TITLE_RE, FENCE_RE, HEADING_RE, OPTION_RE } from './constants.js?v=89';
-import { cleanTitle, stripInline } from './util.js?v=89';
+import { ANSWER_LINE_RE, ANSWER_TITLE_RE, EXAMPLE_TITLE_RE, FENCE_RE, HEADING_RE, OPTION_RE } from './constants.js?v=90';
+import { cleanTitle, stripInline } from './util.js?v=90';
 
 /* -------------------------------------------------------------- headings */
 
