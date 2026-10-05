@@ -12,5 +12,5 @@
  *
  * Config 也要从这里转出去: cordis 是从插件模块本身取 `plugin.Config` / `plugin.inject` 的
  * (cordis/lib/index.js Context.plugin), 不转出去的话 schemastery schema 不会生效。 */
-export { name, inject, Config, ROUTE, ASSET_ROUTE } from './lib/constants.js?v=68';
-export { apply } from './lib/routes.js?v=68';
+export { name, inject, Config, ROUTE, ASSET_ROUTE } from './lib/constants.js?v=69';
+export { apply } from './lib/routes.js?v=69';

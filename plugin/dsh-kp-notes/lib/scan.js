@@ -1,8 +1,8 @@
 /* rk-study · host/scan —— 从 host.js 第 640-967 行原样切出 */
-import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES } from './constants.js?v=68';
-import { parseDocument } from './parse.js?v=68';
-import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=68';
-import { uidFromText } from './uid.js?v=68';
+import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES, MEDIA_DIR_SUFFIX } from './constants.js?v=69';
+import { parseDocument } from './parse.js?v=69';
+import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=69';
+import { uidFromText } from './uid.js?v=69';
 
 /* ------------------------------------------------------------------ scan */
 
@@ -29,7 +29,8 @@ export async function scanWorkspace(ctx, config, signal) {
 		for (const entry of entries) {
 			if (truncated) return;
 			const name = entry.name;
-			if (name.startsWith('.') || config.exclude.includes(name)) {
+			/* 图片素材目录(<小节uid>.assestfiles)不进画布: 它跟小节文件同级, 但不是一章 */
+			if (name.startsWith('.') || config.exclude.includes(name) || name.endsWith(MEDIA_DIR_SUFFIX)) {
 				skipped.push(relPath === '' ? name : `${relPath}/${name}`);
 				continue;
 			}

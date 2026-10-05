@@ -88,6 +88,8 @@ window.__ModuleLoader__.load({
 				findSection,
 				flattenPoints,
 				formatCount,
+				/* 图片素材(client/media.js): 面板里 <img> 的相对路径按它换成可显示地址 */
+				media,
 				pathLabel,
 				pointError,
 				questionError,
@@ -414,6 +416,14 @@ window.__ModuleLoader__.load({
 			/* 启动时把落盘那份状态补进 localStorage: 只补「本机没有」的键(本机存过的以本机为准),
 			 * 画布列表与墓碑取并集。补完踢一次 libRev / rootTick, 让「读库配置」与扫盘按新状态重跑。 */
 			const stateReadyRef = useRef(false);
+			/* 面板根节点: 图片素材的相对路径 → 可显示地址的改写挂在这上面(见 client/media.js)。
+			 * 挂一次管整块面板(卡片 / 导图 / 预览 / 编辑器都在里面), 新插入的 <img> 由 MutationObserver 兜住。 */
+			const panelRootRef = useRef(null);
+			useEffect(() => {
+				const node = panelRootRef.current;
+				if (!media || typeof media.watchImages !== 'function' || !node) return undefined;
+				return media.watchImages(node);
+			}, []);
 			useEffect(() => {
 				let alive = true;
 				/* 老版本把「上次停在哪张画布」存进 localStorage('rk-study:root'), 现在不读了 —— 顺手清掉,
@@ -737,7 +747,7 @@ window.__ModuleLoader__.load({
 
 			const panelRoot = h(
 				'div',
-				{ className: 'rk-root rk-skin-' + skin + (follow ? ' rk-follow' : ''), style: { zoom: String(fontScale / 100) } },
+				{ className: 'rk-root rk-skin-' + skin + (follow ? ' rk-follow' : ''), ref: panelRootRef, style: { zoom: String(fontScale / 100) } },
 				h(
 					'div',
 					{ className: 'rk-head' },
@@ -1233,12 +1243,12 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 156;
-		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
+		const MODULE_VERSION = 158;
+		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
 		async function apply(ctx) {
-			const [api, store, theme, gitPanel, rootsMod, editingMod, canvasMod, viewMod, dict, css, util, vendor, milkdown, md, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
+			const [api, store, theme, gitPanel, rootsMod, editingMod, canvasMod, viewMod, dict, css, util, vendor, milkdown, md, media, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
 			/* api: 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook(见 client/api.js) */
 			const apiMods = api.createApi({ React });
 			/* store: 本机 localStorage + 学习库配置文件(<库>/.config/rk-study.json)的读写(见 client/store.js) */
@@ -1273,16 +1283,21 @@ window.__ModuleLoader__.load({
 				doc: document,
 				onError: (error) => ctx.logger?.warn?.('rk-study: zt-react-milkdown 加载失败, 已回退到源码编辑', error),
 			});
+			/* media: 图片素材 —— 插图落盘到 <小节uid>.assestfiles/ + 面板里相对 src 的显示换算(见 client/media.js) */
+			const mediaMods = media.createMedia({ api: apiMods });
 			/* 依赖图无环: dict / css / util 是叶子, vendor 只要 React, milkdown 只要 react 家族, md 吃 vendor, cards 吃 md + util, editor 吃 md + cards, dialogs 吃 md */
 			const mdMods = md.createMd({ React, MathNode: vendorMods.MathNode, MermaidBlock: vendorMods.MermaidBlock, looksLikeMath: vendorMods.looksLikeMath });
 			const cardMods = cards.createCards({ React, renderInline: mdMods.renderInline, renderMarkdown: mdMods.renderMarkdown, formatCount: utilMods.formatCount, pathLabel: utilMods.pathLabel, countExamples: utilMods.countExamples, SKINS: cssMods.SKINS });
 			/* snippets 只要 React: markdown 输入助手(小工具栏 + 公式/结构模板 + 快捷键) */
 			const snippetsMods = snippets.createSnippets({ React, rootQuery: apiMods.withRootQuery });
-			const dialogMods = dialogs.createDialogs({ React, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, unescapeRedundant: mdMods.unescapeRedundant, milkdown: milkdownMods });
-			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods, unescapeRedundant: mdMods.unescapeRedundant });
+			const dialogMods = dialogs.createDialogs({ React, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, unescapeRedundant: mdMods.unescapeRedundant, media: mediaMods, milkdown: milkdownMods });
+			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods, unescapeRedundant: mdMods.unescapeRedundant, media: mediaMods });
 			/* mindmap: 思维导图模式(左→右的章节 / 小节 / 知识点树), 知识点节点里渲染整篇 markdown 正文 */
 			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody });
-			const mods = Object.assign({}, apiMods, storeMods, themeMods, gitPanelMods, rootsMods, editingMods, canvasMods, viewMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS });
+			/* 注意: Object.assign 是把每个模块工厂的返回**摊平**进 mods 的(面板直接解构 ChapterCard / useStore …),
+			 * 所以 media 这种「要整体拿走」的得写成字面量属性 { media: mediaMods } —— 直接把 mediaMods 当参数传进去
+			 * 只会把它的成员(isRelativeSrc / upload / watchImages …)摊到顶层, 面板里的 media 就是 undefined。 */
+			const mods = Object.assign({}, apiMods, storeMods, themeMods, gitPanelMods, rootsMods, editingMods, canvasMods, viewMods, utilMods, vendorMods, mdMods, cardMods, dialogMods, editorMods, snippetsMods, mindmapMods, { SKINS: cssMods.SKINS, media: mediaMods });
 
 			ensureStyles(ctx, cssMods.CSS);
 			ctx.effect(() => ctx.locale.register(NS, { zh: dictMods.zh, en: dictMods.en }), 'rk-study: dictionaries');

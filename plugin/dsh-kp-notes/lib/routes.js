@@ -4,23 +4,23 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * listNames 等小工具): 那样才会经过 DSH 的沙箱策略, 也才会跟着插件生命周期一起收尾。
  * `renameSync` 是唯一保留的裸 node:fs —— ctx.fs 没有 rename/move 能力, 调用点在改名之前
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
-import { mkdirSync, renameSync } from 'node:fs';
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 
-import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=68';
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=68';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=68';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=68';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=68';
-import { buildNodes, scanHeadings } from './headings.js?v=68';
-import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=68';
-import { parseDocument } from './parse.js?v=68';
-import { pointRegion, rebuildPoint } from './points.js?v=68';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=68';
-import { buildCatalog } from './scan.js?v=68';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=68';
-import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid } from './uid.js?v=68';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=68';
-import { readBody, safePath, writeMarkdown } from './write.js?v=68';
+import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=69';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MEDIA_DIR_SUFFIX, MEDIA_MAX_BYTES, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=69';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=69';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=69';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=69';
+import { buildNodes, scanHeadings } from './headings.js?v=69';
+import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=69';
+import { parseDocument } from './parse.js?v=69';
+import { pointRegion, rebuildPoint } from './points.js?v=69';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=69';
+import { buildCatalog } from './scan.js?v=69';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=69';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=69';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=69';
+import { readBody, safePath, writeMarkdown } from './write.js?v=69';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -701,7 +701,7 @@ export function apply(ctx, rawConfig) {
 	}
 
 	/* 渲染引擎(katex/mermaid)是插件自带资源, 但照样走 ctx.fs 读 —— 统一文件访问入口 */
-	async function readVendorBytes(abs, maxBytes) {
+	async function readBytesAt(abs, maxBytes) {
 		const target = await ctx.fs.resolve(abs);
 		const info = await ctx.fs.stat(target);
 		if (!info || info.type !== 'file') return null;
@@ -715,7 +715,7 @@ export function apply(ctx, rawConfig) {
 		let body = null;
 		if (type) {
 			try {
-				body = await readVendorBytes(VENDOR_DIR + '/' + relPath, 16 * 1024 * 1024);
+				body = await readBytesAt(VENDOR_DIR + '/' + relPath, 16 * 1024 * 1024);
 			} catch (error) {
 				body = null;
 			}
@@ -805,6 +805,227 @@ export function apply(ctx, rawConfig) {
 			return;
 		}
 		await sendAsset(res, rel, method === 'HEAD');
+	}
+
+	/* ------------------------------------------------ 图片素材(见 README「图片素材」)
+	 * 编辑器里插图**不写 Base64**: 字节落到「所在小节」旁边的 <小节uid>.assestfiles/ 里, 正文只留相对路径,
+	 * 所以笔记整体搬走、用别的编辑器打开都不丢图; 删掉正文里的图片**不会**删文件(盘上那份留着, 想捡回来随时)。
+	 *   GET  ?path=<相对 root 的路径>                        → 吐字节(只有 MEDIA_TYPES 里的扩展名放行)
+	 *   POST { path:<笔记相对路径>, name, type, data:<base64> } → 落盘, 回 { ok, src, path, name, uid, bytes }
+	 * 「所在小节」= 同一章节目录里、小节序号相同、classifyFile 判为 section 的那个 .md;
+	 * 题目库(questions/…)先镜像回笔记库(notes/…)一侧再找。找不到就退化成「这个笔记文件自己」。 */
+
+	/* 相对 root 的**任意**文件路径(不能借 write.js 的 safePath —— 那个只放行 markdown) */
+	function mediaAbs(rel) {
+		const clean = normalizeRelPath(rel);
+		if (clean === '' || clean.split('/').includes('..')) return null;
+		const root = activeConfig().root;
+		const abs = `${root}/${clean}`;
+		return abs.startsWith(`${root}/`) ? abs : null;
+	}
+
+	function extOf(name) {
+		const dot = String(name ?? '').lastIndexOf('.');
+		if (dot < 0) return '';
+		const ext = String(name).slice(dot).toLowerCase();
+		return MEDIA_TYPES[ext] ? ext : '';
+	}
+
+	function relDirOf(rel) {
+		const clean = normalizeRelPath(rel);
+		const cut = clean.lastIndexOf('/');
+		return cut < 0 ? '' : clean.slice(0, cut);
+	}
+
+	/* markdown 里存的相对路径: 从 fromDir 走到 toRel(如 notes/01-硬件/s0001.assestfiles/s0001-1.png) */
+	function relativeSrc(fromDir, toRel) {
+		const from = String(fromDir ?? '').split('/').filter(Boolean);
+		const to = normalizeRelPath(toRel).split('/').filter(Boolean);
+		let same = 0;
+		while (same < from.length && same < to.length - 1 && from[same] === to[same]) same += 1;
+		return new Array(from.length - same).fill('..').concat(to.slice(same)).join('/');
+	}
+
+	/* 这个笔记文件归哪个小节管(小节的 uid 就是素材目录名) */
+	async function sectionRelForNote(rel, signal) {
+		const config = activeConfig();
+		const clean = normalizeRelPath(rel);
+		const dir = relDirOf(clean);
+		const info = classifyFile(baseName(clean), null);
+		if (info.kind === 'section' || info.number === null) return clean;
+		/* 题目在 questions/ 一侧, 小节在 notes/ 一侧 —— 按目录镜像过去找 */
+		let home = dir;
+		if (isQuestionStorePath(config, clean)) {
+			const q = String(config.questionDir ?? '');
+			const n = String(config.noteDir ?? '');
+			if (dir === q) home = n;
+			else if (dir.startsWith(`${q}/`)) home = n + dir.slice(q.length);
+		}
+		const homeAbs = safeDirPath(config, home);
+		if (!homeAbs) return clean;
+		for (const file of await listNames(homeAbs, signal)) {
+			if (!MARKDOWN_RE.test(file)) continue;
+			const hit = classifyFile(baseName(file), null);
+			if (hit.kind === 'section' && hit.number === info.number) return `${home}/${file}`;
+		}
+		return clean;
+	}
+
+	/* 小节 uid + 素材目录(相对 root) */
+	async function mediaHomeFor(rel, signal) {
+		const config = activeConfig();
+		const sectionRel = await sectionRelForNote(rel, signal);
+		const sectionAbs = mediaAbs(sectionRel);
+		if (!sectionAbs) throw new Error(`invalid path: ${rel}`);
+		const text = await readFileText(sectionAbs, signal);
+		/* 定到的必须**真是小节**: 认错了就会给题目 / 知识点文件发一个 s 号, 号池就脏了 —— 宁可报错 */
+		const hit = classifyFile(baseName(sectionRel), parseFrontmatter(text.split(/\r?\n/)).front);
+		if (hit.kind !== 'section') throw new Error(`no-section-for-note: ${rel}`);
+		let uid = uidFromText(text, 'section');
+		if (uid === '') {
+			const lib = await uidLibOf(config, signal);
+			uid = (await ensureUids(ctx, lib, 'section', [sectionAbs]))[sectionAbs] || '';
+		}
+		if (uid === '') throw new Error(`no-section-uid: ${sectionRel}`);
+		const dir = relDirOf(sectionRel);
+		return { uid, dir, sectionRel, rel: dir === '' ? `${uid}${MEDIA_DIR_SUFFIX}` : `${dir}/${uid}${MEDIA_DIR_SUFFIX}` };
+	}
+
+	async function nextMediaName(dirAbs, uid, ext, signal) {
+		const pattern = new RegExp(`^${uid}-(\\d+)\\${ext}$`);
+		let max = 0;
+		for (const name of await listNames(dirAbs, signal)) {
+			const hit = pattern.exec(name);
+			if (hit) max = Math.max(max, Number(hit[1]) || 0);
+		}
+		return `${uid}-${max + 1}${ext}`;
+	}
+
+	async function mediaUpload(payload) {
+		const rel = normalizeRelPath(String(payload.path ?? ''));
+		const ext = extOf(payload.name);
+		if (rel === '' || rel.split('/').includes('..') || ext === '') throw new Error(`invalid-upload: ${payload.name ?? ''}`);
+		const home = await mediaHomeFor(rel);
+		const dirAbs = safeDirPath(activeConfig(), home.rel);
+		if (!dirAbs) throw new Error(`invalid path: ${home.rel}`);
+		const data = String(payload.data ?? '').replace(/^data:[^,]+,/, '').replace(/\s+/g, '');
+		const bytes = Buffer.from(data, 'base64');
+		if (bytes.length === 0) throw new Error('empty-image');
+		if (bytes.length > MEDIA_MAX_BYTES) throw new Error('image-too-large');
+		const name = await nextMediaName(dirAbs, home.uid, ext);
+		const abs = `${dirAbs}/${name}`;
+		if (!(await insideRoot(ctx, activeConfig(), abs))) throw new Error(`invalid path: ${abs}`);
+		await mkdirAt(dirAbs);
+		writeFileSync(abs, bytes);
+		const fileRel = `${home.rel}/${name}`;
+		cache.data = null;
+		/* markdown 里存的是**相对这篇笔记自己的位置**的路径: 笔记在题目库里时就是 ../../notes/… 那种,
+		 * 这样 notes/ 与 questions/ 一起搬走(或被别的编辑器打开)都不丢图 */
+		return { ok: true, uid: home.uid, name, path: fileRel, src: relativeSrc(relDirOf(rel), fileRel), bytes: bytes.length };
+	}
+
+	/* markdown 里存的是**相对笔记所在目录**的路径, 而卡片 / 导图 / 预览 / 编辑器渲染时都不知道那个目录,
+	 * 所以认图分三档(结果按 root 缓存, 图只增不改所以缓存不会过期):
+	 *   1) 直接当 root 相对路径认(../ 前缀先剥掉) —— 题目在 questions/ 一侧、素材在 notes/ 一侧时正好落到这;
+	 *   2) 取 <uid>.assestfiles/ 这一段当锚, 在库里(根 + 一二级子目录, 有上限)找同名后缀 —— 同目录写法走这;
+	 *   3) 再退回「整个相对路径按后缀找一遍」。 */
+	const mediaCache = new Map();
+
+	function stripDotParts(rel) {
+		return normalizeRelPath(rel)
+			.split('/')
+			.filter((part) => part !== '' && part !== '.' && part !== '..')
+			.join('/');
+	}
+
+	async function mediaFind(rel, signal) {
+		const clean = stripDotParts(rel);
+		if (clean === '') return '';
+		const key = `${activeConfig().root}|${clean}`;
+		if (mediaCache.has(key)) return mediaCache.get(key);
+		let found = '';
+		const direct = mediaAbs(clean);
+		if (direct && (await pathExists(direct, signal))) found = clean;
+		if (found === '') {
+			const anchor = clean.lastIndexOf(`${MEDIA_DIR_SUFFIX}/`);
+			const tails = anchor < 0 ? [clean] : [clean.slice(anchor), clean];
+			const dirs = [''];
+			const rootNames = await listNames(activeConfig().root, signal);
+			for (const name of rootNames.slice(0, 200)) {
+				if (name.startsWith('.') || activeConfig().exclude.includes(name)) continue;
+				dirs.push(name);
+			}
+			for (const dir of dirs.slice()) {
+				const subNames = await listNames(`${activeConfig().root}/${dir}`, signal);
+				for (const name of subNames.slice(0, 200)) {
+					if (name.startsWith('.') || activeConfig().exclude.includes(name)) continue;
+					if (await dirExists(`${activeConfig().root}/${dir}/${name}`)) dirs.push(`${dir}/${name}`);
+				}
+			}
+			const seen = [];
+			for (const tail of tails) {
+				if (tail === '' || seen.includes(tail)) continue;
+				seen.push(tail);
+				for (const dir of dirs) {
+					const candidate = dir === '' ? tail : `${dir}/${tail}`;
+					const abs = mediaAbs(candidate);
+					if (abs && (await pathExists(abs, signal))) {
+						found = candidate;
+						break;
+					}
+				}
+				if (found !== '') break;
+			}
+		}
+		mediaCache.set(key, found);
+		return found;
+	}
+
+	async function mediaHandler(req, res) {
+		const method = (req.method ?? 'GET').toUpperCase();
+		const url = new URL(req.url ?? MEDIA_ROUTE, 'http://localhost');
+		try {
+			if (method === 'GET' || method === 'HEAD') {
+				const asked = normalizeRelPath(String(url.searchParams.get('path') ?? ''));
+				const type = MEDIA_TYPES[extOf(asked)] || '';
+				const rel = type === '' ? '' : await mediaFind(asked);
+				const abs = rel === '' ? null : mediaAbs(rel);
+				let body = null;
+				if (abs) {
+					try {
+						body = await readBytesAt(abs, MEDIA_MAX_BYTES);
+					} catch (error) {
+						body = null;
+					}
+				}
+				if (!body) {
+					sendJson(res, 404, { error: 'image-not-found', path: rel });
+					return;
+				}
+				res.writeHead(200, {
+					'content-type': type,
+					'content-length': String(body.length),
+					/* 文件名带序号、只增不改, 所以可以长缓存 */
+					'cache-control': 'private, max-age=604800, immutable',
+				});
+				if (method === 'HEAD') res.end();
+				else res.end(body);
+				return;
+			}
+			if (method === 'POST') {
+				const payload = await readBody(req, MEDIA_MAX_BYTES);
+				sendJson(res, 200, await mediaUpload(payload));
+				return;
+			}
+			res.writeHead(405, { allow: 'GET, HEAD, POST', 'content-type': 'application/json; charset=utf-8' });
+			res.end(JSON.stringify({ error: 'method-not-allowed', method }));
+		} catch (error) {
+			const tooLarge = error && error.code === 'RK_BODY_TOO_LARGE';
+			sendJson(res, tooLarge ? 413 : 500, {
+				error: tooLarge ? 'request-too-large' : 'rk-study-failed',
+				message: error instanceof Error ? error.message : String(error),
+			});
+		}
 	}
 
 	function sendJson(res, status, payload) {
@@ -1576,6 +1797,16 @@ export function apply(ctx, rawConfig) {
 				handler: assetHandler,
 			}),
 		'rk-study: vendor assets',
+	);
+
+	ctx.effect(
+		() =>
+			ctx.webServer.register({
+				kind: 'exact',
+				path: MEDIA_ROUTE,
+				handler: withRoot(mediaHandler),
+			}),
+		'rk-study: image media',
 	);
 
 	ctx.effect(

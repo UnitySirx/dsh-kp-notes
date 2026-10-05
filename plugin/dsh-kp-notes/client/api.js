@@ -18,6 +18,8 @@ export function createApi({ React }) {
 	const POLL_MS = 10000;
 	const GIT_ROUTE = '/rk-study/git';
 	const GIT_POLL_MS = 20000;
+	/* 图片素材(见 README「图片素材」): 上传与显示都是这一条路由 */
+	const MEDIA_ROUTE = '/rk-study/media';
 
 	/* 多学习画布(多根目录): 每个请求都带上当前画布的根目录; 一级画布(rootPath 为空)时不带, 走插件默认根目录。
 	 * activeRoot 只活在这一个页面会话里: 以前它同时写进 localStorage('rk-study:root'), 于是每次刷新 /
@@ -356,12 +358,51 @@ export function createApi({ React }) {
 		return { data: state.data, error: state.error, loading: state.loading, reload: load };
 	}
 
+	/* 图片素材: 显示地址(带 ?root= 与 ?path=<markdown 里那段相对路径>)。
+	 * 相对路径的换算全在 host 那边做(见 lib/routes.js 的 mediaFind), 客户端不需要知道笔记在哪、
+	 * 素材目录叫什么 —— 卡片 / 导图 / 预览 / 编辑器都只拿 markdown 里那一段来问这一条 URL。 */
+	function mediaUrl(rel) {
+		const url = new URL(MEDIA_ROUTE, window.location.origin);
+		if (activeRoot) url.searchParams.set('root', activeRoot);
+		if (rel) {
+			let text = String(rel).trim();
+			try {
+				text = decodeURIComponent(text);
+			} catch {
+				/* 不是合法的百分号编码就按原样用 */
+			}
+			url.searchParams.set('path', text);
+		}
+		return url.toString();
+	}
+
+	/* 上传: File → base64 → POST, 成功后 host 回 { ok, src, name, uid, path }。
+	 * 失败返回 null(调用方显示「插入失败」, 不抛异常) */
+	async function uploadMedia(payload) {
+		const url = new URL(MEDIA_ROUTE, window.location.origin);
+		if (activeRoot) url.searchParams.set('root', activeRoot);
+		let response;
+		try {
+			response = await fetch(url.toString(), {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(payload),
+			});
+		} catch (error) {
+			return null;
+		}
+		const data = await response.json().catch(() => ({}));
+		if (!response.ok || data.ok === false) return null;
+		return data;
+	}
+
 	return {
 		ROUTE,
 		ROOTS_ROUTE,
 		CONFIG_ROUTE,
 		STATE_ROUTE,
 		GIT_ROUTE,
+		MEDIA_ROUTE,
 		getActiveRoot,
 		setActiveRoot,
 		baseNameOf,
@@ -393,5 +434,7 @@ export function createApi({ React }) {
 		useGit,
 		defaultGitMessage,
 		useCatalog,
+		mediaUrl,
+		uploadMedia,
 	};
 }

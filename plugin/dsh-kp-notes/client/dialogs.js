@@ -6,8 +6,8 @@
 export function createDialogs(deps) {
 	const React = deps.React;
 	const h = React.createElement;
-	const { useState, useRef } = React;
-	const { LivePreview, MarkdownToolbar, snippetKeyDown, unescapeRedundant } = deps || {};
+	const { useState, useRef, useMemo } = React;
+	const { LivePreview, MarkdownToolbar, snippetKeyDown, unescapeRedundant, media } = deps || {};
 	/* 富文本编辑: 用 vendor 里的 zt-react-milkdown(和知识点编辑器抽屉同一套); 包没起来就自动回退源码框 */
 	const milkdownMods = (deps && deps.milkdown) || null;
 	const useMd = (milkdownMods && milkdownMods.useMilkdown) || (() => ({ status: 'failed', Editor: null }));
@@ -169,6 +169,12 @@ export function createDialogs(deps) {
 			},
 		});
 		const tools = () => (richMode || mdLoading ? null : MarkdownToolbar ? h(MarkdownToolbar, { t, value: form[activeField] ?? '', onChange: (next) => patch({ [activeField]: next }), areaRef, onEditTemplates }) : null);
+		/* 插图落盘(client/media.js): 题目文件在 questions/ 一侧, 图片仍落到「它所属小节」旁边的素材目录,
+		 * 宿主返回的 src 是相对本文件的路径(../../notes/…)。还没有文件(新建)时不管, 走内置 Base64。 */
+		const imageUpload = useMemo(
+			() => (media && form.path ? { upload: (file) => media.upload(file, form.path) } : undefined),
+			[media, form.path],
+		);
 		/* 一个 markdown 字段: 富文本框走 Milkdown, 源码框是原来的 textarea(工具栏 + 快捷键挂在它上面) */
 		const mdField = (key, extra) =>
 			mdLoading
@@ -180,6 +186,7 @@ export function createDialogs(deps) {
 							key: 'qmd-' + key + '-' + seed,
 							defaultValue: form[key] ?? '',
 							onChange: (next) => patch({ [key]: squeeze(next) }),
+							imageUpload: imageUpload,
 							theme: theme === 'light' ? 'light' : 'dark',
 							locale: mdLocaleOf(),
 							className: 'rk-md-zt',
@@ -388,6 +395,11 @@ export function createDialogs(deps) {
 			},
 		});
 		const tools = () => (richMode || mdLoading ? null : MarkdownToolbar ? h(MarkdownToolbar, { t, value: form.body ?? '', onChange: (next) => patch({ body: next }), areaRef, onEditTemplates }) : null);
+		/* 插图落盘: 与题目弹窗同一套(见上面 QuestionDialog 的说明) */
+		const imageUpload = useMemo(
+			() => (media && form.path ? { upload: (file) => media.upload(file, form.path) } : undefined),
+			[media, form.path],
+		);
 		/* 正文: 富文本框走 Milkdown, 源码框是原来的 textarea */
 		const mdField = () =>
 			mdLoading
@@ -399,6 +411,7 @@ export function createDialogs(deps) {
 							key: 'pmd-body-' + seed,
 							defaultValue: form.body ?? '',
 							onChange: (next) => patch({ body: squeeze(next) }),
+							imageUpload: imageUpload,
 							theme: theme === 'light' ? 'light' : 'dark',
 							locale: mdLocaleOf(),
 							className: 'rk-md-zt',

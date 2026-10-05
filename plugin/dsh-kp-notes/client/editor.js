@@ -6,8 +6,8 @@
 export function createEditor(deps) {
 	const React = deps.React;
 	const h = React.createElement;
-	const { useState, useEffect, useRef } = React;
-	const { DeleteButton, LivePreview, MarkdownToolbar, snippetKeyDown, milkdown, unescapeRedundant } = deps || {};
+	const { useState, useEffect, useRef, useMemo } = React;
+	const { DeleteButton, LivePreview, MarkdownToolbar, snippetKeyDown, milkdown, unescapeRedundant, media } = deps || {};
 
 	/* YAML frontmatter 不能交给富文本编辑器: title / type / tags / order 是插件的元数据,
 	 * 让 Milkdown 把 `---` 当成分割线 + 那几行当成段落读进去, 保存时就会被改写掉。
@@ -71,6 +71,13 @@ export function createEditor(deps) {
 		const mdState = useMd();
 		const [view, setView] = useState('rich');
 		const isNew = state.mode === 'newSection' || state.mode === 'newPoint';
+		/* 插图落盘(client/media.js): 把 File 交给宿主落到「这篇笔记所在小节」旁边的素材目录,
+		 * 编辑器只拿到一段相对路径写进 markdown —— 不再写 Base64。新建时还没有文件, 不接管(仍走内置的 Base64)。 */
+		const notePath = !isNew && state.path ? state.path : '';
+		const imageUpload = useMemo(
+			() => (media && notePath ? { upload: (file) => media.upload(file, notePath) } : undefined),
+			[media, notePath],
+		);
 		const kind = state.kind || '';
 		const mdReady = mdState.status === 'ready' && !!mdState.Editor;
 		const richMode = !isNew && view === 'rich';
@@ -232,6 +239,7 @@ export function createEditor(deps) {
 										key: 'rk-md-' + noteKey + ':' + seed,
 										defaultValue: value,
 										onChange: (next) => setValue(cleanMarkdown(next)),
+										imageUpload: imageUpload,
 										theme: theme === 'light' ? 'light' : 'dark',
 										locale: mdLocale,
 										className: 'rk-md-zt',
