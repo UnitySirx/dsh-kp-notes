@@ -1243,7 +1243,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 158;
+		const MODULE_VERSION = 164;
 		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
@@ -1283,7 +1283,7 @@ window.__ModuleLoader__.load({
 				doc: document,
 				onError: (error) => ctx.logger?.warn?.('rk-study: zt-react-milkdown 加载失败, 已回退到源码编辑', error),
 			});
-			/* media: 图片素材 —— 插图落盘到 <小节uid>.assestfiles/ + 面板里相对 src 的显示换算(见 client/media.js) */
+			/* media: 图片素材 —— 插图落盘到 media/<小节uid>.assestfiles/ + 面板里相对 src 的显示换算(见 client/media.js) */
 			const mediaMods = media.createMedia({ api: apiMods });
 			/* 依赖图无环: dict / css / util 是叶子, vendor 只要 React, milkdown 只要 react 家族, md 吃 vendor, cards 吃 md + util, editor 吃 md + cards, dialogs 吃 md */
 			const mdMods = md.createMd({ React, MathNode: vendorMods.MathNode, MermaidBlock: vendorMods.MermaidBlock, looksLikeMath: vendorMods.looksLikeMath });

@@ -17,7 +17,9 @@ export function createDialogs(deps) {
 		return /^zh/i.test(lang) ? 'zh-CN' : 'en-US';
 	};
 	/* Milkdown 把空段落序列化成单独一行的 <br />, 存文件前清掉(和知识点编辑器抽屉同一处理);
-	 * 再把 Milkdown 的"防御性转义"(snake\_case / a\&b / \*A\_i\*)清掉, 和抽屉走同一个判官 */
+	 * 再把 Milkdown 的"防御性转义"(snake\_case / a\&b / \*A\_i\*)清掉, 和抽屉走同一个判官;
+	 * 最后把刚插入图片的「本地引用」(blob: 地址, 等落盘)与「显示地址」换回相对路径
+	 * (和抽屉的 cleanMarkdown 同一收口, 见 client/media.js)。 */
 	const squeeze = (text) => {
 		const tidy = String(text || '')
 			.split('\n')
@@ -25,7 +27,39 @@ export function createDialogs(deps) {
 			.map((line) => line.replace(/[ \t]+$/, ''))
 			.join('\n')
 			.replace(/\n{3,}/g, '\n\n');
-		return typeof unescapeRedundant === 'function' ? unescapeRedundant(tidy) : tidy;
+		const cleaned = typeof unescapeRedundant === 'function' ? unescapeRedundant(tidy) : tidy;
+		return media && media.toMarkdownSrc ? media.toMarkdownSrc(cleaned) : cleaned;
+	};
+	/* 表单里的图先等落盘跑完, 再把指定字段**严格**收口一遍(strict: 还挂着 blob 的图宁可不写),
+	 * 保证提交上去的正文里绝不会出现 blob: 地址; 有变化就顺手回写进 state, 界面上也跟着一致。 */
+	const settleForm = async (form, fields, setForm) => {
+		if (media && media.flush) {
+			try {
+				await media.flush();
+			} catch (error) {
+				/* 落盘失败: 下面的 strict 收口会把那段图去掉 */
+			}
+		}
+		if (!media || !media.toMarkdownSrc) return form;
+		const next = Object.assign({}, form);
+		let dirty = false;
+		for (let index = 0; index < fields.length; index += 1) {
+			const key = fields[index];
+			if (typeof next[key] !== 'string') continue;
+			const fixed = media.toMarkdownSrc(next[key], true);
+			if (fixed !== next[key]) {
+				next[key] = fixed;
+				dirty = true;
+			}
+		}
+		if (dirty) setForm(next);
+		return next;
+	};
+	/* 富文本框回吐的 markdown 里可能刚插进来一张图(还是本地引用): 这时候才落盘,
+	 * 落完把该字段换成相对路径(与抽屉的 onChange 同一套, 见 client/editor.js)。 */
+	const settleField = (text, apply) => {
+		if (!media || !media.settleText || String(text).indexOf('blob:') < 0) return;
+		void media.settleText(text).then((settled) => apply(squeeze(settled)));
 	};
 	/* 章节名称弹窗: 新建章节 / 给已有章节改名 */
 	function NameDialog({ t, title, value, placeholder, onCancel, onSubmit }) {
@@ -169,10 +203,19 @@ export function createDialogs(deps) {
 			},
 		});
 		const tools = () => (richMode || mdLoading ? null : MarkdownToolbar ? h(MarkdownToolbar, { t, value: form[activeField] ?? '', onChange: (next) => patch({ [activeField]: next }), areaRef, onEditTemplates }) : null);
-		/* 插图落盘(client/media.js): 题目文件在 questions/ 一侧, 图片仍落到「它所属小节」旁边的素材目录,
-		 * 宿主返回的 src 是相对本文件的路径(../../notes/…)。还没有文件(新建)时不管, 走内置 Base64。 */
+		/* 插图落盘(client/media.js): 题目文件在 questions/ 一侧, 图片仍落到「它所属小节」旁边的素材目录。
+		 * 两步: 选文件时 upload() 只回一条本地引用(blob: 地址, 不写盘), 图真插进正文(下面的 onChange)
+		 * 才落盘, 存进 form 前由 squeeze 换回相对本文件的路径(../../notes/…)。还没有文件(新建)时不管,
+		 * 走内置 Base64。maxFileSize / allowedProtocols 见 client/editor.js 同处的说明。 */
 		const imageUpload = useMemo(
-			() => (media && form.path ? { upload: (file) => media.upload(file, form.path) } : undefined),
+			() =>
+				media && form.path
+					? {
+							upload: (file) => media.upload(file, form.path),
+							maxFileSize: media.maxFileSize,
+							allowedProtocols: media.allowedProtocols,
+					  }
+					: undefined,
 			[media, form.path],
 		);
 		/* 一个 markdown 字段: 富文本框走 Milkdown, 源码框是原来的 textarea(工具栏 + 快捷键挂在它上面) */
@@ -185,7 +228,10 @@ export function createDialogs(deps) {
 						h(md.Editor, {
 							key: 'qmd-' + key + '-' + seed,
 							defaultValue: form[key] ?? '',
-							onChange: (next) => patch({ [key]: squeeze(next) }),
+							onChange: (next) => {
+								patch({ [key]: squeeze(next) });
+								settleField(next, (settled) => patch({ [key]: settled }));
+							},
 							imageUpload: imageUpload,
 							theme: theme === 'light' ? 'light' : 'dark',
 							locale: mdLocaleOf(),
@@ -217,7 +263,9 @@ export function createDialogs(deps) {
 			}
 			setBusy(true);
 			setProblem('');
-			const result = await onSubmit(questionFields(form), keepOpen);
+			/* 刚插进来、还在落盘的图先等它落完(send 是异步的, 不影响体感), 提交的正文里只有相对路径 */
+			const settled = await settleForm(form, ['stem', 'answerText', 'explanation'], setForm);
+			const result = await onSubmit(questionFields(settled), keepOpen);
 			setBusy(false);
 			if (result && result.error) {
 				setProblem(result.error);
@@ -397,7 +445,14 @@ export function createDialogs(deps) {
 		const tools = () => (richMode || mdLoading ? null : MarkdownToolbar ? h(MarkdownToolbar, { t, value: form.body ?? '', onChange: (next) => patch({ body: next }), areaRef, onEditTemplates }) : null);
 		/* 插图落盘: 与题目弹窗同一套(见上面 QuestionDialog 的说明) */
 		const imageUpload = useMemo(
-			() => (media && form.path ? { upload: (file) => media.upload(file, form.path) } : undefined),
+			() =>
+				media && form.path
+					? {
+							upload: (file) => media.upload(file, form.path),
+							maxFileSize: media.maxFileSize,
+							allowedProtocols: media.allowedProtocols,
+					  }
+					: undefined,
 			[media, form.path],
 		);
 		/* 正文: 富文本框走 Milkdown, 源码框是原来的 textarea */
@@ -410,7 +465,10 @@ export function createDialogs(deps) {
 						h(md.Editor, {
 							key: 'pmd-body-' + seed,
 							defaultValue: form.body ?? '',
-							onChange: (next) => patch({ body: squeeze(next) }),
+							onChange: (next) => {
+								patch({ body: squeeze(next) });
+								settleField(next, (settled) => patch({ body: settled }));
+							},
 							imageUpload: imageUpload,
 							theme: theme === 'light' ? 'light' : 'dark',
 							locale: mdLocaleOf(),
@@ -426,7 +484,9 @@ export function createDialogs(deps) {
 			}
 			setBusy(true);
 			setProblem('');
-			const result = await onSubmit(form);
+			/* 同题目弹窗: 先等插进来的图落盘, 再严格收口, 正文里绝不会有 blob: 地址 */
+			const settled = await settleForm(form, ['body'], setForm);
+			const result = await onSubmit(settled);
 			setBusy(false);
 			if (result && result.error) setProblem(result.error);
 		};

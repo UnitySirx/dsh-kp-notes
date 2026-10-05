@@ -283,6 +283,7 @@ export function createCss(deps) {
 .rk-md-table th { background:var(--rk-bg-2); color:var(--rk-text-2); font-weight:600; white-space:nowrap; }
 .rk-md-table tr:last-child td { border-bottom:0; }
 .rk-md-hr { margin:14px 0; border:0; border-top:1px solid var(--rk-line-1); }
+.rk-md-img { display:block; max-width:100%; height:auto; margin:10px 0; border-radius:9px; border:1px solid var(--rk-line-1); background:var(--rk-bg-2); }
 .rk-code-inline { padding:1px 5px; border-radius:5px; background:var(--rk-bg-2); border:1px solid var(--rk-line-1); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; }
 .rk-example { margin:14px 0; border:1px solid var(--rk-line-2); border-left:2px solid var(--rk-accent); border-radius:0 12px 12px 0; background:var(--rk-bg-2); padding:12px 14px; }
 .rk-example-title { display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; margin-bottom:8px; flex-wrap:wrap; }

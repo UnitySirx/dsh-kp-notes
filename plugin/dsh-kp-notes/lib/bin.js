@@ -10,8 +10,8 @@
  * 搬回去以后按桶里的 .rk-uids.json 认回原来的号，桶空了就把桶目录（连空掉的 .remove）清掉。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync } from 'node:fs';
-import { removeBoxFor } from './delete.js?v=69';
-import { adoptUids } from './uid.js?v=69';
+import { removeBoxFor } from './delete.js?v=70';
+import { adoptUids } from './uid.js?v=70';
 
 const REMOVE_DIR = '.remove';
 const MAX_BUCKETS = 200;

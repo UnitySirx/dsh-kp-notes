@@ -61,11 +61,13 @@ export const STATE_FILE = `${STATE_DIR}/state.json`;
 /* 渲染引擎(katex / mermaid)以静态资源形式随插件分发, 由 host 直接吐文件 —— 客户端按需 <script> 拉取, 离线可用 */
 export const ASSET_ROUTE = '/rk-study/vendor';
 
-/* 图片素材: 编辑器里插入的图片**不写 Base64**, 而是落盘到「所在小节旁边的 <小节编号>.assestfiles/」
+/* 图片素材: 编辑器里插入的图片**不写 Base64**, 而是落盘到「所在小节旁边的 media/<小节编号>.assestfiles/」
  * (编号 = 号池里的 uid, 如 s0001; 同一小节的多个知识点共用这一个目录)。
- * 正文里只存**相对路径**(<uid>.assestfiles/<uid>-序号.<ext>), 所以笔记整体搬走、或用别的编辑器打开都不丢图;
+ * 中间那层 `media/` 是为了不和正文文件混在一堆: 正文目录里只多一个 media/ 子目录, 素材全在它下面。
+ * 正文里只存**相对路径**(media/<uid>.assestfiles/<uid>-序号.<ext>), 所以笔记整体搬走、或用别的编辑器打开都不丢图;
  * 显示时由 MEDIA_ROUTE 这条只读路由把字节吐回去。上传(POST)与显示(GET)都在这条路由上, 边界与画布同 root。 */
 export const MEDIA_ROUTE = '/rk-study/media';
+export const MEDIA_PARENT_DIR = 'media';
 export const MEDIA_DIR_SUFFIX = '.assestfiles';
 export const MEDIA_MAX_BYTES = 24 * 1024 * 1024;
 export const MEDIA_TYPES = {

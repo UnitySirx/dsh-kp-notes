@@ -28,7 +28,10 @@ export function createEditor(deps) {
 	/* 富文本回吐的 markdown 清洗: 空段落会被序列化成单独一行的 <br />,
 	 * 连续空行也可能多出来 —— 不清掉的话每编辑一次, 笔记里就多一点这种噪声。
 	 * 另外回吐的纯文本会被 remark 加防御性反斜杠(snake\_case), 由 unescapeRedundant
-	 * 用渲染器校验后去掉, 见 client/md.js。 */
+	 * 用渲染器校验后去掉, 见 client/md.js。
+	 * 最后一道: 刚插入的图片在富文本里 src 是「本地引用」(blob: 地址, 落盘后才由 media 换成相对
+	 * 路径, 见 client/media.js 的两步插图), 往外写之前一律换成相对路径 —— 这里是编辑器侧唯一的
+	 * 收口, 富文本 onChange / 源码框 / 换笔记重播种都经过它。 */
 	function cleanMarkdown(text) {
 		const tidy = String(text || '')
 			.split('\n')
@@ -36,7 +39,8 @@ export function createEditor(deps) {
 			.map((line) => line.replace(/[ \t]+$/, ''))
 			.join('\n')
 			.replace(/\n{3,}/g, '\n\n');
-		return typeof unescapeRedundant === 'function' ? unescapeRedundant(tidy) : tidy;
+		const cleaned = typeof unescapeRedundant === 'function' ? unescapeRedundant(tidy) : tidy;
+		return media && media.toMarkdownSrc ? media.toMarkdownSrc(cleaned) : cleaned;
 	}
 
 	function Editor({ state, t, onClose, onSave, saving, onDelete, onError, onEditTemplates, theme }) {
@@ -51,10 +55,27 @@ export function createEditor(deps) {
 		const noteKey = (state.mode || '') + '|' + (state.path || state.dir || '');
 		const lastKeyRef = useRef(noteKey);
 		/* 保存时把 YAML 头原样拼回去; 头后面固定留一个空行(富文本回吐的正文会吃掉它) */
-		const savePayload = () => {
+		const savePayload = async () => {
+			/* 刚插进来的图片可能还在落盘(见 client/media.js 的两步插图: 选文件只是本地引用,
+			 * 插入之后才把字节交给 host), 所以写盘前先等落盘作业跑完; 收口用 strict —— 还挂着
+			 * blob 的那张图宁可不写, 文件里绝不会出现 blob: 地址。
+			 * 另外源码框是**直接改 value** 的(不像富文本那样过 cleanMarkdown), 粘贴进来的绝对地址
+			 * 也靠这道收口换回相对路径(幂等, 相对路径走快路径) —— 文件里一定只有相对路径。 */
+			if (media && media.flush) {
+				try {
+					await media.flush();
+				} catch (error) {
+					/* 落盘失败: 下面的 strict 收口会把这段图去掉, 不会把 blob 写进文件 */
+				}
+			}
+			const body = media && media.toMarkdownSrc ? media.toMarkdownSrc(value, true) : value;
 			const head = headRef.current;
-			if (!head) return { value, title };
-			return { value: head + (value.startsWith('\n') ? value : '\n' + value), title };
+			if (!head) return { value: body, title };
+			return { value: head + (body.startsWith('\n') ? body : '\n' + body), title };
+		};
+		/* 保存按钮 / ⌘S: 等落盘 + 收口(异步)之后再把载荷交给 onSave */
+		const submit = () => {
+			void savePayload().then((payload) => onSave(payload));
 		};
 		useEffect(() => {
 			if (lastKeyRef.current === noteKey) return;
@@ -71,11 +92,23 @@ export function createEditor(deps) {
 		const mdState = useMd();
 		const [view, setView] = useState('rich');
 		const isNew = state.mode === 'newSection' || state.mode === 'newPoint';
-		/* 插图落盘(client/media.js): 把 File 交给宿主落到「这篇笔记所在小节」旁边的素材目录,
-		 * 编辑器只拿到一段相对路径写进 markdown —— 不再写 Base64。新建时还没有文件, 不接管(仍走内置的 Base64)。 */
+		/* 插图落盘(client/media.js): **两步** —— 弹窗里选文件时只拿到一条本地引用(blob: 地址,
+		 * 不写盘; 选错重选、选完就关弹窗都不留孤儿图), 等图片真插进正文(下面的 onChange 收到带
+		 * blob 的 markdown)才调 media.settleText 把字节交给宿主落到「这篇笔记所在小节」旁边的
+		 * 素材目录, 落完正文里换成相对路径 —— 不再写 Base64。新建时还没有文件, 不接管(仍走内置的 Base64)。
+		 * maxFileSize 必传: vendor 不传就默认只让传 5MB。
+		 * allowedProtocols 必传: vendor 的图片节点只认白名单里的协议(默认没有 blob:), 不补上
+		 * 「选图阶段那条本地引用」就会被它当成非法地址静默丢掉 —— 图看得见, markdown 里却没有。 */
 		const notePath = !isNew && state.path ? state.path : '';
 		const imageUpload = useMemo(
-			() => (media && notePath ? { upload: (file) => media.upload(file, notePath) } : undefined),
+			() =>
+				media && notePath
+					? {
+							upload: (file) => media.upload(file, notePath),
+							maxFileSize: media.maxFileSize,
+							allowedProtocols: media.allowedProtocols,
+					  }
+					: undefined,
 			[media, notePath],
 		);
 		const kind = state.kind || '';
@@ -98,7 +131,7 @@ export function createEditor(deps) {
 			const onKey = (event) => {
 				if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 's') {
 					event.preventDefault();
-					onSave(savePayload());
+					submit();
 				}
 			};
 			document.addEventListener('keydown', onKey, true);
@@ -139,7 +172,7 @@ export function createEditor(deps) {
 				onKeyDown: (event) => {
 					if ((event.metaKey || event.ctrlKey) && event.key === 's') {
 						event.preventDefault();
-						onSave(savePayload());
+						submit();
 					}
 				},
 			},
@@ -192,7 +225,7 @@ export function createEditor(deps) {
 									onKeyDown: (event) => {
 										if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
 											event.preventDefault();
-											onSave(savePayload());
+											submit();
 										}
 									},
 								}),
@@ -224,7 +257,7 @@ export function createEditor(deps) {
 								if (snippetKeyDown && snippetKeyDown({ value, onChange: setValue, ref: areaRef }, event)) return;
 								if ((event.metaKey || event.ctrlKey) && event.key === 's') {
 									event.preventDefault();
-									onSave(savePayload());
+									submit();
 								}
 							},
 						})
@@ -238,7 +271,16 @@ export function createEditor(deps) {
 										/* 非受控: 父组件每次 onChange 都会重渲染, 再用 value 回写会把光标顶回行首 */
 										key: 'rk-md-' + noteKey + ':' + seed,
 										defaultValue: value,
-										onChange: (next) => setValue(cleanMarkdown(next)),
+										/* 插入图片(或粘贴图片)之后编译器回吐的 markdown 里, 新图还是那条本地引用
+										 * (blob: 地址) —— 这时候才把字节落盘, 落完换成相对路径(见 client/media.js)。
+										 * 先同步 setValue 一次(编辑中的正文里 blob 原样留着, 图照样显示),
+										 * 落盘完成后再 setValue 一次把 value 变成写盘用的相对路径。 */
+										onChange: (next) => {
+											setValue(cleanMarkdown(next));
+											if (media && media.settleText && String(next).indexOf('blob:') >= 0) {
+												void media.settleText(next).then((settled) => setValue(cleanMarkdown(settled)));
+											}
+										},
 										imageUpload: imageUpload,
 										theme: theme === 'light' ? 'light' : 'dark',
 										locale: mdLocale,
@@ -256,7 +298,7 @@ export function createEditor(deps) {
 				{ className: 'rk-drawer-foot' },
 				h(
 					'button',
-					{ className: 'rk-btn rk-primary', type: 'button', disabled: saving, onClick: () => onSave(savePayload()) },
+					{ className: 'rk-btn rk-primary', type: 'button', disabled: saving, onClick: () => submit() },
 					saving ? t('saving') : t('save'),
 				),
 				h('span', { className: 'rk-sec-sub' }, '⌘S'),

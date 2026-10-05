@@ -1,8 +1,8 @@
 /* rk-study · host/scan —— 从 host.js 第 640-967 行原样切出 */
-import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES, MEDIA_DIR_SUFFIX } from './constants.js?v=69';
-import { parseDocument } from './parse.js?v=69';
-import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=69';
-import { uidFromText } from './uid.js?v=69';
+import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_PARENT_DIR } from './constants.js?v=70';
+import { parseDocument } from './parse.js?v=70';
+import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=70';
+import { uidFromText } from './uid.js?v=70';
 
 /* ------------------------------------------------------------------ scan */
 
@@ -14,6 +14,18 @@ export async function scanWorkspace(ctx, config, signal) {
 	const dirs = [];
 	const skipped = [];
 	let truncated = false;
+
+	/* 素材容器 <小节目录>/media/: 里面**只有** <小节uid>.assestfiles/ 这类目录(或它是空的)。
+	 * 判据是「里面全是素材目录」而不是「名字叫 media」—— 用户自己建一个真叫 media 的章节不会被吞掉。 */
+	async function isMediaHome(target) {
+		let names = [];
+		try {
+			names = await ctx.fs.listDir(target, signal);
+		} catch {
+			return false;
+		}
+		return names.every((entry) => entry.type === 'directory' && entry.name.endsWith(MEDIA_DIR_SUFFIX));
+	}
 
 	async function walk(target, relPath, depth) {
 		if (truncated || depth > config.maxDepth) {
@@ -29,13 +41,19 @@ export async function scanWorkspace(ctx, config, signal) {
 		for (const entry of entries) {
 			if (truncated) return;
 			const name = entry.name;
-			/* 图片素材目录(<小节uid>.assestfiles)不进画布: 它跟小节文件同级, 但不是一章 */
+			/* 图片素材目录(<小节uid>.assestfiles, 现在收在各目录的 media/ 下面)不进画布:
+			 * 它跟小节文件同级/同层, 但不是一章 */
 			if (name.startsWith('.') || config.exclude.includes(name) || name.endsWith(MEDIA_DIR_SUFFIX)) {
 				skipped.push(relPath === '' ? name : `${relPath}/${name}`);
 				continue;
 			}
 			const rel = relPath === '' ? name : `${relPath}/${name}`;
 			if (entry.type === 'directory') {
+				/* 素材容器不进画布也不下去扫: 免得「一章 media」这种空壳卡片多出来 */
+				if (name === MEDIA_PARENT_DIR && (await isMediaHome(entry.target))) {
+					skipped.push(rel);
+					continue;
+				}
 				/* 空目录也算一个章节: 新建章节只建目录, 不写文件 */
 				if (depth >= 2 && !isQuestionStorePath(config, rel)) dirs.push(rel);
 				await walk(entry.target, rel, depth + 1);

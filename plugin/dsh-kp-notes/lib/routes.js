@@ -6,21 +6,21 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 
-import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=69';
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MEDIA_DIR_SUFFIX, MEDIA_MAX_BYTES, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=69';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=69';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=69';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=69';
-import { buildNodes, scanHeadings } from './headings.js?v=69';
-import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=69';
-import { parseDocument } from './parse.js?v=69';
-import { pointRegion, rebuildPoint } from './points.js?v=69';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=69';
-import { buildCatalog } from './scan.js?v=69';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=69';
-import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=69';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=69';
-import { readBody, safePath, writeMarkdown } from './write.js?v=69';
+import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=70';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MEDIA_DIR_SUFFIX, MEDIA_MAX_BYTES, MEDIA_PARENT_DIR, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=70';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=70';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=70';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=70';
+import { buildNodes, scanHeadings } from './headings.js?v=70';
+import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=70';
+import { parseDocument } from './parse.js?v=70';
+import { pointRegion, rebuildPoint } from './points.js?v=70';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=70';
+import { buildCatalog } from './scan.js?v=70';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=70';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=70';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=70';
+import { readBody, safePath, writeMarkdown } from './write.js?v=70';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -808,7 +808,7 @@ export function apply(ctx, rawConfig) {
 	}
 
 	/* ------------------------------------------------ 图片素材(见 README「图片素材」)
-	 * 编辑器里插图**不写 Base64**: 字节落到「所在小节」旁边的 <小节uid>.assestfiles/ 里, 正文只留相对路径,
+	 * 编辑器里插图**不写 Base64**: 字节落到「所在小节」旁边的 media/<小节uid>.assestfiles/ 里, 正文只留相对路径,
 	 * 所以笔记整体搬走、用别的编辑器打开都不丢图; 删掉正文里的图片**不会**删文件(盘上那份留着, 想捡回来随时)。
 	 *   GET  ?path=<相对 root 的路径>                        → 吐字节(只有 MEDIA_TYPES 里的扩展名放行)
 	 *   POST { path:<笔记相对路径>, name, type, data:<base64> } → 落盘, 回 { ok, src, path, name, uid, bytes }
@@ -837,7 +837,7 @@ export function apply(ctx, rawConfig) {
 		return cut < 0 ? '' : clean.slice(0, cut);
 	}
 
-	/* markdown 里存的相对路径: 从 fromDir 走到 toRel(如 notes/01-硬件/s0001.assestfiles/s0001-1.png) */
+	/* markdown 里存的相对路径: 从 fromDir 走到 toRel(如 notes/01-硬件/media/s0001.assestfiles/s0001-1.png) */
 	function relativeSrc(fromDir, toRel) {
 		const from = String(fromDir ?? '').split('/').filter(Boolean);
 		const to = normalizeRelPath(toRel).split('/').filter(Boolean);
@@ -888,7 +888,10 @@ export function apply(ctx, rawConfig) {
 		}
 		if (uid === '') throw new Error(`no-section-uid: ${sectionRel}`);
 		const dir = relDirOf(sectionRel);
-		return { uid, dir, sectionRel, rel: dir === '' ? `${uid}${MEDIA_DIR_SUFFIX}` : `${dir}/${uid}${MEDIA_DIR_SUFFIX}` };
+		/* 素材统一收在正文目录下的 media/ 里: <小节目录>/media/<小节uid>.assestfiles/<uid>-<序号>.<ext>
+		 * (正文里存的相对路径也就带上了 media/ 这一层, 搬走笔记时整目录一起走, 不丢图) */
+		const home = `${MEDIA_PARENT_DIR}/${uid}${MEDIA_DIR_SUFFIX}`;
+		return { uid, dir, sectionRel, rel: dir === '' ? home : `${dir}/${home}` };
 	}
 
 	async function nextMediaName(dirAbs, uid, ext, signal) {
@@ -927,7 +930,8 @@ export function apply(ctx, rawConfig) {
 	/* markdown 里存的是**相对笔记所在目录**的路径, 而卡片 / 导图 / 预览 / 编辑器渲染时都不知道那个目录,
 	 * 所以认图分三档(结果按 root 缓存, 图只增不改所以缓存不会过期):
 	 *   1) 直接当 root 相对路径认(../ 前缀先剥掉) —— 题目在 questions/ 一侧、素材在 notes/ 一侧时正好落到这;
-	 *   2) 取 <uid>.assestfiles/ 这一段当锚, 在库里(根 + 一二级子目录, 有上限)找同名后缀 —— 同目录写法走这;
+	 *   2) 把路径按 / 切成后缀(文件名不动, 最多留 3 档), 在库里(根 + 一二级子目录, 有上限)找同名后缀
+	 *      —— 同目录写法走这: media/<uid>.assestfiles/x.png 与旧的 <uid>.assestfiles/x.png 都能命中;
 	 *   3) 再退回「整个相对路径按后缀找一遍」。 */
 	const mediaCache = new Map();
 
@@ -947,8 +951,15 @@ export function apply(ctx, rawConfig) {
 		const direct = mediaAbs(clean);
 		if (direct && (await pathExists(direct, signal))) found = clean;
 		if (found === '') {
-			const anchor = clean.lastIndexOf(`${MEDIA_DIR_SUFFIX}/`);
-			const tails = anchor < 0 ? [clean] : [clean.slice(anchor), clean];
+			/* 兜底找法: 正文里那张图的相对路径不一定跟当前 root 的叫法一致(换过 root / 从别处搬来的笔记)。
+			 * 把相对路径按 `/` 切开, 从最长的开始每次去掉一段前缀(**文件名永不切掉**, 最多 3 档),
+			 * 再到 root 及一二级子目录里挨个试 —— 于是这几种写法都能命中:
+			 * media/<uid>.assestfiles/x.png(现在的布局)、<uid>.assestfiles/x.png(旧布局, 在 media/ 前后都试一遍)、
+			 * notes/01-硬件/media/<uid>.assestfiles/x.png。 */
+			const parts = clean.split('/').filter(Boolean);
+			const tails = [];
+			for (let cut = 0; cut < parts.length - 1 && tails.length < 3; cut += 1) tails.push(parts.slice(cut).join('/'));
+			if (tails.length === 0) tails.push(clean);
 			const dirs = [''];
 			const rootNames = await listNames(activeConfig().root, signal);
 			for (const name of rootNames.slice(0, 200)) {
@@ -967,12 +978,17 @@ export function apply(ctx, rawConfig) {
 				if (tail === '' || seen.includes(tail)) continue;
 				seen.push(tail);
 				for (const dir of dirs) {
-					const candidate = dir === '' ? tail : `${dir}/${tail}`;
-					const abs = mediaAbs(candidate);
-					if (abs && (await pathExists(abs, signal))) {
-						found = candidate;
-						break;
+					const base = dir === '' ? '' : `${dir}/`;
+					/* 每个目录下试两种落点: 直接放(旧布局 / 手写)、或收在 media/ 里(现在的布局) */
+					const candidates = [`${base}${tail}`, `${base}${MEDIA_PARENT_DIR}/${tail}`];
+					for (const candidate of candidates) {
+						const abs = mediaAbs(candidate);
+						if (abs && (await pathExists(abs, signal))) {
+							found = candidate;
+							break;
+						}
 					}
+					if (found !== '') break;
 				}
 				if (found !== '') break;
 			}

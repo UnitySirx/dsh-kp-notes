@@ -84,8 +84,14 @@ export function createMd(deps) {
 				else nodes.push(h(React.Fragment, { key: nextKey() }, token));
 			} else if (token.charAt(0) === '`') nodes.push(h('code', { key: nextKey(), className: 'rk-code-inline' }, token.slice(1, -1)));
 			else if (token.slice(0, 2) === '![') {
+				/* 图片渲染成真的 <img>, src 先原样用 markdown 里那段(通常是相对路径)。
+				 * 相对路径 → 可显示地址(带 ?root=&path= 那条素材路由)的换算挂在**面板根节点**上
+				 * (client.js 的 panelRootRef + client/media.js 的 watchImages): 新插进来的 <img> 由
+				 * MutationObserver 就地改写, 所以这里不用碰 media —— 卡片 / 详情 / 预览 / 编辑器同一层兜住。 */
 				const parts = /^!\[([^\]]*)\]\(([^)]*)\)$/.exec(token);
-				nodes.push(h('span', { key: nextKey() }, (parts && parts[1]) || 'image'));
+				const alt = (parts && parts[1]) || '';
+				const src = ((parts && parts[2]) || '').trim();
+				nodes.push(src === '' ? h('span', { key: nextKey() }, alt || 'image') : h('img', { key: nextKey(), className: 'rk-md-img', src, alt, loading: 'lazy' }));
 			} else if (token.charAt(0) === '[') {
 				const parts = /^\[([^\]]+)\]\(([^)]*)\)$/.exec(token);
 				nodes.push(h('a', { key: nextKey(), href: parts ? parts[2] : '#', target: '_blank', rel: 'noreferrer' }, parts ? parts[1] : token));
