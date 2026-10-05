@@ -372,6 +372,8 @@ window.__ModuleLoader__.load({
 					/* 存储不可用就算了 */
 				}
 			}, [opened]);
+			/* 学习库目录没了时最多自愈一次(见过哪个路径就记下来, 免得两边都报不存在时来回弹) */
+			const healTriedRef = useRef('');
 			/* 读一次配置: 学习库那份 + 当前画布自己那份(视野缩放 / 字号 / 配色 / 画布列表 / 移出列表)。
 			 * 视野与字号「按画布各存一份」, 所以进 / 出一张画布要重读一次; 画布那份盖在库那份上面。
 			 * 一级画布列表会 await 这个 promise(libLoadRef); 视野恢复会用到 libZoomRef。 */
@@ -390,6 +392,32 @@ window.__ModuleLoader__.load({
 				libLoadRef.current = (async () => {
 					const file = await readConfig(lib);
 					if (!alive) return file;
+					/* 学习库目录本身不见了(被删 / 移动硬盘没挂上 / 临时目录被系统清了):
+					 * 别再把库这一级的视野、字号、画布清单往那个路径上写 —— 宿主那边现在也会
+					 * 直接挡掉(400 no-such-root), 所以这里先认路: 拿画布列表的共同上一层当候选,
+					 * 它还得真的在、不是画布自己、并且像学习库(有 .config 或 .templates)才算。 */
+					if (file.exists === false && healTriedRef.current !== lib) {
+						healTriedRef.current = lib;
+						const parentOfPath = (value) => {
+							const cut = String(value).replace(/\/+$/, '').lastIndexOf('/');
+							return cut > 0 ? String(value).slice(0, cut) : '';
+						};
+						const paths = readRoots().map((item) => (item && typeof item.path === 'string' ? item.path : '')).filter((path) => path.charAt(0) === '/');
+						const parents = paths.map(parentOfPath);
+						const candidate = parents.length > 0 && parents[0] !== '' && parents[0] !== '/' && parents.every((dir) => dir === parents[0]) && parents[0] !== lib ? parents[0] : '';
+						const probe = candidate === '' ? {} : await readConfig(candidate);
+						if (!alive) return file;
+						if (candidate !== '' && probe.exists !== false && probe.isCanvas !== true && (probe.hasConfig === true || probe.hasTemplates === true)) {
+							writeDefaultRoot(candidate);
+							flash(t('libHealed').split('{path}').join(candidate));
+							setLibRev((value) => value + 1);
+							setLibTick((value) => value + 1);
+							return file;
+						}
+						/* 认不回来就只提醒: 本机原有的视野 / 字号留着(目录回来还能接着用),
+						 * 但这一轮的库级写入会被宿主挡掉, 不会再往幽灵目录里塞东西。 */
+						flash(t('libGone').split('{path}').join(lib));
+					}
 					/* 画布自己那份: 它自己的视野(键就是这张画布的路径) + 字号 */
 					const own = rootPath && rootPath !== lib ? await readConfig(rootPath) : {};
 					if (!alive) return file;
@@ -1260,7 +1288,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 165;
+		const MODULE_VERSION = 167;
 		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
