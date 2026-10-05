@@ -5,8 +5,9 @@
  *   1. 画布列表与每张画布的统计(roots / rootStats);
  *   2. 「移出列表」的墓碑(removed): 磁盘一个文件都不动, 只是本机与库配置里记一笔 —— 本机那份在
  *      localStorage, 库那份走 api 的 readRemoved/writeRemoved;
- *   3. 学习库的配置(<库>/.config/rk-study.json): 视野缩放 / 字号 / 配色 / 画布列表 / 移出列表。
- *      localStorage 也照写一份(打开就能立刻看到), 这个文件负责「换浏览器 / 换机器 / 换人接手时还在」;
+ *   3. 配置: 学习库那一份 <库>/.config/rk-study.json(配色 / 画布列表 / 移出列表 / 一级画布的视野),
+ *      画布自己那一份 <画布>/.config/rk-study.json(它自己的视野 + 字号 —— 跟着画布走)。
+ *      localStorage 也照写一份(打开就能立刻看到), 这两个文件负责「换浏览器 / 换机器 / 换人接手时还在」;
  *      写是 500ms 合并一次的补丁, 一次操作只落一次盘。
  *
  * 依赖一律从外面传进来(deps 里是 React 与 api 模块的成员), 模块之间不互相 import。
@@ -22,9 +23,10 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 		const [rootStats, setRootStats] = useState({});
 		const [rootTick, setRootTick] = useState(0);
 
-		/* 设置一律只留在浏览器 localStorage 里(画布目录里不写配置文件):
-		 * 画布列表 / 上次停在哪张画布 / 移出列表的墓碑 / 字号 / 配色 / 画布还是导图 / 逐项配色 / 导图折叠。
-		 * 视野位置与弹窗位置属于临时状态, 不落盘。 */
+		/* 浏览器 localStorage 是本机即时状态(打开就能立刻看到): 画布列表 / 上次停在哪张画布 /
+		 * 移出列表的墓碑 / 字号 / 配色 / 画布还是导图 / 逐项配色 / 导图折叠。
+		 * 其中视野与字号同时写进 .config 的配置文件(见下面的 saveLib), 其余只在本机。
+		 * 弹窗位置属于临时状态, 不落盘。 */
 
 		/* 「移出列表」的画布 = 墓碑: 扫盘 / 重新扫描 / 导入都不会再加回来; 磁盘一个文件都不动。
 		 * 在同一个路径重新建画布、或重新导入这个库时解除。 */
@@ -43,9 +45,9 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 			writeRemoved(removedRef.current);
 			saveLib({ removed: removedRef.current });
 		};
-		/* 学习库的配置(<库>/.config/rk-study.json): 存视野缩放 / 字号 / 配色 / 画布列表 / 移出列表。
-		 * localStorage 照写一份(打开就能立刻看到), 这个文件负责「换浏览器 / 换机器 / 换人接手时还在」。
-		 * 写是 500ms 合并一次的补丁(一次操作只落一次盘); 还没读到这个文件时先不写, 免得用默认值把它盖掉。 */
+		/* 配置(<库>/.config/rk-study.json 与 <画布>/.config/rk-study.json): 存视野缩放 / 字号 / 配色 /
+		 * 画布列表 / 移出列表。localStorage 照写一份(打开就能立刻看到), 这两个文件负责「换浏览器 / 换机器 /
+		 * 换人接手时还在」。写是 500ms 合并一次的补丁(一次操作只落一次盘); 还没读到文件时先不写, 免得用默认值把它盖掉。 */
 		const [libRev, setLibRev] = useState(0);
 		const [libTick, setLibTick] = useState(0);
 		const libZoomRef = useRef(null);
@@ -54,6 +56,11 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 		const libTimerRef = useRef(0);
 		const toastTimerRef = useRef(0);
 		const libLoadRef = useRef(null);
+		/* 现在停在哪张画布: 视野 / 字号按画布各存一份, 落点由它决定(null = 一级画布 ⇒ 记进学习库那份配置) */
+		const workRootRef = useRef(null);
+		const setWorkRoot = useCallback((root) => {
+			workRootRef.current = typeof root === 'string' && root !== '' ? root : null;
+		}, []);
 		/* 本机已经存过哪些外观设置: 存过就以本机为准(同一个人的即时状态), 没存过(换台机器)才用文件里的 */
 		const hadLocalUiRef = useRef(null);
 		if (hadLocalUiRef.current === null) {
@@ -76,8 +83,39 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 			const lib = readDefaultRoot();
 			const patch = libPatchesRef.current;
 			libPatchesRef.current = {};
-			if (!lib || !libReadyRef.current || Object.keys(patch).length === 0) return;
-			postLibConfig(lib, patch).catch(() => {
+			if (!libReadyRef.current || Object.keys(patch).length === 0) return;
+			/* 视野(zoom)与字号(ui.fontScale)按画布各存一份: 停在哪张画布就写进那张画布自己的
+			 * .config/rk-study.json(跟着画布走); 其余键(canvases / removed / 配色 …)与停在一级画布时的
+			 * 东西一律写学习库那份。zoom 的键是「哪个工作区的视野」: 与本张画布同路径的才归它自己。 */
+			const work = workRootRef.current;
+			const own = {};
+			const rest = {};
+			for (const key of Object.keys(patch)) {
+				if (key !== 'zoom' && key !== 'ui') {
+					rest[key] = patch[key];
+					continue;
+				}
+				if (key === 'zoom') {
+					const zoom = patch.zoom && typeof patch.zoom === 'object' ? patch.zoom : {};
+					for (const name of Object.keys(zoom)) {
+						if (work && name === work) own.zoom = { [name]: zoom[name] };
+						else (rest.zoom = rest.zoom || {})[name] = zoom[name];
+					}
+					continue;
+				}
+				const ui = patch.ui && typeof patch.ui === 'object' ? patch.ui : {};
+				for (const name of Object.keys(ui)) {
+					if (work && name === 'fontScale') (own.ui = own.ui || {})[name] = ui[name];
+					else (rest.ui = rest.ui || {})[name] = ui[name];
+				}
+			}
+			if (work && Object.keys(own).length > 0) {
+				postLibConfig(work, own).catch(() => {
+					/* 画布那份写不动就算了, 本机 localStorage 照样能用 */
+				});
+			}
+			if (!lib || Object.keys(rest).length === 0) return;
+			postLibConfig(lib, rest).catch(() => {
 				/* 写不动就算了, 本机 localStorage 照样能用 */
 			});
 		}, []);
@@ -195,6 +233,7 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 			hadLocalUiRef,
 			flushLib,
 			saveLib,
+			setWorkRoot,
 			saveRoots,
 			fontScale,
 			setFontScale,

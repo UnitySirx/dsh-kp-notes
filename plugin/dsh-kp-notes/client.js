@@ -161,6 +161,7 @@ window.__ModuleLoader__.load({
 				saveLib,
 				saveRoots,
 				flushLib,
+				setWorkRoot,
 				fontScale,
 				setFontScale,
 				zoomRef,
@@ -195,6 +196,11 @@ window.__ModuleLoader__.load({
 				enterRoot, leaveRoot, openNewRoot, openRenameRoot, canvasParent, probeRoot, forgetRoot,
 				submitRootDialog, openImportLib, chooseLibraryDir, runImportLib, renderLibraryDialog,
 			} = useRoots({ t, storeBag, setRootPath, rootPath, dirPicker });
+			/* 视野 / 字号按画布各存一份: 告诉 store 现在停在哪张画布(null = 一级画布 ⇒ 记进学习库那份配置)。
+			 * 这条 effect 得排在下面「读配置」那条前面, 免得进画布后第一次写入还按上一张画布的落点算。 */
+			useEffect(() => {
+				setWorkRoot(rootPath);
+			}, [rootPath, setWorkRoot]);
 			const [binDialog, setBinDialog] = useState(null); /* 回收站面板: { busy, data, error } */
 
 			/* 回收站只有两层看它:
@@ -366,7 +372,8 @@ window.__ModuleLoader__.load({
 					/* 存储不可用就算了 */
 				}
 			}, [opened]);
-			/* 读一次学习库的配置: 视野缩放 / 字号 / 配色 / 画布列表 / 移出列表。
+			/* 读一次配置: 学习库那份 + 当前画布自己那份(视野缩放 / 字号 / 配色 / 画布列表 / 移出列表)。
+			 * 视野与字号「按画布各存一份」, 所以进 / 出一张画布要重读一次; 画布那份盖在库那份上面。
 			 * 一级画布列表会 await 这个 promise(libLoadRef); 视野恢复会用到 libZoomRef。 */
 			useEffect(() => {
 				const lib = readDefaultRoot();
@@ -379,40 +386,50 @@ window.__ModuleLoader__.load({
 					return undefined;
 				}
 				let alive = true;
-				libLoadRef.current = fetchLibConfig(lib)
-					.then((saved) => {
-						const file = saved && typeof saved === 'object' ? saved : {};
-						if (!alive) return file;
-						libZoomRef.current = file.zoom && typeof file.zoom === 'object' ? file.zoom : {};
-						/* 移出列表取并集: 墓碑宁多勿少 */
-						let changed = false;
-						for (const path of Array.isArray(file.removed) ? file.removed : []) {
-							if (typeof path !== 'string' || path.charAt(0) !== '/' || removedRef.current.indexOf(path) >= 0) continue;
-							removedRef.current = removedRef.current.concat([path]);
-							changed = true;
+				const readConfig = (root) => fetchLibConfig(root).then((saved) => (saved && typeof saved === 'object' ? saved : {})).catch(() => ({}));
+				libLoadRef.current = (async () => {
+					const file = await readConfig(lib);
+					if (!alive) return file;
+					/* 画布自己那份: 它自己的视野(键就是这张画布的路径) + 字号 */
+					const own = rootPath && rootPath !== lib ? await readConfig(rootPath) : {};
+					if (!alive) return file;
+					const zoom = Object.assign({}, file.zoom && typeof file.zoom === 'object' ? file.zoom : {});
+					const ownZoom = own.zoom && typeof own.zoom === 'object' ? own.zoom : null;
+					if (rootPath && ownZoom) {
+						if (ownZoom[rootPath] && typeof ownZoom[rootPath] === 'object') zoom[rootPath] = ownZoom[rootPath];
+						else {
+							const views = Object.keys(ownZoom).filter((key) => ownZoom[key] && typeof ownZoom[key] === 'object');
+							/* 画布被整个拷到别的路径: 那份配置里只有一条视野就认它, 否则退回按路径合并 */
+							if (views.length === 1) zoom[rootPath] = ownZoom[views[0]];
+							else Object.assign(zoom, ownZoom);
 						}
-						if (changed) writeRemoved(removedRef.current);
-						/* 字号 / 配色: 本机存过就以本机为准, 没存过(换台机器)才用文件里的 */
-						const ui = file.ui && typeof file.ui === 'object' ? file.ui : {};
-						const had = hadLocalUiRef.current || {};
-						if (!had.fontScale && FONT_STEPS.indexOf(Number(ui.fontScale)) >= 0) setFontScale(Number(ui.fontScale));
-						if (!had.skin && typeof ui.skin === 'string' && ui.skin !== '') setSkin(ui.skin);
-						if (!had.theme && typeof ui.theme === 'string') setTheme(ui.theme === 'follow' || ui.theme === 'light' || ui.theme === 'auto' ? 'follow' : 'plugin');
-						if (!had.cardColors && typeof ui.cardColors === 'boolean') setCardColors(ui.cardColors);
-						libReadyRef.current = true;
-						setLibTick((value) => value + 1);
-						/* 顺手把这个库当前的画布列表写回去(文件不存在就建出来) */
-						postLibConfig(lib, { canvases: readRoots() }).catch(() => {});
-						return file;
-					})
-					.catch(() => {
-						libReadyRef.current = true;
-						return {};
-					});
+					}
+					libZoomRef.current = zoom;
+					/* 移出列表取并集: 墓碑宁多勿少 */
+					let changed = false;
+					for (const path of Array.isArray(file.removed) ? file.removed : []) {
+						if (typeof path !== 'string' || path.charAt(0) !== '/' || removedRef.current.indexOf(path) >= 0) continue;
+						removedRef.current = removedRef.current.concat([path]);
+						changed = true;
+					}
+					if (changed) writeRemoved(removedRef.current);
+					/* 字号 / 配色: 本机存过就以本机为准, 没存过(换台机器)才用文件里的; 画布那份盖在库那份上 */
+					const ui = Object.assign({}, file.ui && typeof file.ui === 'object' ? file.ui : {}, own.ui && typeof own.ui === 'object' ? own.ui : {});
+					const had = hadLocalUiRef.current || {};
+					if (!had.fontScale && FONT_STEPS.indexOf(Number(ui.fontScale)) >= 0) setFontScale(Number(ui.fontScale));
+					if (!had.skin && typeof ui.skin === 'string' && ui.skin !== '') setSkin(ui.skin);
+					if (!had.theme && typeof ui.theme === 'string') setTheme(ui.theme === 'follow' || ui.theme === 'light' || ui.theme === 'auto' ? 'follow' : 'plugin');
+					if (!had.cardColors && typeof ui.cardColors === 'boolean') setCardColors(ui.cardColors);
+					libReadyRef.current = true;
+					setLibTick((value) => value + 1);
+					/* 顺手把这个库当前的画布列表写回去(文件不存在就建出来) */
+					postLibConfig(lib, { canvases: readRoots() }).catch(() => {});
+					return file;
+				})();
 				return () => {
 					alive = false;
 				};
-			}, [libRev]);
+			}, [libRev, rootPath]);
 			/* 启动时把落盘那份状态补进 localStorage: 只补「本机没有」的键(本机存过的以本机为准),
 			 * 画布列表与墓碑取并集。补完踢一次 libRev / rootTick, 让「读库配置」与扫盘按新状态重跑。 */
 			const stateReadyRef = useRef(false);
@@ -1243,7 +1260,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 164;
+		const MODULE_VERSION = 165;
 		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 

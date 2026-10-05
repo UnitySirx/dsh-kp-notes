@@ -65,7 +65,7 @@ dsh plugin --profile <profile 名> add dsh-kp-notes
 2. **写笔记**：在 `notes/` 下按约定建目录与 markdown 文件（见下一节），或者直接在面板里点 `＋ 新建章节` / `＋ 新建小节` / `＋ 新建知识点` / `＋ 添加题目`。
 3. **看画布**：章节卡 → 点小节 → 右侧知识点卡片墙 → 点知识点看说明与题目；答案默认遮挡，点一下展开。
 
-> 笔记目录里**不写任何配置文件**（只有学习库那一级会有一份 `.config/rk-study.json` 和共用的 `.templates/`）：字号、配色、视野这类状态只存在浏览器与学习库里，进 git 的永远是纯粹的 markdown。
+> 笔记目录（`notes/` / `questions/`）里**不写任何配置文件**：字号、配色、视野这类状态只存在浏览器、学习库那一级的 `.config/rk-study.json`，以及每张画布自己目录下那份 `.config/rk-study.json`（只记**这张画布**的视野与字号），笔记文件永远是纯粹的 markdown。
 
 ## 目录
 
@@ -104,7 +104,7 @@ dsh plugin --profile <profile 名> add dsh-kp-notes
       └─ 02-04-敏感点-权衡点-风险点.md            ← 知识点 02-04 的题目
 ```
 
-> 挂在**学习库**下的画布（父目录里还有别的画布，例如 `~/Notes/系统架构师/`）自己**不会**有 `.templates/`、也**不会**有 `.config/`：模板统一放学习库根目录那一份，设置在库级的 `.config/rk-study.json` 里（见下面「学习库」与「设置存在哪」）。只有**自带根目录的画布**（不挂在任何学习库下）才会在它自己目录下建 `.templates/`。
+> 挂在**学习库**下的画布（父目录里还有别的画布，例如 `~/Notes/系统架构师/`）自己**不会**有 `.templates/`：模板统一放学习库根目录那一份。它自己的目录下会有一份 `.config/`，但只放**这张画布自己**的东西 —— 视野与字号（`rk-study.json`）、发号计数器（同一个文件里的 `seq`）与号池（`rk-study-uids.json`）；画布清单、库级字号配色这类库级状态仍在库根目录那份里（见下面「学习库」与「设置存在哪」）。只有**自带根目录的画布**（不挂在任何学习库下）才会在它自己目录下建 `.templates/`。
 
 `notes/`、`questions/` 是**相对画布根目录**的路径（不是相对插件仓库）。插件仓库里没有这两个目录：一个画布一个根目录，各自独立、也各自独立 `git`。
 
@@ -343,7 +343,7 @@ D. 非风险点
 
 ## 四、画布操作
 
-> 章节图是一块可以自由平移、缩放的画布：**所有章节卡排成一行、不换行**（顺序就是章节顺序），所以「复位」/双击空白会把这一整行缩放到刚好铺满可视区；只有当前视野按工作区记在浏览器本地（`localStorage` 的 `rk-canvas:<工作区路径>`），刷新后保持原样；一级画布（学习库）的视野还会同时写进 `<库>/.config/rk-study.json` 的 `zoom`，换浏览器也回到同一处。
+> 章节图是一块可以自由平移、缩放的画布：**所有章节卡排成一行、不换行**（顺序就是章节顺序），所以「复位」/双击空白会把这一整行缩放到刚好铺满可视区；当前视野同时记两处 —— 浏览器本地（`localStorage` 的 `rk-canvas:<工作区路径>`，刷新后立刻保持）与配置文件：**一级画布**的视野写进 `<库>/.config/rk-study.json` 的 `zoom.roots`，**某张画布**的视野写进**它自己**的 `<画布>/.config/rk-study.json` 的 `zoom`（键就是这张画布的绝对路径）。换浏览器 / 换机器都回到同一处；画布那份还会跟着画布目录一起被拷到别处（里面只有一条视野时，换个路径也认得出它）。
 >
 > 视图缩放是**纯视觉**的：`.rk-plane` 上用 `transform: translate(x, y) scale(s)`，**排版完全不动** —— 同一篇正文在任何缩放下，换行位置和节点高度都逐字节一样（实测 4 档缩放一致）。曾经为了「文字更锐利」改用过 CSS `zoom`，但 `zoom` 会让浏览器**按缩放后的字号重新排版**，盒子边缘还要向像素栅格取整（缩放越小取整误差越大，1/zoom 个布局像素）⇒ 宽度抖动几个像素 ⇒ 长段落偶尔多折一行、代码块的横向滚动条槽变高 ⇒ 越缩小节点越高。整数设备像素比（Retina dpr 2）下 `transform: scale` 的静态清晰度与 `zoom` 目视无差别，所以**缩小时**选排版稳定。但**小数设备像素比**（系统「显示缩放」1.5 倍之类）下 `transform` 的位图重采样会让文字发虚 —— 实测 dpr 1.5、放大 2 倍时 `zoom` 的笔画明显更实（1:1 裁剪对比 `/tmp/rk186-A-transform.png` vs `/tmp/rk186-B-zoom.png`）⇒ **导图的平面在放大到 1 倍以上时改用 CSS `zoom`**（一屏只有一片正文，重排可以接受）；1 倍及以下仍用 `transform`，缩小时的排版稳定不变。**画布用同一套规则**（放大到 1 倍以上也改用 `zoom`，实测 1.146→2.262 时卡片宽度 428→490→561→643→736→845＝374×缩放比、间距 18→22→26→29→34→37＝16×缩放比，不重叠不跳变；`zoom` 不影响卡片的布局宽度，只让盒内文字按新字号重排，画布「量一次真实卡片高度」的逻辑会自动跟上）。平移量仍按设备像素对齐，画布只在平移的那一瞬间提升为合成层（`will-change` 用完即撤）。
 >
@@ -417,11 +417,11 @@ D. 非风险点
 - 画布卡片是**穿透**的：卡片空白处按住鼠标 = 直接拖动画布（`pointer-events:none`，指针事件落到 canvas 上），卡片上的文字也不可选中（`user-select:none`）；只有真正要执行事件的部件（`进入画布 ›` 与 `改名` / `移出列表` 按钮）照旧接收鼠标（`pointer-events:auto`）。`＋ 新建学习画布` 那张虚线卡本身就是按钮，仍然整块可点。
 - 列表、手动移出的墓碑、以及一级画布上的字号 / 配色，都记在 `localStorage`（`rk-study:roots` / `rk-study:removed-roots` / `rk-study:font-scale` / `rk-study:skin`）；「当前在哪张画布」只活在这一个页面会话里，打开 / 刷新都从**一级画布**（全部画布总览）开始；**学习库那一级**的这些状态还会写进 `<库>/.config/rk-study.json`（`canvases` / `ui` / `zoom`；移出记录单独放同目录的 `.config/rk-study-removed.json`），所以换浏览器、换机器、重装插件，导入同一个库就能把画布列表与移出记录读回来；每个画布的统计与 Git 范围都只算当前这个根目录。
 
-实现上，客户端把当前根目录加在所有请求上（`?root=<绝对路径>`），Host 半只在**学习库那一级**落一个配置文件 `<库>/.config/rk-study.json`（单张画布的笔记目录一个字节都不写，见「设置存在哪」一节）：`plugin/dsh-kp-notes/lib/routes.js` 用 `node:async_hooks` 的 `AsyncLocalStorage` 做**请求级 root** —— 每个请求进来先算出它自己的 `{...基础配置, root}`，配置对象与 1 秒缓存都按 root 分桶（同一秒里读两个画布不会串），其余逻辑一行没改。新增四个接口：`GET /rk-study/roots`（默认根、建议父目录 `suggestParent`、宿主常用的 `home` / `desktop`、某个目录自己是不是画布 `isCanvas`，以及 `notes`/`questions`/模板目录约定）与 `POST /rk-study/roots`（建目录骨架 / 导入 / 改名，返回 `created` / `templates`），以及 `GET` / `POST /rk-study/config`（读写**学习库那一级**的 `.config/rk-study.json`，`POST` 发现目标根自己有 `notes/` 就回 400 `not-a-library`；`removed` 移出列表另存同目录的 `rk-study-removed.json`，读写仍走这个接口），还有 `GET` / `POST /rk-study/state`（插件级状态的镜像文件 `<DSH_HOME>/rk-study/state.json`：`GET` 读回 `roots` / `defaultRoot` / `removed`，`POST` 清洗这三项后与旧文件**合并**再落盘（老版本存过的 `activeRoot` 一律忽略，并在写盘时删掉），返回写进去的 `keys`）。路径会校验：必须是绝对路径、不含 `..`、长度受限，不合法的 `root` 参数回退到默认根。
+实现上，客户端把当前根目录加在所有请求上（`?root=<绝对路径>`），Host 半按 root 落配置文件分两级 —— **学习库那一级**是 `<库>/.config/rk-study.json`（画布清单 / 移出记录 / 库级字号配色 / 一级画布视野），**每张画布自己**那一级是 `<画布>/.config/rk-study.json`（只放这张画布的视野与字号 + 发号计数器；笔记目录 `notes/` 里一个字节都不写，见「设置存在哪」一节）：`plugin/dsh-kp-notes/lib/routes.js` 用 `node:async_hooks` 的 `AsyncLocalStorage` 做**请求级 root** —— 每个请求进来先算出它自己的 `{...基础配置, root}`，配置对象与 1 秒缓存都按 root 分桶（同一秒里读两个画布不会串），其余逻辑一行没改。新增四个接口：`GET /rk-study/roots`（默认根、建议父目录 `suggestParent`、宿主常用的 `home` / `desktop`、某个目录自己是不是画布 `isCanvas`，以及 `notes`/`questions`/模板目录约定）与 `POST /rk-study/roots`（建目录骨架 / 导入 / 改名，返回 `created` / `templates`），以及 `GET` / `POST /rk-study/config`（读写那一级的 `.config/rk-study.json`：学习库那一级照单全收；请求的 root 自己有 `notes/` 时按**画布**对待，只收 `ui` / `zoom` 两个键，`canvases` / `seq` 这类库级键一律丢掉，免得画布那份把库级状态写歪 —— 见 `routes.js` 的 `canvasConfigPatch`；`removed` 移出列表另存同目录的 `rk-study-removed.json`，读写仍走这个接口），还有 `GET` / `POST /rk-study/state`（插件级状态的镜像文件 `<DSH_HOME>/rk-study/state.json`：`GET` 读回 `roots` / `defaultRoot` / `removed`，`POST` 清洗这三项后与旧文件**合并**再落盘（老版本存过的 `activeRoot` 一律忽略，并在写盘时删掉），返回写进去的 `keys`）。路径会校验：必须是绝对路径、不含 `..`、长度受限，不合法的 `root` 参数回退到默认根。
 
 ### 设置存在哪
 
-**单张画布的笔记目录里不写任何配置文件**。设置分三处存：**即时状态**在浏览器 `localStorage`（打开就立刻生效），**画布清单 / 字号配色 / 一级画布视野**还会写一份到**学习库目录**下的 `.config/rk-study.json`（换浏览器 / 换机器也读得回来），插件再把「画布列表 / 学习库（新画布的父目录）/ 移出墓碑」三项镜像到宿主侧的 `<DSH_HOME>/rk-study/state.json`（`DSH_HOME` 默认 `~/.dsh`）。
+**单张画布的笔记目录（`notes/` 那一层）里不写任何配置文件**。设置分四处存：**即时状态**在浏览器 `localStorage`（打开就立刻生效）；**画布清单 / 移出记录 / 库级字号配色 / 一级画布视野**写一份到**学习库目录**下的 `.config/rk-study.json`；**某张画布自己的视野与字号**（跟着画布走）写进**这张画布目录**下的 `.config/rk-study.json`；「画布列表 / 学习库（新画布的父目录）/ 移出墓碑」三项再由插件镜像到宿主侧的 `<DSH_HOME>/rk-study/state.json`（`DSH_HOME` 默认 `~/.dsh`）。
 
 第三份（`state.json`）解决的是「重启系统后要重新导入目录」：浏览器 `localStorage` 是空的（清过缓存 / 换了浏览器 / 宿主换了端口），客户端启动时会先读这份文件，**只补齐 `localStorage` 里缺的键**（画布列表与墓碑取并集），补齐后再走原来的恢复链，所以画布列表会自己回来，不用手动 `⇪ 导入目录`。之后客户端每 900ms 比对一次这三项的快照，变了才 `POST /rk-study/state` 写回（Host 端是**合并写**：只覆盖这三个键 + `updatedAt`，不动文件里别的字段）。
 
@@ -441,32 +441,44 @@ D. 非风险点
 ```
 <学习库>/
 ├─ .config/
-│  └─ rk-study.json     ← 画布清单 / 移出记录 / 字号配色 / 一级画布视野
+│  └─ rk-study.json     ← 画布清单 / 移出记录 / 库级字号配色 / 一级画布视野
 ├─ .templates/          ← 库里共用的模板（导入 / 新建画布时建）
 ├─ .remove/20261004/    ← 「移出列表」的画布目录整份移到这里（按天开桶；想恢复就移回上一层）
-└─ <各张画布>/           ← 每张画布 = 一个目录（自己不再有 .config）
+└─ <各张画布>/           ← 每张画布 = 一个目录
+   └─ .config/
+      ├─ rk-study.json        ← 这张画布自己的视野 / 字号 + 发号计数器 seq
+      └─ rk-study-uids.json   ← 这张画布自己的号池（画布与它下面章节的号）
 ```
 
 | `.config/rk-study.json` 键 | 内容 | 说明 |
 | --- | --- | --- |
 | `version` | 格式版本 | 目前是 `1` |
-| `ui.fontScale` / `ui.skin` / `ui.cardColors` / `ui.theme` | 字号 / 配色 / 卡片各用一色 / 主题（`plugin` / `follow`） | 在一级画布上改就写这里；进某张画布后改的仍只记本机 |
-| `zoom.roots` | 一级画布的视野 | `{ "x": …, "y": …, "scale": … }`；每张画布各自的视野记 `localStorage`（工作区路径因机器而异，不适合写进库里那份） |
+| `ui.fontScale` / `ui.skin` / `ui.cardColors` / `ui.theme` | 库级的字号 / 配色 / 卡片各用一色 / 主题（`plugin` / `follow`） | **在一级画布（学习库这一级）上改**就写这里；进某张画布后改的字号写它自己那份 `.config`（下面那张表），配色 / 主题仍走库级 |
+| `zoom.roots` | **一级画布**的视野 | `{ "x": …, "y": …, "scale": … }`；某张画布自己的视野写进它那份 `<画布>/.config`（键是这张画布的绝对路径），浏览器里的 `rk-canvas:<工作区路径>` 只是本机的即时副本 |
 | `canvases` | 画布清单 | `[{ "path": "…", "name": "…" }]`，`name` 只是副本，真正的名字仍是磁盘目录名 |
 | `uid` | 这个库自己的编号 | 给「一张画布自成一库」时记下这张画布的号 |
 | `seq` | 发号计数器 | `{ "canvas": …, "chapter": …, "section": …, "point": …, "question": … }`，只增不减（号不复用的根据） |
+
+**每张画布自己那一份**（`<画布>/.config/rk-study.json`）只有它自己的三样东西 —— 视野、字号、发号计数器：
+
+| `<画布>/.config/rk-study.json` 键 | 内容 | 说明 |
+| --- | --- | --- |
+| `version` | 格式版本 | 目前是 `1` |
+| `zoom` | **这张画布**的视野 | `{ "<画布绝对路径>": { "x": …, "y": …, "scale": … } }`；键就是画布自己的绝对路径，所以画布被整个拷到别处后仍认得出（那份配置里只有一条视野时，换个路径也认它） |
+| `ui.fontScale` | **这张画布**的字号 | 在画布里改字号写这里；配色 / 主题 / 卡片各用一色仍只走库级那份 |
+| `seq` | 发号计数器 | 与库级那份同名同义，各记各的 |
 
 号池是**单独一个文件**（跟 `rk-study.json` 同一个 `.config/`）：`rk-study-uids.json`，内容 `{ "version": 1, "uids": { 绝对路径: 编号 } }` —— 画布与章节的号都在这儿；小节 / 知识点的号平时写在 markdown 的 frontmatter 里，只有「老笔记还没被保存过」时先在号池里按路径挂一个（保存后就摘掉）。老版本混在 `rk-study.json` 里的 `uids` 会被自动搬到这个文件（见上面「编号」一段），`rk-study.json` 里的老键随之摘掉。
 
 移出列表（墓碑）同样是**单独一个文件**（同一个 `.config/`）：`rk-study-removed.json`，内容 `{ "version": 1, "removed": [绝对路径] }` —— 客户端每次送的是**完整名单**，所以写就是整份替换（空数组 = 全部解除）。这个文件一旦建出来它就是权威：即使 `rk-study.json` 里还留着老键也不再并进来（不然「取消墓碑」会被那条老记录重新加回来）；老版本混在 `rk-study.json` 里的 `removed` 照读，第一次写时自动搬过去并把老键摘掉。
 
-写入是**深合并**：`POST /rk-study/config` 只带要改的键（例如 `{"ui":{"fontScale":130}}`），值给 `null` 就删掉那个键；文件不存在会自动连 `.config/` 一起建。**单张画布一个字节都不写**：目标根自己有 `notes/` 时直接回 400 `not-a-library`。
+写入是**深合并**：`POST /rk-study/config` 只带要改的键（例如 `{"ui":{"fontScale":130}}`），值给 `null` 就删掉那个键；文件不存在会自动连 `.config/` 一起建。**写哪一级由目标根决定**：目标根自己有 `notes/`（说明它是张画布）时就只收 `ui` / `zoom` 两类键 —— `routes.js` 的 `canvasConfigPatch` 会把 `canvases` / `removed` / `seq` 这些库级键滤掉，所以画布那份 `.config` 只会长它自己的视野与字号，发号器写在里面的 `seq` 与号池文件 `rk-study-uids.json` 原样保留（老版本对画布回 400 `not-a-library`，现在放开了）。
 
-- **为什么只写在「学习库」这一级**：库目录是**你自己选的项目根**，「这个库有哪些画布 / 移出过哪些 / 看的时候习惯多大多小」记在它下面最自然 —— 换浏览器、换机器、重装插件，导入同一个库就全都回来了。而**每张画布的笔记目录**（`notes/` 那一层）一个字节都不写：笔记进 git 时不会因为字号、视野这类状态变化而互相冲突。
+- **为什么库级与画布级各写一份**：库目录是**你自己选的项目根**，「这个库有哪些画布 / 移出过哪些 / 库这一级习惯多大多小」记在它下面最自然 —— 换浏览器、换机器、重装插件，导入同一个库就全都回来了。而**某张画布**的视野与字号记在**它自己**目录下：把这张画布拷到别的库 / 别的机器上，视野与字号跟着它走（`localStorage` 的键名带着工作区路径，换台机器就对不上，所以配置文件才是它的「真身」）。无论哪一级，**笔记目录**（`notes/` 那一层）与笔记文件本身一个字节都不写：笔记进 git 时不会因为字号、视野这类状态变化而互相冲突。
 - **画布名就是目录名，不写进配置**：名字只有一个来源，就是磁盘上的目录名。卡片上「改名」走的是 `POST /rk-study/roots {action:"rename"}`：Host 半直接把目录 `rename` 掉再返回新路径，客户端把列表里的路径换成新的。所以换浏览器 / 换机器 / 重新 `⇪ 导入目录`，显示的都是目录名；直接改目录名也一样有效。名字会校验（不能为空、不能含 `/`、不能以 `.` 开头）与查重（同一层已有同名目录就报 `name-taken`，弹窗不关、磁盘不动）。
-- **画布目录里只剩下 `notes/` 与 `questions/`**（老画布可能还有 `notes/.templates/`）：模板是给人编辑的 markdown（见上面「模板共用规则」），统一放**学习库根目录**的 `.templates/`；库根目录下还会有 `.config/rk-study.json`（上面那份 json，界面设置）与它旁边的 `.config/rk-study-uids.json`（号池）、`.config/rk-study-removed.json`（移出列表的墓碑）。点开头的目录扫描会跳过、也不会被当成一章。`⎇ Git 提交` 现在只在一级画布上、范围是整个学习库，所以这两样（以及库根目录下别的改动）都会在「仅提交」时一起进版本库 —— 除非 `.gitignore` 排除。
+- **画布目录里除了 `notes/` 与 `questions/`，只有一个 `.config/`**（老画布可能还有 `notes/.templates/`）：模板是给人编辑的 markdown（见上面「模板共用规则」），统一放**学习库根目录**的 `.templates/`；画布自己的 `.config/` 里就是上面那两张表里的画布那份 —— `rk-study.json`（这张画布的视野 / 字号 / `seq`）与 `rk-study-uids.json`（号池）。库根目录下另有一份 `.config/`：`rk-study.json`（画布清单 / 库级字号配色 / 一级画布视野）、`rk-study-uids.json`（库这一级与各画布的号池）、`rk-study-removed.json`（移出列表的墓碑）。点开头的目录扫描会跳过、也不会被当成一章。`⎇ Git 提交` 现在只在一级画布上、范围是整个学习库，所以这两样（以及库根目录下别的改动）都会在「仅提交」时一起进版本库 —— 除非 `.gitignore` 排除。
 - **想覆盖插件配置**（目录名 / 排除 / 扫描深度 / AI 模型）：改插件自己的 `plugin/dsh-kp-notes/cordis.patch.yml`，不再支持「按画布覆盖」。
-- **一级画布的视野（平移 / 缩放）**写进库的 `.config`（跨浏览器保持）；**单张画布内的视野**与**全屏开关**只在浏览器里，不落盘。
+- **视野（平移 / 缩放）两级各写一份**：**一级画布的视野**写进库的 `.config`（`zoom.roots`，跨浏览器保持），**单张画布内的视野**写进这张画布自己的 `<画布>/.config/rk-study.json`（键是画布路径，跟着画布走）；两者在浏览器里都还有一份即时的 `localStorage`（`rk-canvas:roots` / `rk-canvas:<画布路径>`，刷新先用本机这份）。只有**全屏开关**不落盘。
 
 ## 五、插件实现
 
@@ -486,7 +498,7 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 | --- | --- | --- |
 | `constants.js` | 127 | 路由/资源路径、默认值与上限、路径与标题的正则 |
 | `util.js` | 283 | 目录名归一化、路径换算、标题与标签清洗、frontmatter、摘要、模板/库路径（`templateDirOf` / `sharedTemplateDirOf` / `libraryDirOf`）、`validateRoot` |
-| `libconfig.js` | 346 | 学习库级 `.config/rk-study.json` 的读写：键清洗（`ui` / `zoom` / `canvases` / `uid` / `seq`）、深合并（`null` 删键）、1 秒缓存，`/rk-study/config` 与 uid 发号器共用；两份「机器账本」各自另立文件 —— 号池 `uidConfigPathOf`（`<库>/.config/rk-study-uids.json`）/ `readUidStore`（号池优先，老配置里的 `uids` 只用来补缺、并被照读）/ `writeUidStore`（只写号池，写完顺手把老配置里那份 `uids` 摘掉，完成迁移），移出列表 `removedConfigPathOf`（`<库>/.config/rk-study-removed.json`）/ `readRemovedStore`（独立文件是权威，老键只在文件还没建出来时才认）/ `writeRemovedStore`（整份替换，写完把老配置里的 `removed` 摘掉），各有自己的 1 秒缓存 |
+| `libconfig.js` | 346 | 那一级的 `.config/rk-study.json` 读写（学习库那份与画布自己那份共用同一套代码，写哪一级由调用方给的 root 决定）：键清洗（`ui` / `zoom` / `canvases` / `uid` / `seq`；画布那级由 `routes.js` 的 `canvasConfigPatch` 只放行 `ui` / `zoom`）、深合并（`null` 删键）、1 秒缓存，`/rk-study/config` 与 uid 发号器共用；两份「机器账本」各自另立文件 —— 号池 `uidConfigPathOf`（`<库>/.config/rk-study-uids.json`）/ `readUidStore`（号池优先，老配置里的 `uids` 只用来补缺、并被照读）/ `writeUidStore`（只写号池，写完顺手把老配置里那份 `uids` 摘掉，完成迁移），移出列表 `removedConfigPathOf`（`<库>/.config/rk-study-removed.json`）/ `readRemovedStore`（独立文件是权威，老键只在文件还没建出来时才认）/ `writeRemovedStore`（整份替换，写完把老配置里的 `removed` 摘掉），各有自己的 1 秒缓存 |
 | `uid.js` | 262 | 编号发号器：`ensureUids`（按路径批量发号，一次调用只写一次配置）/ `uidsFor`（只读）/ `moveUid`（改名搬号）/ `dropUids`（摘号，计数器不回退）/ `adoptUids`（恢复时认回）/ `takeUid`（只发号不记路径，给小节 / 知识点写进 frontmatter）/ `adoptUid`（认下文件里已有的号并把计数器抬上去）/ `uidFromText` 与 `withUidText`（从 markdown 里读号 / 把号写进 frontmatter）/ `formatUid` / `isUid`；号表读写的都是号池文件（`readUidStore` / `writeUidStore`），只有 `seq` 计数器还留在 `.config/rk-study.json` 里 |
 | `headings.js` | 156 | 扫标题（跳过代码围栏）、建标题树、子树范围、节点正文 |
 | `parse.js` | 224 | 一个 markdown 文件 → 小节/知识点/题目 的结构 |

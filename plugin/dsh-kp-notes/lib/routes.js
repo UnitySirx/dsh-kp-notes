@@ -6,21 +6,21 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot)。 */
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 
-import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=70';
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MEDIA_DIR_SUFFIX, MEDIA_MAX_BYTES, MEDIA_PARENT_DIR, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=70';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=70';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=70';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=70';
-import { buildNodes, scanHeadings } from './headings.js?v=70';
-import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=70';
-import { parseDocument } from './parse.js?v=70';
-import { pointRegion, rebuildPoint } from './points.js?v=70';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=70';
-import { buildCatalog } from './scan.js?v=70';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=70';
-import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=70';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=70';
-import { readBody, safePath, writeMarkdown } from './write.js?v=70';
+import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=71';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MEDIA_DIR_SUFFIX, MEDIA_MAX_BYTES, MEDIA_PARENT_DIR, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=71';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=71';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=71';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=71';
+import { buildNodes, scanHeadings } from './headings.js?v=71';
+import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=71';
+import { parseDocument } from './parse.js?v=71';
+import { pointRegion, rebuildPoint } from './points.js?v=71';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=71';
+import { buildCatalog } from './scan.js?v=71';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=71';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=71';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=71';
+import { readBody, safePath, writeMarkdown } from './write.js?v=71';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -1762,32 +1762,40 @@ export function apply(ctx, rawConfig) {
 		}
 	}
 
-	/* 学习库的配置: <库>/.config/rk-study.json —— 缩放 / 字号 / 配色 / 画布列表。
+	/* 画布那一级的配置只留「视野 / 外观」两类键: zoom(这张画布的视野) 与 ui(字号…) */
+	function canvasConfigPatch(body) {
+		const keep = {};
+		if (body && typeof body === 'object') {
+			if (body.ui && typeof body.ui === 'object' && !Array.isArray(body.ui)) keep.ui = body.ui;
+			if (body.zoom && typeof body.zoom === 'object' && !Array.isArray(body.zoom)) keep.zoom = body.zoom;
+		}
+		return keep;
+	}
+
+	/* 配置: 学习库那一份在 <库>/.config/rk-study.json(配色 / 画布列表 / 一级画布的视野),
+	 * 画布自己那一份在 <画布>/.config/rk-study.json(它自己的视野 / 字号 —— 跟着画布走, 换机器 / 换浏览器照它恢复)。
 	 * 移出列表(墓碑)跟号表一样住在同目录自己的文件里: <库>/.config/rk-study-removed.json,
 	 * 客户端 POST 名单、GET 时跟配置一起返回(客户端那半只认 config.removed 这一个入口)。
-	 * 客户端带 ?root=<库绝对路径> 调它; 没带时退回插件自己的默认根目录(也就是默认学习库)。
+	 * 客户端带 ?root=<绝对路径> 调它; 没带时退回插件自己的默认根目录(也就是默认学习库)。
 	 * GET 读一份; POST 是「合并写」(深合并且不覆盖同层的其它键), 返回合并后的完整配置。 */
 	async function configHandler(req, res) {
 		try {
 			const method = (req.method || 'GET').toUpperCase();
 			const lib = config.root;
-			/* 安全阀: 画布自己(里面有 notes/)不接受配置写入 —— 配置只属于学习库那一级 */
-			const selfCanvas = await pathExists(`${lib}/${baseConfig.noteDir}`);
 			if (method === 'GET' || method === 'HEAD') {
 				const base = await readLibConfig(ctx, lib);
 				sendJson(res, 200, { ok: true, root: lib, path: configPathOf(lib), config: { ...base, removed: await readRemovedStore(ctx, lib) } });
 				return;
 			}
 			if (method === 'POST') {
-				if (selfCanvas) {
-					sendJson(res, 400, { error: 'not-a-library', root: lib, message: '配置只写在学习库目录，不写进画布' });
-					return;
-				}
+				/* 画布自己(里面有 notes/)也有自己那份配置, 但只收 ui / zoom —— canvases(画布清单) /
+				 * removed(移出列表) / uid / seq 属于学习库那一级, 在画布上写会被丢掉(免得两张画布互相覆盖)。 */
+				const selfCanvas = await pathExists(`${lib}/${baseConfig.noteDir}`);
 				const patch = await readBody(req, MAX_BODY_BYTES);
 				const body = patch && typeof patch === 'object' && !Array.isArray(patch) ? { ...patch } : {};
 				const hasRemoved = Object.prototype.hasOwnProperty.call(body, 'removed');
 				if (hasRemoved) delete body.removed;
-				const merged = await writeLibConfig(ctx, lib, body);
+				const merged = await writeLibConfig(ctx, lib, selfCanvas ? canvasConfigPatch(body) : body);
 				merged.removed = hasRemoved ? await writeRemovedStore(ctx, lib, patch.removed) : await readRemovedStore(ctx, lib);
 				sendJson(res, 200, {
 					ok: true,
