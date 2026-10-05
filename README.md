@@ -497,7 +497,7 @@ D. 非风险点
 | --- | --- |
 | `plugin/dsh-kp-notes/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
 | `plugin/dsh-kp-notes/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
-| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（1448 行，含回收站面板与那块 `panelRoot` JSX）；数据层 / 持久化 / 配色主题 / Git 面板 / 画布目录与导入 / 编辑动作 / 画布视口与导图几何 / 渲染层分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` / `client/roots.js` / `client/editing.js` / `client/canvas.js` / `client/view.js` |
+| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（1453 行，含回收站面板与那块 `panelRoot` JSX）；数据层 / 持久化 / 配色主题 / Git 面板 / 画布目录与导入 / 编辑动作 / 画布视口与导图几何 / 渲染层分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` / `client/roots.js` / `client/editing.js` / `client/canvas.js` / `client/view.js` |
 | `plugin/dsh-kp-notes/client/*.js` | Client 半的实现，按职责拆成 20 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回 |
 | `plugin/dsh-kp-notes/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
 | `plugin/dsh-kp-notes/package.json` | 包清单（`dsh.bundle.patch`、`dsh.client`、图标） |
@@ -527,10 +527,10 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 > **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/` 下的文件时**必须把 `?v=N` +1**（碰了客户端模块的行为再一起 +1 `client.js` 的 `MODULE_VERSION`），不然会出现「改了文件却还是老代码」的静默错配：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=87）
-> sed -i '' 's/?v=86/?v=87/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 174；只改注释 / 只动宿主时不必动）
-> sed -i '' 's/MODULE_VERSION = 173;/MODULE_VERSION = 174;/' plugin/dsh-kp-notes/client.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=88）
+> sed -i '' 's/?v=87/?v=88/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 175；只改注释 / 只动宿主时不必动）
+> sed -i '' 's/MODULE_VERSION = 174;/MODULE_VERSION = 175;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
