@@ -400,13 +400,18 @@ window.__ModuleLoader__.load({
 				/* 读配置: 只有真读到了才算数 —— 宿主回的成功响应里永远带探针字段(exists/isCanvas/hasConfig/hasTemplates),
 				 * 所以「对象非空」= 读到了; 请求失败 / 宿主还没起来 / 返回不像配置 ⇒ null(= 读不到, 绝不等于「没存过」)。 */
 				const readConfig = (root) => fetchLibConfig(root).then((saved) => (saved && typeof saved === 'object' && Object.keys(saved).length > 0 ? saved : null)).catch(() => null);
-				/* 读不到就过一会儿重读(宿主刚重启时前端可能比插件先起来), 但别无限重试; 返回「还安排了重试吗」 */
+				/* 读不到就过一会儿重读(宿主刚重启时前端可能比插件先起来), 但别无限重试; 返回「还安排了重试吗」。
+				 * 窗口要够长: 实测「重启后第一次打开面板」时宿主这一半可能十来秒才把 /rk-study/config 注册好,
+				 * 以前 6 次 × 700ms(≈4.2 秒)会在这之前耗尽 —— 之后没人再读, 一级画布就一直停在默认视野,
+				 * 直到进出一张画布(rootPath 变了)才重读, 于是表现成「第一次打开缩放不对, 进出一趟就正常」。
+				 * 现在: 0.4s / 0.8s / 1.6s 起步, 之后每 2.5s 一次, 最多 50 次(≈2 分钟), 读到就清零。 */
 				const retryRead = () => {
-					if (libRetryRef.current >= 6) return false;
-					libRetryRef.current += 1;
+					if (libRetryRef.current >= 50) return false;
+					const attempt = libRetryRef.current;
+					libRetryRef.current = attempt + 1;
 					window.setTimeout(() => {
 						if (alive) setLibRev((value) => value + 1);
-					}, 700);
+					}, Math.min(400 * 2 ** attempt, 2500));
 					return true;
 				};
 				if (!lib) {
@@ -1365,7 +1370,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 174;
+		const MODULE_VERSION = 175;
 		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
