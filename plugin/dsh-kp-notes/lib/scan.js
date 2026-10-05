@@ -1,8 +1,8 @@
 /* rk-study · host/scan —— 从 host.js 第 640-967 行原样切出 */
-import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_PARENT_DIR } from './constants.js?v=73';
-import { parseDocument } from './parse.js?v=73';
-import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=73';
-import { uidFromText } from './uid.js?v=73';
+import { MARKDOWN_RE, MAX_BYTES_PER_FILE, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_PARENT_DIR } from './constants.js?v=74';
+import { parseDocument } from './parse.js?v=74';
+import { baseName, classifyFile, compareText, isQuestionStorePath, notePathFor, numericPrefix, parseFrontmatter, stripNumericPrefix } from './util.js?v=74';
+import { uidFromText } from './uid.js?v=74';
 
 /* ------------------------------------------------------------------ scan */
 
@@ -16,7 +16,9 @@ export async function scanWorkspace(ctx, config, signal) {
 	let truncated = false;
 
 	/* 素材容器 <小节目录>/media/: 里面**只有** <小节uid>.assestfiles/ 这类目录(或它是空的)。
-	 * 判据是「里面全是素材目录」而不是「名字叫 media」—— 用户自己建一个真叫 media 的章节不会被吞掉。 */
+	 * 判据是「里面全是素材目录」而不是「名字叫 media」—— 用户自己建一个真叫 media 的章节不会被吞掉。
+	 * 点开头的东西(.DS_Store —— Finder 一逛就写一个)不算数: 扫描本来就不看它们, 可它要是在 media/ 里
+	 * 躺一个, 「里面全是素材目录」这条就不成立, 于是画布上会多出一张空空的 media 卡片. */
 	async function isMediaHome(target) {
 		let names = [];
 		try {
@@ -24,7 +26,9 @@ export async function scanWorkspace(ctx, config, signal) {
 		} catch {
 			return false;
 		}
-		return names.every((entry) => entry.type === 'directory' && entry.name.endsWith(MEDIA_DIR_SUFFIX));
+		return names
+			.filter((entry) => !String(entry.name).startsWith('.'))
+			.every((entry) => (entry.type === 'directory' ? entry.name.endsWith(MEDIA_DIR_SUFFIX) : !MARKDOWN_RE.test(entry.name)));
 	}
 
 	async function walk(target, relPath, depth) {
