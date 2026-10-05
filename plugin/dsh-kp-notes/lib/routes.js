@@ -4,23 +4,23 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * listNames 等小工具): 那样才会经过 DSH 的沙箱策略, 也才会跟着插件生命周期一起收尾。
  * `renameSync` / `rmdirSync` 是仅有的裸 node:fs —— ctx.fs 没有 rename / 摘空目录的能力, 调用点在动手之前
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot / migrateLegacyMedia)。 */
-import { mkdirSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 
-import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=88';
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MAX_DEPTH, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_LEGACY_PARENT_DIR, MEDIA_MAX_BYTES, MEDIA_PARENT_DIR, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=88';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=88';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=88';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=88';
-import { buildNodes, scanHeadings } from './headings.js?v=88';
-import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=88';
-import { parseDocument } from './parse.js?v=88';
-import { pointRegion, rebuildPoint } from './points.js?v=88';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=88';
-import { buildCatalog } from './scan.js?v=88';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=88';
-import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=88';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=88';
-import { readBody, safePath, writeMarkdown } from './write.js?v=88';
+import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=89';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MAX_DEPTH, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_LEGACY_PARENT_DIR, MEDIA_MAX_BYTES, MEDIA_PARENT_DIR, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=89';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=89';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=89';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=89';
+import { buildNodes, scanHeadings } from './headings.js?v=89';
+import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=89';
+import { parseDocument } from './parse.js?v=89';
+import { pointRegion, rebuildPoint } from './points.js?v=89';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=89';
+import { buildCatalog } from './scan.js?v=89';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=89';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=89';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=89';
+import { readBody, safePath, writeMarkdown } from './write.js?v=89';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
@@ -132,6 +132,50 @@ export function apply(ctx, rawConfig) {
 			return false;
 		}
 	}
+
+	/* 路径探针三态: 'yes'(在) / 'no'(确定不在: ENOENT 一类) / 'unknown'(这一问本身没问成)。
+	 * 以前只有 true/false 两态 —— resolve/stat 抖一下、宿主刚起来、插件这一半刚被换过一次,
+	 * 任何一次瞬时失败都被当成「目录不存在」报给客户端; 客户端据此认定「学习库目录已经不在了」:
+	 * 弹提示、停掉库级写入, 那一轮还会把空配置当成「读到了配置」。表现就是「第一次打开插件,
+	 * 根画布没有读取配置文件, 第二次打开就正常了」。所以「确定不在」和「问不出来」必须分开。 */
+	const fsMissing = (error) => {
+		const code = error && typeof error === 'object' ? error.code || error.name : '';
+		return code === 'FS_NOT_FOUND' || code === 'ENOENT' || code === 'ENOTDIR';
+	};
+
+	/* 诊断(有意留下, 只有「没问到 / 确定不在」才写一行, 加 try 兜着):
+	 * 把每次探针的结论与原因记到 /tmp/rk-probe.log。再出现「第一次打开面板读不到配置」时,
+	 * 看一眼这里就知道那一下到底是「确定不在」(no) 还是「问不出来」(unknown)。 */
+	const probeLog = (line) => {
+		try {
+			appendFileSync('/tmp/rk-probe.log', `${new Date().toISOString()} ${line}\n`);
+		} catch {
+			/* 记不上就算了 */
+		}
+	};
+
+	async function pathState(abs, signal, label = '') {
+		let target = null;
+		try {
+			target = await ctx.fs.resolve(abs, { signal });
+		} catch (error) {
+			const state = fsMissing(error) ? 'no' : 'unknown';
+			probeLog(`${label || 'probe'} ${state} ${abs} :: resolve ${error && error.name}/${error && error.code}: ${error && error.message}`);
+			return state;
+		}
+		try {
+			const info = await ctx.fs.stat(target, { signal });
+			if (info !== undefined) return 'yes';
+			probeLog(`${label || 'probe'} no ${abs} :: stat 回 undefined`);
+			return 'no';
+		} catch (error) {
+			const state = fsMissing(error) ? 'no' : 'unknown';
+			probeLog(`${label || 'probe'} ${state} ${abs} :: stat ${error && error.name}/${error && error.code}: ${error && error.message}`);
+			return state;
+		}
+	}
+
+	const triState = (state) => (state === 'yes' ? true : state === 'no' ? false : null);
 
 	async function dirExists(abs, signal) {
 		const target = await resolveAbs(abs, signal);
@@ -1866,30 +1910,40 @@ export function apply(ctx, rawConfig) {
 			if (method === 'GET' || method === 'HEAD') {
 				const base = await readLibConfig(ctx, lib);
 				/* 客户端靠这几个探针判断「这个根还在不在、是不是画布、像不像学习库」:
-				 * 根被删掉(临时目录被清 / 移动硬盘拔了)时它好自愈, 别再把配置写进一个幽灵目录。 */
+				 * 根被删掉(临时目录被清 / 移动硬盘拔了)时它好自愈, 别再把配置写进一个幽灵目录。
+				 * 三态: true 在 / false **确定**不在 / null 这一问没问成 —— 客户端只把 false 当
+				 * 「目录没了」, null 当「还不知道」继续重读, 免得一次瞬时失败就被当成库没了。 */
+				const libState = await pathState(lib, undefined, 'get.exists');
+				const noteState = await pathState(`${lib}/${baseConfig.noteDir}`, undefined, 'get.isCanvas');
+				const configState = await pathState(configPathOf(lib), undefined, 'get.hasConfig');
+				const templateState = await pathState(`${lib}/.templates`, undefined, 'get.hasTemplates');
 				sendJson(res, 200, {
 					ok: true,
 					root: lib,
 					path: configPathOf(lib),
-					exists: await pathExists(lib),
-					isCanvas: await pathExists(`${lib}/${baseConfig.noteDir}`),
-					hasConfig: await pathExists(configPathOf(lib)),
-					hasTemplates: await pathExists(`${lib}/.templates`),
+					exists: triState(libState),
+					isCanvas: triState(noteState),
+					hasConfig: triState(configState),
+					hasTemplates: triState(templateState),
 					config: { ...base, removed: await readRemovedStore(ctx, lib) },
 				});
 				return;
 			}
 			if (method === 'POST') {
-				/* 目标根目录本身必须还在: 学习库被删 / 移动硬盘没挂上 / 临时目录被系统清掉之后,
+				/* 目标根目录**确定**不在了才挡(学习库被删 / 移动硬盘没挂上 / 临时目录被系统清掉之后,
 				 * 客户端还拿着老路径往里写的话, writeLibConfig 会顺手 mkdirSync 把整条路径重建出来
-				 * —— 幽灵库静默复活, 用户的视野与字号全落进一个早就没了的目录。这里直接挡掉。 */
-				if (!(await pathExists(lib))) {
+				 * —— 幽灵库静默复活, 用户的视野与字号全落进一个早就没了的目录)。
+				 * 探针只是「问不出来」时放它去写: 写不动会在下面报错, 而这里一旦误判,
+				 * 丢掉的是一次「用户刚调好的视野 / 字号」。 */
+				const libState = await pathState(lib, undefined, 'post.exists');
+				if (libState === 'no') {
 					sendJson(res, 400, { ok: false, error: 'no-such-root', root: lib, message: `目录不存在: ${lib}` });
 					return;
 				}
 				/* 画布自己(里面有 notes/)也有自己那份配置, 但只收 ui / zoom —— canvases(画布清单) /
 				 * removed(移出列表) / uid / seq 属于学习库那一级, 在画布上写会被丢掉(免得两张画布互相覆盖)。 */
-				const selfCanvas = await pathExists(`${lib}/${baseConfig.noteDir}`);
+				/* 只认「确定在」才算画布自己: 探针问不出来时不猜(照库那一级写, 与旧行为一致) */
+				const selfCanvas = (await pathState(`${lib}/${baseConfig.noteDir}`, undefined, 'post.selfCanvas')) === 'yes';
 				const patch = await readBody(req, MAX_BODY_BYTES);
 				const body = patch && typeof patch === 'object' && !Array.isArray(patch) ? { ...patch } : {};
 				const hasRemoved = Object.prototype.hasOwnProperty.call(body, 'removed');

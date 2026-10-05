@@ -173,8 +173,12 @@ export function createApi({ React }) {
 		if (!response.ok || data.ok === false) return {}; /* 没有 / 读不动就当空的, 不影响使用 */
 		const config = (data && data.config) || {};
 		/* 顺手带上宿主的几个探针: 这个根还在不在 / 是不是画布自己 / 像不像学习库 ——
-		 * 学习库目录被删掉(或临时目录被清)时, 客户端靠它自愈: 认回画布的上一层, 而不是继续往幽灵目录里写。 */
-		config.exists = data.exists !== false;
+		 * 学习库目录被删掉(或临时目录被清)时, 客户端靠它自愈: 认回画布的上一层, 而不是继续往幽灵目录里写。
+		 * exists 是三态: true 在 / false **确定**不在 / null 这一问没问成(宿主刚起来那会儿 resolve/stat
+		 * 抖一下就会这样)。调用方只把 false 当「目录没了」, null 当「还不知道」接着重读 ——
+		 * 以前这里把任何非 false 都当 true, 于是一次瞬时失败就成了「读到了配置」,
+		 * 客户端拿空配置把 libReady 置真 + 自动铺满一次, 把文件里真值盖掉了(见 client.js 读配置那段)。 */
+		config.exists = data.exists === false ? false : data.exists === null ? null : true;
 		config.isCanvas = data.isCanvas === true;
 		config.hasConfig = data.hasConfig === true;
 		config.hasTemplates = data.hasTemplates === true;

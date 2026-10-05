@@ -1,6 +1,6 @@
 /* rk-study · host/questions —— 从 host.js 第 1185-1252 行原样切出 */
-import { buildNodes, hasAnswerLine, isQuestionHeading, scanHeadings } from './headings.js?v=88';
-import { parseFrontmatter, stripInline } from './util.js?v=88';
+import { buildNodes, hasAnswerLine, isQuestionHeading, scanHeadings } from './headings.js?v=89';
+import { parseFrontmatter, stripInline } from './util.js?v=89';
 
 /* 题目块的身份号: 单独一行挂在标题下面, 形如 `<!-- rk-uid: q0001 -->`。
    为什么单独一行 —— renumberQuestionBlocks 会重写标题行(`## 题目 N`), 号放标题行里会被冲掉;
