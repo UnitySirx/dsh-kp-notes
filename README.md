@@ -56,7 +56,7 @@ dsh plugin --profile <profile 名> add dsh-kp-notes
 
 装好后在「插件」面板里把 **`dsh-kp-notes`**（内部名 `rk-study`）打开 —— `plugin/dsh-kp-notes/package.json` 里声明了 `dsh.bundle.patch`（Node 半）与 `dsh.client`（浏览器半），宿主会把两半一起挂上；入口是**左侧边栏面板列表里的「知识点笔记」**（英文界面下是 `Knowledge Notes`，图标 `plugin/dsh-kp-notes/icon.svg`）。三种装法装完都一样。
 
-**改完代码怎么生效**：改 `plugin/dsh-kp-notes/client/` 或 `client.js` 后刷新页面（`⌘R`）即可；改 `host.js` / `lib/` 下任何文件要把 `?v=N` 与 `client.js` 的 `MODULE_VERSION` 一起 +1，见「五、插件实现」开头。`cordis.patch.yml` 现在是发布形态的包名 `dsh-kp-notes`（没有 `?entry=N` 缓存戳）⇒ **关开 bundle 不会重新 import 宿主模块，宿主半的改动要重启 DeepSeek Harness 才生效**；客户端那半关开一次 bundle（或改个按钮文案）就生效。
+**改完代码怎么生效**：改 `plugin/dsh-kp-notes/client/` 或 `client.js` 后刷新页面（`⌘R`）即可；改 `host.js` / `lib/` 下任何文件时把 `?v=N` +1（碰了客户端模块的行为就再把 `client.js` 的 `MODULE_VERSION` +1），见「五、插件实现」开头。`cordis.patch.yml` 现在是发布形态的包名 `dsh-kp-notes`（没有 `?entry=N` 缓存戳），关开 bundle **不会**靠换 URL 重新 import 宿主模块；但实测**保存后宿主半仍会被重新 import，隔几秒就生效**（撞 `?v=N` 是必须的：模块按完整 URL 缓存，只改文件内容不换 URL 会一直用缓存里的旧模块）。客户端那半关开一次 bundle（或改个按钮文案）就生效；不放心时重启 DeepSeek Harness 最稳。
 
 ## 快速开始
 
@@ -262,19 +262,20 @@ D. 非风险点
 
 编辑器（富文本 / 题目表单 / 知识点表单）里插的图**不再写成一长串 Base64**，而是交给插件落成真文件：
 
-- **放哪**：这篇笔记所属**小节**旁边，统一收在正文目录下的 `media/` 里 —— `media/<小节编号>.assestfiles/`（例：`notes/01-计算机硬件/media/s0001.assestfiles/`）。编号就是插件给每个小节发的 `s0001` 号（见「编号（uid）」一节）。中间那层 `media/` 是为了让正文目录里只多一个素材目录，不和 `.md` 混在一起。
+- **放哪**：这篇笔记所属**小节**旁边，统一收在正文目录下的 `.media/` 里 —— `.media/<小节编号>.assestfiles/`（例：`notes/01-计算机硬件/.media/s0001.assestfiles/`）。编号就是插件给每个小节发的 `s0001` 号（见「编号（uid）」一节）。中间那层 `.media/` 是为了让正文目录里只多一个素材目录，不和 `.md` 混在一起；点开头这一条还顺手解决了「素材目录被当成一章」—— 扫描本来就不看点开头的目录，它连判据都不用走。
 - **叫什么**：`<小节编号>-<序号>.<扩展名>` —— `s0001-1.png`、`s0001-2.png` …… 序号自动往后排，同名不会互相覆盖。
-- **笔记里写什么**：只写**相对路径**，例如 `![](media/s0001.assestfiles/s0001-1.png)`；在题目文件（`questions/` 那一侧）里插的图落到同一个素材目录，路径写成 `../../notes/01-计算机硬件/media/s0001.assestfiles/s0001-1.png` —— 因为相对的是**这篇笔记自己**的位置。
+- **笔记里写什么**：只写**相对路径**，例如 `![](.media/s0001.assestfiles/s0001-1.png)`；在题目文件（`questions/` 那一侧）里插的图落到同一个素材目录，路径写成 `../../notes/01-计算机硬件/.media/s0001.assestfiles/s0001-1.png` —— 因为相对的是**这篇笔记自己**的位置。老布局里写的 `media/…` 也照旧认得到（认图按后缀找，见「路由」一节），所以旧笔记不改也能显示。
 - **显示**：卡片 / 思维导图 / 实时预览 / 编辑器都会把这段相对路径换成 `/rk-study/media?path=…` 去取字节，所以写进去立刻能看到图；插件之外（别的 markdown 编辑器、导出、搬走整个库）也照样认，因为它就是普通相对路径。渲染器（`client/md.js`）把 `![]()` 渲染成真的 `<img>`，相对路径→可显示地址的换算挂在**面板根节点**上统一的那个 `watchImages` 里（新插进来的节点也会被就地改写），所以**源码模式的实时预览、卡片、详情**里都能看到图。
 - **入口是 ⌘⇧I**：vendor（zt-milkdown）的斜杠菜单在打进 vendor 的这份 build 里没注册语言 / 菜单 spec，`/` 菜单是关的；插图只有「⌘⇧I 上传文件」和「粘贴」两个口子。
-- **插图是两步（选文件 → 插入）**：**选文件那一步一个字节都不写盘** —— `media.upload()` 同步交回一条 `blob:` 本地引用（`URL.createObjectURL(file)`，浏览器自己的临时地址，弹窗拿它 `new Image()` 探得到、预览也看得见），文件对象先记在内存里；只有点了「插入图片」（或直接粘贴）之后，图片真进了正文，`onChange` 交回的 markdown 里带着那条 `blob:` 时，才由 `media.settleText()` 把字节交给 host 落到 `media/<小节编号>.assestfiles/`，落完把正文里那段换成相对路径。选完就取消、或重新选一张，都不留孤儿图。
+- **插图是两步（选文件 → 插入）**：**选文件那一步一个字节都不写盘** —— `media.upload()` 同步交回一条 `blob:` 本地引用（`URL.createObjectURL(file)`，浏览器自己的临时地址，弹窗拿它 `new Image()` 探得到、预览也看得见），文件对象先记在内存里；只有点了「插入图片」（或直接粘贴）之后，图片真进了正文，`onChange` 交回的 markdown 里带着那条 `blob:` 时，才由 `media.settleText()` 把字节交给 host 落到 `.media/<小节编号>.assestfiles/`，落完把正文里那段换成相对路径。选完就取消、或重新选一张，都不留孤儿图。
 - **`imageUpload` 上有两个必传项**（vendor 的默认值都不合用）：`maxFileSize`（默认只让传 5 MB，超限只 `console.error`，粘贴路连提示都没有；现在给 16 MB —— host 那侧 `/rk-study/media` 收 24 MB 的 JSON body，base64 要膨胀 4/3）与 **`allowedProtocols: ['blob:']`**（vendor 在 image 节点上装了协议白名单，只放行 `http:`/`https:`/`mailto:`/`tel:`/`data:`，名单外的地址会被换成空串 ⇒ 图片节点被 markdown 序列化器**静默跳过**：文档里看得见图、markdown 里一个字都没有、`onChange` 也永远不触发，落盘那步就永远等不到。vendor 允许调用方追加协议，所以把 `blob:` 补进去）。
 - **写盘收口**：`media.toMarkdownSrc(text)` 把 `/rk-study/media?…` 显示地址与还没落盘的 `blob:` 换成相对路径，编辑器 / 弹窗的清洗函数各调一次，编辑器保存前再对整段跑一次 strict 收口（源码框里手打的地址也跑不掉；落盘失败时 strict 收口直接把那段图去掉，绝不把 `blob:` 写进文件）。
 - **删图不删文件**：从正文里删掉图片只删 markdown 里那一行，盘上的文件留着（想删就去那个目录删）。名字带序号、只增不改，所以图片可以放心长缓存。
 - **支持的格式**：`png` / `jpg` / `jpeg` / `gif` / `webp` / `avif` / `bmp` / `svg`，单张上限 24 MB。
 - **新建时例外**：新建小节 / 知识点时文件还没落盘，此时插图仍是编辑器内置的 Base64；保存之后再插图就走上面这套了（把之前的 Base64 图删掉重插一次即可）。
-- `media/*.assestfiles/` 目录不会被扫描成章节，画布上不会多出奇怪的卡片（判据是「`media/` 里除点开头的东西外全是 `*.assestfiles` 目录」—— 所以 Finder 顺手丢进来的 `.DS_Store` 不会让它变成一章；你真建一个叫 `media` 的章节、里面有 `.md`，它照样是章节）。
-- **删笔记时素材跟着走**：删小节（含连带删掉的知识点 / 题目）⇒ 它那份 `media/<小节编号>.assestfiles/` **整份**跟着进 `.remove/<桶>/`；只删某个知识点 / 题目 ⇒ 只搬「这篇笔记引用、而别处已经不再引用」的那几张（别的笔记还在用的留着），搬完空掉的素材目录顺手清掉。详见「删除」一节。
+- **素材目录不会被扫描成章节**：新布局的 `.media/` 是点开头的，扫描根本不看它；老布局的 `media/` 仍走判据 ——「里面除点开头的东西外全是 `*.assestfiles` 目录」（`isMediaHome`，所以 Finder 顺手丢进来的 `.DS_Store` 不会让它变成一章；你真建一个叫 `media` 的章节、里面有 `.md`，它照样是章节）。两种布局都不会在画布上多出奇怪的卡片。
+- **老布局的 `media/` 会自己搬过来**：往一个老小节里**第一次插图**时，插件顺手把 `<小节目录>/media/` 整层搬成 `<小节目录>/.media/`（`migrateLegacyMedia`），并把 `notes/`、`questions/` 两侧正文里的 `media/<小节编号>.assestfiles/` 改成 `.media/…`（`rewriteLegacyMediaRefs`，只动这一层，字节一个不碰）。目标位置已经存在同名素材目录（那个小节在新布局下已经插过图）时改成逐个文件并过去，同名文件留在原地不动 —— 名字一样就是同一张图，正文里那段路径改成 `.media/` 之后照旧点得开。搬完空掉的旧目录摘掉（**只删空目录**：里面还剩 Finder 的 `.DS_Store` 这类文件就留着，扫描反正不看它）。搬不动也不拦着插图。
+- **删笔记时素材跟着走**：删小节（含连带删掉的知识点 / 题目）⇒ 它那份 `.media/<小节编号>.assestfiles/` **整份**跟着进 `.remove/<桶>/`；只删某个知识点 / 题目 ⇒ 只搬「这篇笔记引用、而别处已经不再引用」的那几张（别的笔记还在用的留着），搬完空掉的素材目录顺手清掉（老布局的 `media/` 一样认）。详见「删除」一节。
 
 ### 输入助手（快捷键 + 公式模板）
 
@@ -322,10 +323,10 @@ D. 非风险点
 | 题目卡片右上角 | **删除此题** | 题目文件本身不动：被删掉的这一段 markdown 另存成 `.remove/<桶>/<题目文件路径>.removed-<题号>.md`（首行注释写明从哪个文件、第几题删的；同一题删两次就是两个桶里各一份，不覆盖），再重写剩下的题目 |
 | 小节页 / 知识点页 / 编辑器 | **删除本文件** | 当前打开的这个文件（笔记文件同样连带移动配对题目文件） |
 
-**图也跟着走**：笔记里引用的图片素材（`media/<小节编号>.assestfiles/…`）不会留在原地空着 ——
-- **删小节**（含它底下连带删掉的知识点 / 题目）：这一份素材目录属于这个小节，**整份跟着进同一个桶**，桶里路径照旧（`<桶>/notes/01-第一章/media/s0001.assestfiles/`），恢复时图就在正文旁边；
+**图也跟着走**：笔记里引用的图片素材（`.media/<小节编号>.assestfiles/…`，老布局的 `media/…` 一样认）不会留在原地空着 ——
+- **删小节**（含它底下连带删掉的知识点 / 题目）：这一份素材目录属于这个小节，**整份跟着进同一个桶**，桶里路径照旧（`<桶>/notes/01-第一章/.media/s0001.assestfiles/`），恢复时图就在正文旁边；
 - **只删某个知识点 / 题目**：那份素材目录是**整个小节共用**的，所以只搬「这篇笔记引用、而画布里别的笔记已经不再引用」的那几个文件 —— 还被别处引用的留着（判断就是拿文件名在 `notes/` 与 `questions/` 的 markdown 正文里再找一遍，扫不完就一律留着，宁可少搬不多搬）；
-- 搬走之后空掉的 `<小节编号>.assestfiles/` 与它上面那层 `media/` 顺手清掉（**只删空目录**）。
+- 搬走之后空掉的 `<小节编号>.assestfiles/` 与它上面那层 `.media/`（老布局是 `media/`）顺手清掉（**只删空目录**）。
 - 删除接口的返回里因此多一个 `media` 字段（这次跟着搬走的素材路径），界面用不到，排查时看得见。
 
 点一次按钮会在原处浮出「确认删除？ / 取消 / 删除」，再点「删除」才真正执行。确认条是**绝对定位浮层**，不占布局 —— 所以列表里的按钮不会因为多出这行字而换行或位移，**同一个位置连点两下第二次点到的仍然是「删除」**（早先的写法会把按钮挤到下一行、让第二次点空或误点「取消」）。执行后自动回到章节图并刷新，提示条写「已移到 .remove/<桶>/ · <路径>」，并写明连带处理了几个关联文件。
@@ -503,7 +504,7 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 
 | 模块 | 行数 | 职责 |
 | --- | --- | --- |
-| `constants.js` | 127 | 路由/资源路径、默认值与上限、路径与标题的正则 |
+| `constants.js` | 131 | 路由/资源路径、默认值与上限、路径与标题的正则（图片素材那几项：`MEDIA_ROUTE = '/rk-study/media'`、`MEDIA_PARENT_DIR = '.media'`、老布局 `MEDIA_LEGACY_PARENT_DIR = 'media'`、`MEDIA_DIR_SUFFIX = '.assestfiles'`、`MEDIA_MAX_BYTES = 24 MB`、`MEDIA_TYPES` 后缀白名单） |
 | `util.js` | 283 | 目录名归一化、路径换算、标题与标签清洗、frontmatter、摘要、模板/库路径（`templateDirOf` / `sharedTemplateDirOf` / `libraryDirOf`）、`validateRoot` |
 | `libconfig.js` | 346 | 那一级的 `.config/rk-study.json` 读写（学习库那份与画布自己那份共用同一套代码，写哪一级由调用方给的 root 决定）：键清洗（`ui` / `zoom` / `canvases` / `uid` / `seq`；画布那级由 `routes.js` 的 `canvasConfigPatch` 只放行 `ui` / `zoom`）、深合并（`null` 删键）、1 秒缓存，`/rk-study/config` 与 uid 发号器共用；两份「机器账本」各自另立文件 —— 号池 `uidConfigPathOf`（`<库>/.config/rk-study-uids.json`）/ `readUidStore`（号池优先，老配置里的 `uids` 只用来补缺、并被照读）/ `writeUidStore`（只写号池，写完顺手把老配置里那份 `uids` 摘掉，完成迁移），移出列表 `removedConfigPathOf`（`<库>/.config/rk-study-removed.json`）/ `readRemovedStore`（独立文件是权威，老键只在文件还没建出来时才认）/ `writeRemovedStore`（整份替换，写完把老配置里的 `removed` 摘掉），各有自己的 1 秒缓存 |
 | `uid.js` | 262 | 编号发号器：`ensureUids`（按路径批量发号，一次调用只写一次配置）/ `uidsFor`（只读）/ `moveUid`（改名搬号）/ `dropUids`（摘号，计数器不回退）/ `adoptUids`（恢复时认回）/ `takeUid`（只发号不记路径，给小节 / 知识点写进 frontmatter）/ `adoptUid`（认下文件里已有的号并把计数器抬上去）/ `uidFromText` 与 `withUidText`（从 markdown 里读号 / 把号写进 frontmatter）/ `formatUid` / `isUid`；号表读写的都是号池文件（`readUidStore` / `writeUidStore`），只有 `seq` 计数器还留在 `.config/rk-study.json` 里 |
@@ -514,23 +515,23 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 | `templates.js` | 547 | 小节 / 知识点 / 题目文件 / 题目的模板与题目计数 + 内置的「公式与结构模板」默认库 |
 | `fsguard.js` | 69 | 路径边界：`insideRoot`（经 `ctx.fs.resolve` 复核，符号链接指向外面也挡得住）、`writePolicyOf`（写操作的沙箱策略）、`denyOutsideRoot`；`mkdir` 的边界由调用方给 —— 新建画布 / 导入学习库 / 移出列表的目标本来就在请求 root 之外（父目录才是这几件事的边界）。取舍见文件头 |
 | `write.js` | 103 | 路径校验与写文件（经 `ctx.fs.writeText`，必要时 `mkdir` 兜底）；写盘前给小节 / 知识点补 frontmatter 里的 `uid`：先认文件里 / 盘上已有的号，再认扫描时在号池里按路径登记的号（认到就把它摘出号池、写进 frontmatter），都没有才发新号；失败只当这次没补，不挡写盘 |
-| `delete.js` | 456 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `bucketNameIn` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`；「移出列表」用同一个 `bucketNameIn` 在**同层** `.remove/` 下开桶）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段）/ `stashUids` 与 `readStashedUids`（把这次删掉的目录带走了哪个编号记进桶里的 `.rk-uids.json`；`readAllStashedUids` 把一个 `.remove/` 下所有桶记着的号合并读出来，恢复时按路径认回，名字（= 时间）晚的桶覆盖早的）；**素材跟着走**：`mediaRefsOf`（从被删笔记的正文里挑出 `…/*.assestfiles/*` 引用，`MEDIA_REF_RE` + `joinRel` 拼成 root 相对路径）/ `mediaStillReferenced`（拿文件名在 `notes/`、`questions/` 的 markdown 里再找一遍，扫不完返回 `true` = 留着）/ `moveMediaIntoBucket`（删小节 ⇒ 整个 `<uid>.assestfiles/` 目录进同一个桶；只删知识点 / 题目 ⇒ 只搬没人再引用的那几个文件；`mediaDirsOf` 列出可能空掉的目录，只 `rmdirSync` 空目录），以及排除判断 |
-| `scan.js` | 354 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存（`*.assestfiles` 图片素材目录跳过；收着它们的 `media/` 那层也跳过，不然会被当成一章 —— 判据 `isMediaHome` 是「里面除点开头的东西外全是 `*.assestfiles` 目录」，`.DS_Store` 不算数，而真有 `.md` 的 `media` 目录照旧是章节）；顺带把号带出来 —— 文件记录读 frontmatter 里的 `uid`（小节 / 知识点），知识点文件自己的号挂到它那条知识点上 |
+| `delete.js` | 456 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `bucketNameIn` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`；「移出列表」用同一个 `bucketNameIn` 在**同层** `.remove/` 下开桶）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段）/ `stashUids` 与 `readStashedUids`（把这次删掉的目录带走了哪个编号记进桶里的 `.rk-uids.json`；`readAllStashedUids` 把一个 `.remove/` 下所有桶记着的号合并读出来，恢复时按路径认回，名字（= 时间）晚的桶覆盖早的）；**素材跟着走**：`mediaRefsOf`（从被删笔记的正文里挑出 `…/*.assestfiles/*` 引用，`MEDIA_REF_RE` + `joinRel` 拼成 root 相对路径）/ `mediaStillReferenced`（拿文件名在 `notes/`、`questions/` 的 markdown 里再找一遍，扫不完返回 `true` = 留着）/ `moveMediaIntoBucket`（删小节 ⇒ 整个 `<uid>.assestfiles/` 目录进同一个桶；只删知识点 / 题目 ⇒ 只搬没人再引用的那几个文件；`mediaDirsOf` 列出可能空掉的目录（新老两种布局的 `media/` 都认），只 `rmdirSync` 空目录），以及排除判断 |
+| `scan.js` | 357 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存（`*.assestfiles` 图片素材目录跳过；新布局的 `.media/` 那层是点开头的，扫描本来就不看，直接进 `skipped`；老布局的 `media/` 那层也跳过，不然会被当成一章 —— 判据 `isMediaHome` 是「里面除点开头的东西外全是 `*.assestfiles` 目录」，`.DS_Store` 不算数，而真有 `.md` 的 `media` 目录照旧是章节）；顺带把号带出来 —— 文件记录读 frontmatter 里的 `uid`（小节 / 知识点），知识点文件自己的号挂到它那条知识点上 |
 | `bin.js` | 507 | 回收站（只有两层有它）：根画布那层 `listRootBins`（把当前根、它上一层、画布列表里每张画布父目录的 `.remove` 合起来列，只留「顶层整条」= 整只画布，`notes` / `questions` 这类画布内部结构不算），一级画布那层 `listChapterBin`（只看这张画布自己的 `.remove`，按章把 `notes/<章>/…` 与平行的 `questions/<章>/…` 聚成一条）；恢复是 `restoreItem` / `restoreBucket` / `restoreChapter`（按记录所在的 `box` 落回对应目录、原位已有同名**文件**时跳过或拒绝、章级恢复是「原位缺什么补什么」的合并、号按那只桶里记的认回、空桶与空掉的 `.remove` 一起收掉）；`listBin` 是底座 —— 只列「影子树的根」（原位已经没有、父目录还在的那一层，所以恢复它就是把整棵子树搬回去），并且按 `isBucketName`（`YYYYMMDD` / `YYYYMMDD-2` / `YYYY-MM-DD_HHmmss`）区分新旧：不是日期桶的目录是**老格式**（`.remove/<相对路径>` 就是那条记录本身），交给 `collectLegacy` 收进一只 `at=旧格式`、桶名为空字符串的分组，`restoreItem` 也支持空的 `bucket`（记录直接躺在 `.remove` 下） |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
-| `routes.js` | 1953 | `apply`：注册 8 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/media` 图片素材（GET 取字节（按后缀在根 + 一二级子目录里兜底找）、POST 落盘到 `media/<小节编号>.assestfiles/`）、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
+| `routes.js` | 2042 | `apply`：注册 8 个路由（`/rk-study/notes` 的全部 GET/POST 动作（含回收站 `?bin=1`（`mode=roots` 走根画布那层、默认按章）与 `restore` / `restoreBucket` / `restoreChapter`）、`/rk-study/roots` 建画布 / 改名 / 浏览 / 导入学习库、`/rk-study/templates` 模板读写、`/rk-study/git`、`/rk-study/state` 插件级状态镜像、`/rk-study/media` 图片素材（GET 取字节（按后缀在根 + 一二级子目录里兜底找，所以正文里老布局的 `media/…` 也认得到）、POST 落盘到 `.media/<小节编号>.assestfiles/`，落盘前先 `migrateLegacyMedia` 把老布局那层搬过来并 `rewriteLegacyMediaRefs` 改正文里的路径）、`/rk-study/client` 与 `/rk-study/asset` 静态资源）、用 `AsyncLocalStorage` 做请求级 root；画布与章节的编号在这里发放（`uidLibOf` 找号池、`withChapterUids` 给章节补号、`withNoteUids` 给还没号的小节 / 知识点在号池里挂号、建 / 改名 / 删除时发号 / 搬号 / 摘号；题目在 `addQuestion` 发新号、`saveQuestion` 沿用原来那道题的号、`deleteQuestion` 把号记进计数器；恢复时按桶里记的号认回 —— 导入搬回来的画布、扫描时搬回来的章节 / 笔记） |
 
-> **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/`、`client/` 下的文件时，**两个版本号（`?v=N` 与 `client.js` 的 `MODULE_VERSION`）要一起 +1，缺一个都会出现「新代码跑在旧模块上」的静默错配**：
+> **改完怎么让它生效**：改 `client/`（或 `client.js`）保存后按 `⌘R` 即可，但**如果按钮 / 文案这类东西没变，就把 bundle 关一次再开一次**（客户端也是经打包端点带 `rev` 哈希下发的，缓存的 `rev` 不变就还是老脚本）。改 `host.js`、`lib/` 下的文件时**必须把 `?v=N` +1**（碰了客户端模块的行为再一起 +1 `client.js` 的 `MODULE_VERSION`），不然会出现「改了文件却还是老代码」的静默错配：
 >
 > ```sh
-> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=70）
-> sed -i '' 's/?v=69/?v=70/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 164）
-> sed -i '' 's/MODULE_VERSION = 163;/MODULE_VERSION = 164;/' plugin/dsh-kp-notes/client.js
+> # 1) host 半跨模块 import 的 ?v=N（当前 ?v=81）
+> sed -i '' 's/?v=80/?v=81/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 165；只改注释 / 只动宿主时不必动）
+> sed -i '' 's/MODULE_VERSION = 164;/MODULE_VERSION = 165;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
-> 然后才在插件管理里把 bundle 关一次 / 开一次 —— 宿主是按**完整 URL（含 query）**缓存模块的：入口 URL 不变就还是老代码，只改 `lib/` 的 URL 又会继续用旧的兄弟模块。 **注意：这一步对宿主半已经失效** —— `plugin/dsh-kp-notes/cordis.patch.yml` 现在是发布形态的 `name: 'dsh-kp-notes'`，源文件里不再有 `?entry=N`，宿主模块的 URL 永远不变 ⇒ 关开 bundle 不会重新 import 宿主代码，**改 `host.js` / `lib/` 之后必须重启 DeepSeek Harness**；客户端那半仍然是 `⌘R` 或关开一次 bundle 就生效。
+> 宿主是按**完整 URL（含 query）**缓存模块的：只改 `lib/` 的文件内容而不换 URL，兄弟模块照旧从缓存里拿 ⇒ 必须撞 `?v=N`。 至于**什么时候**加载：实测宿主半保存后会被重新 import，**隔几秒就生效，不用重启 Harness**（`cordis.patch.yml` 是发布形态的 `name: 'dsh-kp-notes'`，没有 `?entry=N`，所以别再指望关开 bundle 换 URL）；紧跟保存的那次请求可能还是旧代码，等几秒再试。客户端那半仍然是 `⌘R` 或关开一次 bundle 就生效。
 
 client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个模块导出的是一个 `createX(deps)` 工厂 —— 模块之间不互相 import，依赖由入口按拓扑顺序注入，`deps` 里包含 `React` 与它需要的兄弟模块成员）：
 
@@ -540,8 +541,8 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 | `client/css.js` | 754 | 全部样式（`const CSS` + 末尾的 `HOST_CSS` 宿主主题映射层：`.rk-root.rk-follow` 把 `--rk-*` 指到宿主 `--dsw-alias-*`） | — |
 | `client/util.js` | 94 | 缩放取整、字数、路径标签、小节 / 知识点查找、编辑器状态 | — |
 | `client/api.js` | 440 | 数据层：宿主路由的 fetch/post 包装（画布目录、roots、库配置、`state`、git）+ `useCatalog` / `useGit` 两个轮询 hook + `activeRoot`（只活在本页面会话的当前根目录，面板通过 `getActiveRoot()` / `setActiveRoot()` 读写） | React |
-| `client/media.js` | 229 | 图片素材：插图**两步**（`upload(file, notePath)` **同步**交回一条 `blob:` 本地引用（`URL.createObjectURL(file)`）并把文件记进内存 —— 选文件阶段不写盘；`settleText(text)` 在图片真进正文（markdown 里带 `blob:`）之后才把字节 POST 到 `/rk-study/media` 落到 `media/<小节uid>.assestfiles/`，`flush()` 供保存前等一等）+ 显示换算（`mediaUrl(src)` / `watchImages(rootEl)`：用 `MutationObserver` 盯住面板里所有 `<img>`，把相对 `src` 就地换成路由地址；只改 DOM，markdown 里那份相对路径原样不动）+ 写盘收口（`toMarkdownSrc(text, strict)`：把显示地址与没落盘的 `blob:` 换回相对路径，strict 时把落盘失败的图整段去掉）+ `maxFileSize`（16 MB）与 `allowedProtocols`（`['blob:']`，两个都喂给 vendor 的 `imageUpload`，不传它默认只让 5 MB、且不认 `blob:` 会把图从 markdown 里静默丢掉） | api |
-| `client/store.js` | 211 | 持久化 + 本机状态：画布列表与统计（`roots` / `rootStats`）、「移出列表」墓碑（`isRemoved` / `markRemoved` / `unmarkRemoved`）、学习库配置的 500ms 合并写盘（`saveLib` / `saveRoots` / `flushLib`）、字号（`fontScale` / `stepFont` / `zoomRef`）、闪信（`flash`）；`useStore()` 把这一整包一次性返回给面板，函数名与原来一致 | React、api |
+| `client/media.js` | 230 | 图片素材：插图**两步**（`upload(file, notePath)` **同步**交回一条 `blob:` 本地引用（`URL.createObjectURL(file)`）并把文件记进内存 —— 选文件阶段不写盘；`settleText(text)` 在图片真进正文（markdown 里带 `blob:`）之后才把字节 POST 到 `/rk-study/media` 落到 `.media/<小节uid>.assestfiles/`，`flush()` 供保存前等一等）+ 显示换算（`mediaUrl(src)` / `watchImages(rootEl)`：用 `MutationObserver` 盯住面板里所有 `<img>`，把相对 `src` 就地换成路由地址；只改 DOM，markdown 里那份相对路径原样不动）+ 写盘收口（`toMarkdownSrc(text, strict)`：把显示地址与没落盘的 `blob:` 换回相对路径，strict 时把落盘失败的图整段去掉）+ `maxFileSize`（16 MB）与 `allowedProtocols`（`['blob:']`，两个都喂给 vendor 的 `imageUpload`，不传它默认只让 5 MB、且不认 `blob:` 会把图从 markdown 里静默丢掉） | api |
+| `client/store.js` | 250 | 持久化 + 本机状态：画布列表与统计（`roots` / `rootStats`）、「移出列表」墓碑（`isRemoved` / `markRemoved` / `unmarkRemoved`）、配置的 500ms 合并写盘（`saveLib` / `saveRoots` / `flushLib` —— 库级那份收 `canvases` / `ui.skin|cardColors|theme` / `zoom.roots` / `seq`，**视野与字号按画布各存一份**：`ui.fontScale` 与 `zoom[<画布绝对路径>]` 写进那张画布自己的 `<画布>/.config/rk-study.json`）、字号（`fontScale` / `stepFont` / `zoomRef`）、闪信（`flash`）；`useStore()` 把这一整包一次性返回给面板，函数名与原来一致 | React、api |
 | `client/theme.js` | 176 | 配色与主题：配色皮肤（`skin` / `skinList` / `skinHex`）、主题（`theme`：插件配色 / 跟随宿主明暗，`follow` / `hostDark` / `mdTheme`）、卡片各一色（`cardColors`）；跟随主题时把宿主 brand 色搬进 `--rk-a1..a3`，主题变化用 `MutationObserver` 跟住，三样都同时写 localStorage 与库配置 | React、store |
 | `client/git.js` | 109 | Git 提交面板的状态与动作：未提交改动的角标数字（`gitPending` / `gitOutside`）、提交（可选顺手推送）/ 仅推送 / 拉取、让模型写候选 commit message（`gitAi`） | React、api |
 | `client/roots.js` | 253 | 学习画布目录管理：新建 / 改名（= 重命名磁盘目录）/ 移出列表（搬进同层 `.remove/` + 记墓碑）、扫盘核对 `probeRoot`、导入学习库（输入框 + 宿主原生选目录窗体）以及两个弹窗的状态 | React、api |
@@ -570,13 +571,13 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 - `GET /rk-study/templates` —— 模板库文件表：`{ok, dir, files:[{key, label, file, path, exists, markdown}]}`，`key` 为 `formula`（公式模板）/ `markdown`（Markdown模板），文件不存在时 `exists:false` 并给出内置默认库；`POST /rk-study/templates` `{key, markdown}` 覆盖写入对应文件（目录不存在会建），用于「建模板文件」与在外部改完再存回
 - `GET /rk-study/vendor/<文件名>` —— 插件自带的渲染引擎与编辑器静态资源（KaTeX / mermaid / 字体 / zt-milkdown），只允许 `js|css|woff2|svg`，单文件上限 16 MB，带一周缓存；越界路径一律 404
 - `GET /rk-study/client/<文件名>` —— Client 半的 ESM 模块（见下表），只允许 `js`、只允许 GET/HEAD、`no-store`、拒绝 `.` 开头与含 `..` / `\` 的路径
-- `GET /rk-study/media?path=<笔记里的那段相对路径>[&root=…]` —— 图片素材（`png|jpg|jpeg|gif|webp|avif|bmp|svg`，单张上限 24 MB，私有长缓存）：先当「相对 root」的路径认（`../` 前缀剥掉），认不到就把路径按 `/` 切成后缀（文件名不动、最多 3 档）到库里的根 + 一二级子目录找同名后缀 —— 所以 `media/<uid>.assestfiles/x.png`、旧布局的 `<uid>.assestfiles/x.png`、以及 `notes/01-硬件/media/<uid>.assestfiles/x.png` 都能认；卡片 / 导图 / 预览 / 编辑器都只需要把 markdown 里那一段原样丢过来。找不到回 `404 {error:'image-not-found'}`
-- `POST /rk-study/media` —— `{path:<正在编辑的那篇笔记的相对路径>, name, type, data:<base64>}`（`data` 也接受带 `data:` 前缀的 dataURL）：按「同目录 + 小节序号相同」定到这篇笔记所属的**小节**（题目文件先镜像到 `notes/` 一侧），把字节写进它旁边的 `media/<小节编号>.assestfiles/<小节编号>-<序号>.<扩展名>`（序号自动往后排），返回 `{ok, uid, name, path, src, bytes}`，`src` 是**相对那篇笔记自己**的路径（题目文件里就是 `../../notes/…`）。校验 `invalid-upload` / `empty-image` / `image-too-large` / `no-section-for-note`
+- `GET /rk-study/media?path=<笔记里的那段相对路径>[&root=…]` —— 图片素材（`png|jpg|jpeg|gif|webp|avif|bmp|svg`，单张上限 24 MB，私有长缓存）：先当「相对 root」的路径认（`../` 前缀剥掉），认不到就把路径按 `/` 切成后缀（文件名不动、最多 3 档）到库里的根 + 一二级子目录找同名后缀 —— 所以 `.media/<uid>.assestfiles/x.png`、老布局的 `media/<uid>.assestfiles/x.png` 与 `<uid>.assestfiles/x.png`、以及 `notes/01-硬件/.media/<uid>.assestfiles/x.png` 都能认（搬迁之前写在正文里的老路径不改也照样显示）；卡片 / 导图 / 预览 / 编辑器都只需要把 markdown 里那一段原样丢过来。找不到回 `404 {error:'image-not-found'}`
+- `POST /rk-study/media` —— `{path:<正在编辑的那篇笔记的相对路径>, name, type, data:<base64>}`（`data` 也接受带 `data:` 前缀的 dataURL）：按「同目录 + 小节序号相同」定到这篇笔记所属的**小节**（题目文件先镜像到 `notes/` 一侧）；**落盘之前先看这个小节有没有老布局的 `media/`**，有就先整层搬成 `.media/` 并把正文里那几段路径改过来（`migrateLegacyMedia` + `rewriteLegacyMediaRefs`，搬不动不拦着插图），然后才把字节写进它旁边的 `.media/<小节编号>.assestfiles/<小节编号>-<序号>.<扩展名>`（序号自动往后排），返回 `{ok, uid, name, path, src, bytes}`，`src` 是**相对那篇笔记自己**的路径（题目文件里就是 `../../notes/…`）。校验 `invalid-upload` / `empty-image` / `image-too-large` / `no-section-for-note`
 - `GET /rk-study/git[?scope=notes]` —— 工作区 git 状态：`{ok, root, branch, upstream, remote, ahead, behind, clean, files:[{path,code,group,tracked}], truncated, scope, scopeTotal, counts:{plugin,notes,other,total}, lastCommit:{hash,subject,date}}`（`?scope=notes` 时 `files` / `clean` / `scopeTotal` 只算 `notes/` + `questions/`，`counts` 仍是全量；不是 git 仓库时 `{ok:false,error:'not-a-git-repo'}`）
 - `POST /rk-study/git` —— `{action:'commit', message, scope:'all'|'plugin'|'notes', push?}` 先按范围 `git add` 再 `git commit`（没东西可提交时返回 `nothing-to-commit`；`push:true` 时连着 `git push`，没有新改动就只推送已有提交）；`{action:'push', dryRun?}` 只推送（弹窗里的「仅推送」按钮 = 不提交、直接把本地已有的提交推到远程）；`{action:'message', scope?}` 让模型读一遍改动内容给 3 条候选 commit message（返回 `{ok, candidates, provider, model, files, tried}`）；`{action:'models'}` 列出当前可用的 provider / model（排障用）
 - `POST /rk-study/notes` —— `{action:'save', path, markdown}` / `{action:'newSection', dir, title}` / `{action:'newPoint', dir, section, title}` / `{action:'addQuestion', path}`（题目文件不存在就自动创建）/ `{action:'saveQuestion', path, order?, fields}`（`path` 可以是知识点路径，也可以是题目文件路径；`fields = {kind:'choice'|'case', stem, options:[{key,text}], answerKey, answerText, explanation}`，校验 `empty-stem` / `need-two-options` / `bad-option-key` / `answer-not-in-options` / `empty-answer`，写完统一重排 `## 题目 N`）/ `{action:'savePoint', path, key, title, body, tags?}`（知识点表单：`key` 决定改的是整篇文件还是文件里的某一个 `##` 段落，校验 `empty-title`，`tags` 只在整篇文件模式下生效）/ `{action:'newChapter', parent, title}`（只建目录）/ `{action:'renameChapter', dir, title}`（改目录名，题目镜像目录与 `point:` 前缀一起改）/ `{action:'delete', path}` / `{action:'deleteDir', dir}` / `{action:'deleteQuestion', path, order}`
 
-扫描规则：忽略 `plugin`、`node_modules`、`.git`、`dist`、`build`、`.obsidian` 与隐藏文件；最多 1500 个文件、8 层目录、单文件 1 MB；图片素材目录 `*.assestfiles` 也跳过（否则会被当成一章），收着它们的 `media/` 那层一并跳过（里面除点开头的 `.DS_Store` 这类文件外全是 `*.assestfiles` 目录时才算素材目录，真有 `.md` 就没被吞掉）。
+扫描规则：忽略 `plugin`、`node_modules`、`.git`、`dist`、`build`、`.obsidian` 与隐藏文件；最多 1500 个文件、8 层目录、单文件 1 MB；图片素材目录 `*.assestfiles` 也跳过（否则会被当成一章），新布局的 `.media/` 那层因为是点开头、直接进 `skipped`，老布局的 `media/` 那层走判据（里面除点开头的 `.DS_Store` 这类文件外全是 `*.assestfiles` 目录时才算素材目录，真有 `.md` 就没被吞掉）。
 
 ## 六、主题与配色
 

@@ -11,11 +11,11 @@
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE, MAX_DEPTH, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_PARENT_DIR } from './constants.js?v=74';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=74';
-import { listDirSafe } from './templates.js?v=74';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=74';
-import { safePath } from './write.js?v=74';
+import { MARKDOWN_RE, MAX_DEPTH, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_LEGACY_PARENT_DIR, MEDIA_PARENT_DIR } from './constants.js?v=81';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=81';
+import { listDirSafe } from './templates.js?v=81';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=81';
+import { safePath } from './write.js?v=81';
 
 /* --------------------------------------------------------------- deleting */
 
@@ -184,15 +184,15 @@ export function pruneEmptyDirs(config, relPaths) {
 
 /**
  * 打扫一个笔记文件时, 它引用的素材要怎么处理 —— 素材统一收在
- * <正文目录>/media/<小节uid>.assestfiles/ 里(见 host 半 mediaHomeFor):
+ * <正文目录>/.media/<小节uid>.assestfiles/ 里(见 host 半 mediaHomeFor; 老库里那层还叫 media/):
  *   - 删的是**小节**(连带它的知识点 / 题目): 这一份素材目录属于这个小节, 整个搬进同一个桶 ——
  *     图跟着小节走, 想恢复时把桶里的东西移回去, 正文里的相对路径照旧能找到图;
  *   - 删的是单个知识点 / 题目: 那份素材目录是**整个小节共用**的, 所以只搬「这篇笔记引用、
  *     而画布里别的笔记已经不再引用」的那几个文件(别的笔记还在用的留着, 免得把它们弄丢);
- *   - 搬走之后空掉的 <uid>.assestfiles/ 与它上面那层 media/ 顺手清掉.
+ *   - 搬走之后空掉的 <uid>.assestfiles/ 与它上面那层 .media/(老库: media/)顺手清掉.
  */
 
-/** 正文里的素材引用: …/media/<uid>.assestfiles/<文件名>(笔记里存的是相对这篇笔记的路径) */
+/** 正文里的素材引用: …/.media/<uid>.assestfiles/<文件名>(笔记里存的是相对这篇笔记的路径) */
 const MEDIA_REF_RE = /[^\s()"'<>[\]|]*\.assestfiles\/[^\s()"'<>[\]|]+/g;
 
 /** 把 relPath(相对路径) 与它引用的素材路径拼起来, 吃掉 ./ 与 ../, 得到 root 相对路径 */
@@ -220,7 +220,7 @@ export function mediaRefsOf(text, relPath) {
 	return out;
 }
 
-/** 素材路径所在的那些目录: <uid>.assestfiles/ 与它上面那层 media/(都可能空掉) */
+/** 素材路径所在的那些目录: <uid>.assestfiles/ 与它上面那层 .media/(老库: media/)(都可能空掉) */
 function mediaDirsOf(rel) {
 	const out = [];
 	let dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
@@ -230,7 +230,7 @@ function mediaDirsOf(rel) {
 		if (cut <= 0) break;
 		dir = dir.slice(0, cut);
 	}
-	if (dir === MEDIA_PARENT_DIR || dir.endsWith(`/${MEDIA_PARENT_DIR}`)) out.push(dir);
+	if (dir === MEDIA_PARENT_DIR || dir.endsWith(`/${MEDIA_PARENT_DIR}`) || dir === MEDIA_LEGACY_PARENT_DIR || dir.endsWith(`/${MEDIA_LEGACY_PARENT_DIR}`)) out.push(dir);
 	return out;
 }
 
@@ -246,7 +246,7 @@ async function mediaStillReferenced(ctx, config, name) {
 			if (entryName.startsWith('.') || (config.exclude || []).includes(entryName)) continue;
 			const rel = relDir === '' ? entryName : `${relDir}/${entryName}`;
 			if (entry.type === 'directory') {
-				if (entryName.endsWith(MEDIA_DIR_SUFFIX) || entryName === MEDIA_PARENT_DIR) continue;
+				if (entryName.endsWith(MEDIA_DIR_SUFFIX) || entryName === MEDIA_PARENT_DIR || entryName === MEDIA_LEGACY_PARENT_DIR) continue;
 				queue.push([rel, depth + 1]);
 				continue;
 			}
@@ -313,7 +313,7 @@ async function moveMediaIntoBucket(ctx, config, refs, bucket, whole) {
 /**
  * 删除一个笔记文件, 并连带删除同一知识点在题目目录(questions/)下的同名文件;
  * 删除小节文件时, 连带删除该小节下的全部知识点文件及其题目文件.
- * 被删掉的笔记**引用的素材**(media/<小节uid>.assestfiles/…)也跟着进同一个桶, 见下面 mediaDirsToMove.
+ * 被删掉的笔记**引用的素材**(.media/<小节uid>.assestfiles/…)也跟着进同一个桶, 见下面 mediaDirsToMove.
  */
 export async function deleteEntry(ctx, config, relPath) {
 	const clean = String(relPath ?? '').trim();

@@ -1300,7 +1300,7 @@ window.__ModuleLoader__.load({
 				doc: document,
 				onError: (error) => ctx.logger?.warn?.('rk-study: zt-react-milkdown 加载失败, 已回退到源码编辑', error),
 			});
-			/* media: 图片素材 —— 插图落盘到 media/<小节uid>.assestfiles/ + 面板里相对 src 的显示换算(见 client/media.js) */
+			/* media: 图片素材 —— 插图落盘到 .media/<小节uid>.assestfiles/ + 面板里相对 src 的显示换算(见 client/media.js) */
 			const mediaMods = media.createMedia({ api: apiMods });
 			/* 依赖图无环: dict / css / util 是叶子, vendor 只要 React, milkdown 只要 react 家族, md 吃 vendor, cards 吃 md + util, editor 吃 md + cards, dialogs 吃 md */
 			const mdMods = md.createMd({ React, MathNode: vendorMods.MathNode, MermaidBlock: vendorMods.MermaidBlock, looksLikeMath: vendorMods.looksLikeMath });

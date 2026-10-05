@@ -1,8 +1,9 @@
 /* rk-study · client/media.js —— 图片素材(落盘 + 显示)
  *
  * 编辑器里插图**不写 Base64**: 字节交给 host 落到「所在小节」旁边的
- * media/<小节uid>.assestfiles/ 里(见 lib/routes.js 的 /rk-study/media 与 README「图片素材」),
- * 正文里只留一段相对路径(如 media/s0001.assestfiles/s0001-2.png), 所以笔记整体搬走、
+ * .media/<小节uid>.assestfiles/ 里(见 lib/routes.js 的 /rk-study/media 与 README「图片素材」;
+ * 老库里那层还叫 media/, host 会在第一次插图时顺手搬过来),
+ * 正文里只留一段相对路径(如 .media/s0001.assestfiles/s0001-2.png), 所以笔记整体搬走、
  * 用别的编辑器打开都不丢图; 从正文里删掉图片也**不会**删盘上那份。
  *
  * 插入图片是**两步**的(跟 vendor 弹窗「先选文件 → 再点『插入图片』」对齐):
