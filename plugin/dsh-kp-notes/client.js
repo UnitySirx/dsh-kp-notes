@@ -377,6 +377,20 @@ window.__ModuleLoader__.load({
 			/* 读一次配置: 学习库那份 + 当前画布自己那份(视野缩放 / 字号 / 配色 / 画布列表 / 移出列表)。
 			 * 视野与字号「按画布各存一份」, 所以进 / 出一张画布要重读一次; 画布那份盖在库那份上面。
 			 * 一级画布列表会 await 这个 promise(libLoadRef); 视野恢复会用到 libZoomRef。 */
+			/* 「学习库在哪」的推断: 画布列表的共同上一层, 并且它不是画布自己、也不是本机已经记着的那个。
+			 * 本机没记着库目录(换浏览器 / 清了缓存 / 以前那个目录被删了)时用它兜底认回来。 */
+			const rootCandidateOf = () => {
+				const parentOfPath = (value) => {
+					const cut = String(value).replace(/\/+$/, '').lastIndexOf('/');
+					return cut > 0 ? String(value).slice(0, cut) : '';
+				};
+				const paths = readRoots().map((item) => (item && typeof item.path === 'string' ? item.path : '')).filter((path) => path.charAt(0) === '/');
+				const parents = paths.map(parentOfPath);
+				if (parents.length === 0 || parents[0] === '' || parents[0] === '/' || parents[0] === readDefaultRoot()) return '';
+				return parents.every((dir) => dir === parents[0]) ? parents[0] : '';
+			};
+			/* 一个候选目录像不像学习库: 真的在、不是画布自己、并且有 .config 或 .templates */
+			const looksLikeLib = (probe) => probe && probe.exists !== false && probe.isCanvas !== true && (probe.hasConfig === true || probe.hasTemplates === true);
 			useEffect(() => {
 				const lib = readDefaultRoot();
 				libReadyRef.current = false;
@@ -385,7 +399,27 @@ window.__ModuleLoader__.load({
 					libLoadRef.current = Promise.resolve({});
 					/* 也要踢一次, 否则一级画布那个「首次铺满」effect 等不到信号 */
 					setLibTick((value) => value + 1);
-					return undefined;
+					/* 本机没记着学习库目录: 拿画布列表的共同上一层认一把。认回来之前库这一级的
+					 * 改动都会被 store.flushLib 攒着(不再静默丢掉), 目录一认回来就写盘。 */
+					let alive = true;
+					(async () => {
+						const candidate = rootCandidateOf();
+						if (candidate === '' || healTriedRef.current === candidate) return;
+						healTriedRef.current = candidate;
+						const probe = await fetchLibConfig(candidate).then((saved) => (saved && typeof saved === 'object' ? saved : {})).catch(() => ({}));
+						if (!alive) return;
+						if (looksLikeLib(probe)) {
+							writeDefaultRoot(candidate);
+							flash(t('libHealed').split('{path}').join(candidate));
+							setLibRev((value) => value + 1);
+							setLibTick((value) => value + 1);
+							return;
+						}
+						flash(t('libUnset'));
+					})();
+					return () => {
+						alive = false;
+					};
 				}
 				let alive = true;
 				const readConfig = (root) => fetchLibConfig(root).then((saved) => (saved && typeof saved === 'object' ? saved : {})).catch(() => ({}));
@@ -398,16 +432,10 @@ window.__ModuleLoader__.load({
 					 * 它还得真的在、不是画布自己、并且像学习库(有 .config 或 .templates)才算。 */
 					if (file.exists === false && healTriedRef.current !== lib) {
 						healTriedRef.current = lib;
-						const parentOfPath = (value) => {
-							const cut = String(value).replace(/\/+$/, '').lastIndexOf('/');
-							return cut > 0 ? String(value).slice(0, cut) : '';
-						};
-						const paths = readRoots().map((item) => (item && typeof item.path === 'string' ? item.path : '')).filter((path) => path.charAt(0) === '/');
-						const parents = paths.map(parentOfPath);
-						const candidate = parents.length > 0 && parents[0] !== '' && parents[0] !== '/' && parents.every((dir) => dir === parents[0]) && parents[0] !== lib ? parents[0] : '';
+						const candidate = rootCandidateOf();
 						const probe = candidate === '' ? {} : await readConfig(candidate);
 						if (!alive) return file;
-						if (candidate !== '' && probe.exists !== false && probe.isCanvas !== true && (probe.hasConfig === true || probe.hasTemplates === true)) {
+						if (candidate !== '' && looksLikeLib(probe)) {
 							writeDefaultRoot(candidate);
 							flash(t('libHealed').split('{path}').join(candidate));
 							setLibRev((value) => value + 1);
@@ -444,7 +472,10 @@ window.__ModuleLoader__.load({
 					/* 字号 / 配色: 本机存过就以本机为准, 没存过(换台机器)才用文件里的; 画布那份盖在库那份上 */
 					const ui = Object.assign({}, file.ui && typeof file.ui === 'object' ? file.ui : {}, own.ui && typeof own.ui === 'object' ? own.ui : {});
 					const had = hadLocalUiRef.current || {};
-					if (!had.fontScale && FONT_STEPS.indexOf(Number(ui.fontScale)) >= 0) setFontScale(Number(ui.fontScale));
+					/* 字号: 本机存过的以本机为准, 但「本机那份就是出厂默认 100」不算存过 ——
+					 * localStorage 被清过一次之后都会落到这个默认值, 认它就会把文件里真正那份永久顶掉,
+					 * 表现就是「离开插件再进来, 字号被重置」。 */
+					if ((!had.fontScale || fontScale === 100) && FONT_STEPS.indexOf(Number(ui.fontScale)) >= 0) setFontScale(Number(ui.fontScale));
 					if (!had.skin && typeof ui.skin === 'string' && ui.skin !== '') setSkin(ui.skin);
 					if (!had.theme && typeof ui.theme === 'string') setTheme(ui.theme === 'follow' || ui.theme === 'light' || ui.theme === 'auto' ? 'follow' : 'plugin');
 					if (!had.cardColors && typeof ui.cardColors === 'boolean') setCardColors(ui.cardColors);
@@ -515,7 +546,12 @@ window.__ModuleLoader__.load({
 							touched = true;
 						}
 						/* activeRoot 不再补齐: 打开面板就停在「全部画布」这一级 */
-						if (touched) setRootTick((value) => value + 1);
+						if (touched) {
+							setRootTick((value) => value + 1);
+							/* 画布列表是刚从落盘镜像补进来的: 让「读库配置」再跑一次,
+							 * 好让「本机没记着学习库目录」时的兜底认回有列表可用 */
+							setLibRev((value) => value + 1);
+						}
 					})
 					.catch(() => {
 						stateReadyRef.current = true;
@@ -1288,7 +1324,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 167;
+		const MODULE_VERSION = 172;
 		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 

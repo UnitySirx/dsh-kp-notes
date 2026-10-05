@@ -60,14 +60,20 @@ export function createCanvas({ React }) {
 				const raw = window.localStorage.getItem(layoutKey);
 				if (raw) {
 					const saved = JSON.parse(raw);
-					if (saved && saved.view && saved.v === VIEW_VERSION) { applyView(saved.view); userMoved.current = true; }
-					didFit.current = true;
-					return;
+					/* 本机那条得真的能用才算数: 老版本(v 对不上) / 坏掉的条目不能当成「本机有」,
+					 * 否则下面直接 return 会让视野停在一个默认值上, 再被 saveLib 写回文件 —— 用户看到的
+					 * 就是「离开插件再进来, 画布缩放被重置」。 */
+					if (saved && saved.view && saved.v === VIEW_VERSION) {
+						applyView(saved.view);
+						userMoved.current = true;
+						didFit.current = true;
+						return;
+					}
 				}
 			} catch (problem) {
 				/* 存储不可用就算了 */
 			}
-			/* 本机没存过(换浏览器 / 换机器) ⇒ 用学习库配置里的那一份 */
+			/* 本机没存过(换浏览器 / 换机器 / 本机那条用不了) ⇒ 用学习库配置里的那一份 */
 			const fromFile = (libZoomRef.current || {})[zoomKey];
 			if (fromFile && typeof fromFile === 'object') {
 				applyView(fromFile);
@@ -351,13 +357,22 @@ export function createCanvas({ React }) {
 			}
 			if (last.w === stageBox.w && last.h === stageBox.h) return;
 			lastFit.current = { w: stageBox.w, h: stageBox.h };
+			/* 视野是「本机存过的 / 学习库配置里的 / 用户自己调过的」(userMoved) 就绝不再自动铺满:
+			 * 面板刚挂上来的头几次尺寸测量还是布局噪声, 拿它重新铺满, 会把刚从学习库恢复的那份视野
+			 * 直接盖掉 —— 表现就是「离开插件再进来, 画布缩放被重置」。内容真被挤出去时, 用户按一下
+			 * 铺满/复位就行。 */
+			if (userMoved.current) return;
 			const fits = view.scale * extent.w <= stageBox.w - 24 && view.scale * extent.h <= stageBox.h - 24;
 			if (fits) return;
 			fitView();
 		}, [stageBox, mapReady, fitView, extent, view.scale]);
 
-		/* 切模式时视图复位一次(导图与画布的布局不一样), 并让下次回画布时重新铺满 */
+		/* 切模式时视图复位一次(导图与画布的布局不一样), 并让下次回画布时重新铺满。
+		 * 首次挂载不算「切模式」: 那一下复位会把刚从本机 / 学习库配置里恢复回来的视野清掉。 */
+		const modeRef = useRef(mode);
 		useEffect(() => {
+			if (modeRef.current === mode) return;
+			modeRef.current = mode;
 			didFit.current = false;
 			mapFits.current = 0;
 			userMoved.current = false;

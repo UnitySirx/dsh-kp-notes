@@ -82,8 +82,9 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 			libTimerRef.current = 0;
 			const lib = readDefaultRoot();
 			const patch = libPatchesRef.current;
-			libPatchesRef.current = {};
+			/* 还没读到库配置(或本机还没认下库目录)时别把补丁丢掉 —— 攒着, 等目录定下来再写 */
 			if (!libReadyRef.current || Object.keys(patch).length === 0) return;
+			libPatchesRef.current = {};
 			/* 视野(zoom)与字号(ui.fontScale)按画布各存一份: 停在哪张画布就写进那张画布自己的
 			 * .config/rk-study.json(跟着画布走); 其余键(canvases / removed / 配色 …)与停在一级画布时的
 			 * 东西一律写学习库那份。zoom 的键是「哪个工作区的视野」: 与本张画布同路径的才归它自己。 */
@@ -114,7 +115,19 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 					/* 画布那份写不动就算了, 本机 localStorage 照样能用 */
 				});
 			}
-			if (!lib || Object.keys(rest).length === 0) return;
+			if (Object.keys(rest).length === 0) return;
+			if (!lib) {
+				/* 学习库目录还没认出来(本机没存过 / 目录被删了): 这一份攒回去, 等认回目录那一刻再写盘。
+				 * 不能静默丢掉 —— 否则用户改了视野 / 字号, 重启一看全没了("配置被重置"就是这么来的)。 */
+				const acc = libPatchesRef.current;
+				for (const key of Object.keys(rest)) {
+					const value = rest[key];
+					const plain = value && typeof value === 'object' && !Array.isArray(value);
+					const base = plain && acc[key] && typeof acc[key] === 'object' && !Array.isArray(acc[key]);
+					acc[key] = base ? { ...acc[key], ...value } : value;
+				}
+				return;
+			}
 			postLibConfig(lib, rest).catch(() => {
 				/* 写不动就算了, 本机 localStorage 照样能用 */
 			});
@@ -162,6 +175,10 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 		const zoomRef = useRef(1);
 		zoomRef.current = fontScale / 100;
 		useEffect(() => {
+			/* 还没读过一次库配置时先不写: 这一发写的可能只是启动默认值(100), 它会盖掉文件里那份,
+			 * 而且先落进 localStorage 就被当成「本机存过」, 之后再也纠正不回来 —— 用户看到的就是
+			 * 「离开插件再进来, 字号被重置」。 */
+			if (!libReadyRef.current) return;
 			try {
 				window.localStorage.setItem(FONT_KEY, String(fontScale));
 			} catch (problem) {

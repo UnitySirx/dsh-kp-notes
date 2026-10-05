@@ -6,21 +6,21 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * 已经用 ctx.fs 复核过两头都在画布 root 之内(见 renameChapter / renameRoot / removeRoot / migrateLegacyMedia)。 */
 import { mkdirSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 
-import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=82';
-import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MAX_DEPTH, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_LEGACY_PARENT_DIR, MEDIA_MAX_BYTES, MEDIA_PARENT_DIR, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=82';
-import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=82';
-import { insideRoot, writePolicyOf } from './fsguard.js?v=82';
-import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=82';
-import { buildNodes, scanHeadings } from './headings.js?v=82';
-import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=82';
-import { parseDocument } from './parse.js?v=82';
-import { pointRegion, rebuildPoint } from './points.js?v=82';
-import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=82';
-import { buildCatalog } from './scan.js?v=82';
-import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=82';
-import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=82';
-import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=82';
-import { readBody, safePath, writeMarkdown } from './write.js?v=82';
+import { listChapterBin, listRootBins, restoreBucket, restoreChapter, restoreItem } from './bin.js?v=86';
+import { ASSET_ROUTE, ASSET_TYPES, CACHE_TTL_MS, CLIENT_DIR, CLIENT_ROUTE, CLIENT_TYPES, CONFIG_DIR, CONFIG_ROUTE, GIT_ROUTE, MARKDOWN_RE, MAX_BODY_BYTES, MAX_BYTES_PER_FILE, MAX_DEPTH, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_LEGACY_PARENT_DIR, MEDIA_MAX_BYTES, MEDIA_PARENT_DIR, MEDIA_ROUTE, MEDIA_TYPES, ROOTS_ROUTE, ROUTE, STATE_DIR, STATE_FILE, STATE_ROUTE, TEMPLATE_ROUTE, VENDOR_DIR } from './constants.js?v=86';
+import { REMOVE_DIR, deleteDirEntry, deleteEntry, isExcludedPath, questionDirFor, readAllStashedUids, removeBucketFor, removeBucketName, bucketNameIn, safeDirPath, saveRemovedText, stashUids } from './delete.js?v=86';
+import { insideRoot, writePolicyOf } from './fsguard.js?v=86';
+import { gitCommit, gitMessage, gitModels, gitPull, gitPush, gitStatus } from './git.js?v=86';
+import { buildNodes, scanHeadings } from './headings.js?v=86';
+import { configBytesOf, configPathOf, readLibConfig, readRemovedStore, writeLibConfig, writeRemovedStore } from './libconfig.js?v=86';
+import { parseDocument } from './parse.js?v=86';
+import { pointRegion, rebuildPoint } from './points.js?v=86';
+import { questionBlockNodes, removeQuestionBlock, saveQuestionBlock, withBlockUid } from './questions.js?v=86';
+import { buildCatalog } from './scan.js?v=86';
+import { TEMPLATE_FILES, countQuestionItems, filePad, listDirSafe, noteTemplate, pointNumberFor, pointTemplate, questionBlock, questionBlockFromFields, questionFileTemplate, questionTemplate, sanitizeName } from './templates.js?v=86';
+import { adoptUid, adoptUids, dropUids, ensureUids, moveUid, takeUid, uidFromText } from './uid.js?v=86';
+import { baseName, classifyFile, cleanTitle, countWords, isQuestionStorePath, legacyTemplateDirOf, libraryDirOf, normalizeConfig, normalizeRelPath, notePathFor, noteStorePath, numericPrefix, parseFrontmatter, questionPathFor, sharedTemplateDirOf, stripNumericPrefix, templateDirOf, templatePath, validateRoot } from './util.js?v=86';
+import { readBody, safePath, writeMarkdown } from './write.js?v=86';
 
 /* 模板文件很小, 读它不需要跟画布扫描抢上限 */
 const TEMPLATE_MAX_BYTES = 256 * 1024;
