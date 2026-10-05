@@ -11,11 +11,11 @@
  * pruneEmptyDirs 只碰由这些已校验路径推导出来的空目录。除此之外不再新增裸 node:fs。 */
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 
-import { MARKDOWN_RE } from './constants.js?v=71';
-import { resolveTarget, rootTargetOf } from './fsguard.js?v=71';
-import { listDirSafe } from './templates.js?v=71';
-import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=71';
-import { safePath } from './write.js?v=71';
+import { MARKDOWN_RE, MAX_DEPTH, MAX_FILES, MEDIA_DIR_SUFFIX, MEDIA_PARENT_DIR } from './constants.js?v=73';
+import { resolveTarget, rootTargetOf } from './fsguard.js?v=73';
+import { listDirSafe } from './templates.js?v=73';
+import { isQuestionStorePath, noteStorePath, normalizeRelPath, questionPathFor } from './util.js?v=73';
+import { safePath } from './write.js?v=73';
 
 /* --------------------------------------------------------------- deleting */
 
@@ -183,8 +183,137 @@ export function pruneEmptyDirs(config, relPaths) {
 }
 
 /**
+ * 打扫一个笔记文件时, 它引用的素材要怎么处理 —— 素材统一收在
+ * <正文目录>/media/<小节uid>.assestfiles/ 里(见 host 半 mediaHomeFor):
+ *   - 删的是**小节**(连带它的知识点 / 题目): 这一份素材目录属于这个小节, 整个搬进同一个桶 ——
+ *     图跟着小节走, 想恢复时把桶里的东西移回去, 正文里的相对路径照旧能找到图;
+ *   - 删的是单个知识点 / 题目: 那份素材目录是**整个小节共用**的, 所以只搬「这篇笔记引用、
+ *     而画布里别的笔记已经不再引用」的那几个文件(别的笔记还在用的留着, 免得把它们弄丢);
+ *   - 搬走之后空掉的 <uid>.assestfiles/ 与它上面那层 media/ 顺手清掉.
+ */
+
+/** 正文里的素材引用: …/media/<uid>.assestfiles/<文件名>(笔记里存的是相对这篇笔记的路径) */
+const MEDIA_REF_RE = /[^\s()"'<>[\]|]*\.assestfiles\/[^\s()"'<>[\]|]+/g;
+
+/** 把 relPath(相对路径) 与它引用的素材路径拼起来, 吃掉 ./ 与 ../, 得到 root 相对路径 */
+function joinRel(dir, ref) {
+	const stack = [];
+	for (const part of `${dir}/${ref}`.split('/')) {
+		if (part === '' || part === '.') continue;
+		if (part === '..') {
+			stack.pop();
+			continue;
+		}
+		stack.push(part);
+	}
+	return stack.join('/');
+}
+
+/** 一篇笔记的正文引用了哪些素材(root 相对路径) */
+export function mediaRefsOf(text, relPath) {
+	const dir = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : '';
+	const out = new Set();
+	for (const hit of String(text ?? '').match(MEDIA_REF_RE) ?? []) {
+		const rel = joinRel(dir, hit);
+		if (rel !== '' && rel.includes('/')) out.add(rel);
+	}
+	return out;
+}
+
+/** 素材路径所在的那些目录: <uid>.assestfiles/ 与它上面那层 media/(都可能空掉) */
+function mediaDirsOf(rel) {
+	const out = [];
+	let dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+	while (dir !== '' && dir.endsWith(MEDIA_DIR_SUFFIX)) {
+		out.push(dir);
+		const cut = dir.lastIndexOf('/');
+		if (cut <= 0) break;
+		dir = dir.slice(0, cut);
+	}
+	if (dir === MEDIA_PARENT_DIR || dir.endsWith(`/${MEDIA_PARENT_DIR}`)) out.push(dir);
+	return out;
+}
+
+/** 画布里别的笔记还有没有引用这个素材(按文件名在 markdown 正文里找) —— 扫不完就当还在用, 保守留着 */
+async function mediaStillReferenced(ctx, config, name) {
+	const queue = [[config.noteDir, 0], [config.questionDir, 0]];
+	let scanned = 0;
+	while (queue.length > 0) {
+		const [relDir, depth] = queue.shift();
+		if (depth > MAX_DEPTH) continue;
+		for (const entry of await listDirSafe(ctx, config, relDir)) {
+			const entryName = String(entry.name ?? '');
+			if (entryName.startsWith('.') || (config.exclude || []).includes(entryName)) continue;
+			const rel = relDir === '' ? entryName : `${relDir}/${entryName}`;
+			if (entry.type === 'directory') {
+				if (entryName.endsWith(MEDIA_DIR_SUFFIX) || entryName === MEDIA_PARENT_DIR) continue;
+				queue.push([rel, depth + 1]);
+				continue;
+			}
+			if (!MARKDOWN_RE.test(entryName)) continue;
+			scanned += 1;
+			if (scanned > MAX_FILES) return true;
+			try {
+				if (readFileSync(`${config.root}/${rel}`, 'utf8').includes(name)) return true;
+			} catch {
+				/* 读不动就当没引用 */
+			}
+		}
+	}
+	return false;
+}
+
+/** 把这次删掉的笔记引用的素材搬进桶(whole = 删的是小节 ⇒ 它的素材目录整份跟着走) */
+async function moveMediaIntoBucket(ctx, config, refs, bucket, whole) {
+	const moved = [];
+	const dirs = new Set();
+	for (const rel of refs) {
+		const abs = `${config.root}/${rel}`;
+		let isFile = false;
+		try {
+			isFile = statSync(abs).isFile();
+		} catch {
+			isFile = false;
+		}
+		if (!isFile) continue;
+		const dirRel = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
+		if (whole) {
+			dirs.add(dirRel);
+			continue;
+		}
+		if (await mediaStillReferenced(ctx, config, rel.slice(rel.lastIndexOf('/') + 1))) continue;
+		try {
+			moved.push(moveIntoRemove(config, rel, abs, bucket));
+		} catch {
+			/* 搬不动就算了: 留在原地比丢掉好 */
+		}
+	}
+	for (const dirRel of dirs) {
+		const abs = `${config.root}/${dirRel}`;
+		try {
+			if (!statSync(abs).isDirectory()) continue;
+			moved.push(moveIntoRemove(config, dirRel, abs, bucket));
+		} catch {
+			/* 目录不在 / 搬不动: 跳过 */
+		}
+	}
+	if (moved.length === 0) return moved;
+	const empties = new Set();
+	for (const rel of refs) for (const dir of mediaDirsOf(rel)) empties.add(dir);
+	for (const dir of [...empties].sort((a, b) => b.length - a.length)) {
+		try {
+			if (readdirSync(`${config.root}/${dir}`).length === 0) rmdirSync(`${config.root}/${dir}`);
+		} catch {
+			/* 目录不在 / 不空 / 删不掉: 跳过 */
+		}
+	}
+	return moved;
+}
+
+/**
  * 删除一个笔记文件, 并连带删除同一知识点在题目目录(questions/)下的同名文件;
  * 删除小节文件时, 连带删除该小节下的全部知识点文件及其题目文件.
+ * 被删掉的笔记**引用的素材**(media/<小节uid>.assestfiles/…)也跟着进同一个桶, 见下面 mediaDirsToMove.
  */
 export async function deleteEntry(ctx, config, relPath) {
 	const clean = String(relPath ?? '').trim();
@@ -211,12 +340,24 @@ export async function deleteEntry(ctx, config, relPath) {
 			}
 		}
 	}
+	const list = [...new Set(targets)];
+	/* 动手之前先把这些笔记引用的素材记下来(搬走之后文件就读不到了) */
+	const mediaRefs = new Set();
+	for (const target of list) {
+		const abs = safePath(ctx, config, target);
+		if (!abs || !MARKDOWN_RE.test(target)) continue;
+		try {
+			for (const rel of mediaRefsOf(readFileSync(abs, 'utf8'), target)) mediaRefs.add(rel);
+		} catch {
+			/* 读不动就算了: 素材只是留在原地, 不会少东西 */
+		}
+	}
 	/* 这次删除要搬走的一切(本体 + 连带的小节/知识点/题目)都进**同一个桶** */
 	const bucket = removeBucketFor(config);
 	let removed = false;
 	const done = [];
 	let movedTo = null;
-	for (const target of [...new Set(targets)]) {
+	for (const target of list) {
 		const result = await deleteFile(ctx, config, target, bucket);
 		if (!result.removed) continue;
 		removed = true;
@@ -225,7 +366,8 @@ export async function deleteEntry(ctx, config, relPath) {
 		if (target !== clean) related.push(target);
 	}
 	const prunedDirs = pruneEmptyDirs(config, done);
-	return { ok: true, path: clean, removed, related, prunedDirs, movedTo, box: REMOVE_DIR, bucket: removeBucketName(bucket) };
+	const media = removed && mediaRefs.size > 0 ? await moveMediaIntoBucket(ctx, config, mediaRefs, bucket, sectionOrderOfPath(config, clean) !== null) : [];
+	return { ok: true, path: clean, removed, related, prunedDirs, media, movedTo, box: REMOVE_DIR, bucket: removeBucketName(bucket) };
 }
 
 /** 删除章节目录, 同时删除题目目录(questions/)下的同名目录(两份都进同一个桶) */

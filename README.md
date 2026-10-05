@@ -274,6 +274,7 @@ D. 非风险点
 - **支持的格式**：`png` / `jpg` / `jpeg` / `gif` / `webp` / `avif` / `bmp` / `svg`，单张上限 24 MB。
 - **新建时例外**：新建小节 / 知识点时文件还没落盘，此时插图仍是编辑器内置的 Base64；保存之后再插图就走上面这套了（把之前的 Base64 图删掉重插一次即可）。
 - `media/*.assestfiles/` 目录不会被扫描成章节，画布上不会多出奇怪的卡片。
+- **删笔记时素材跟着走**：删小节（含连带删掉的知识点 / 题目）⇒ 它那份 `media/<小节编号>.assestfiles/` **整份**跟着进 `.remove/<桶>/`；只删某个知识点 / 题目 ⇒ 只搬「这篇笔记引用、而别处已经不再引用」的那几张（别的笔记还在用的留着），搬完空掉的素材目录顺手清掉。详见「删除」一节。
 
 ### 输入助手（快捷键 + 公式模板）
 
@@ -320,6 +321,12 @@ D. 非风险点
 | 知识点卡片底部 | **删除知识点** | 该知识点文件 + `questions/<章>/<同名文件>.md`（两侧同步移动） |
 | 题目卡片右上角 | **删除此题** | 题目文件本身不动：被删掉的这一段 markdown 另存成 `.remove/<桶>/<题目文件路径>.removed-<题号>.md`（首行注释写明从哪个文件、第几题删的；同一题删两次就是两个桶里各一份，不覆盖），再重写剩下的题目 |
 | 小节页 / 知识点页 / 编辑器 | **删除本文件** | 当前打开的这个文件（笔记文件同样连带移动配对题目文件） |
+
+**图也跟着走**：笔记里引用的图片素材（`media/<小节编号>.assestfiles/…`）不会留在原地空着 ——
+- **删小节**（含它底下连带删掉的知识点 / 题目）：这一份素材目录属于这个小节，**整份跟着进同一个桶**，桶里路径照旧（`<桶>/notes/01-第一章/media/s0001.assestfiles/`），恢复时图就在正文旁边；
+- **只删某个知识点 / 题目**：那份素材目录是**整个小节共用**的，所以只搬「这篇笔记引用、而画布里别的笔记已经不再引用」的那几个文件 —— 还被别处引用的留着（判断就是拿文件名在 `notes/` 与 `questions/` 的 markdown 正文里再找一遍，扫不完就一律留着，宁可少搬不多搬）；
+- 搬走之后空掉的 `<小节编号>.assestfiles/` 与它上面那层 `media/` 顺手清掉（**只删空目录**）。
+- 删除接口的返回里因此多一个 `media` 字段（这次跟着搬走的素材路径），界面用不到，排查时看得见。
 
 点一次按钮会在原处浮出「确认删除？ / 取消 / 删除」，再点「删除」才真正执行。确认条是**绝对定位浮层**，不占布局 —— 所以列表里的按钮不会因为多出这行字而换行或位移，**同一个位置连点两下第二次点到的仍然是「删除」**（早先的写法会把按钮挤到下一行、让第二次点空或误点「取消」）。执行后自动回到章节图并刷新，提示条写「已移到 .remove/<桶>/ · <路径>」，并写明连带处理了几个关联文件。
 
@@ -507,7 +514,7 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 | `templates.js` | 547 | 小节 / 知识点 / 题目文件 / 题目的模板与题目计数 + 内置的「公式与结构模板」默认库 |
 | `fsguard.js` | 69 | 路径边界：`insideRoot`（经 `ctx.fs.resolve` 复核，符号链接指向外面也挡得住）、`writePolicyOf`（写操作的沙箱策略）、`denyOutsideRoot`；`mkdir` 的边界由调用方给 —— 新建画布 / 导入学习库 / 移出列表的目标本来就在请求 root 之外（父目录才是这几件事的边界）。取舍见文件头 |
 | `write.js` | 103 | 路径校验与写文件（经 `ctx.fs.writeText`，必要时 `mkdir` 兜底）；写盘前给小节 / 知识点补 frontmatter 里的 `uid`：先认文件里 / 盘上已有的号，再认扫描时在号池里按路径登记的号（认到就把它摘出号池、写进 frontmatter），都没有才发新号；失败只当这次没补，不挡写盘 |
-| `delete.js` | 314 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `bucketNameIn` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`；「移出列表」用同一个 `bucketNameIn` 在**同层** `.remove/` 下开桶）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段）/ `stashUids` 与 `readStashedUids`（把这次删掉的目录带走了哪个编号记进桶里的 `.rk-uids.json`；`readAllStashedUids` 把一个 `.remove/` 下所有桶记着的号合并读出来，恢复时按路径认回，名字（= 时间）晚的桶覆盖早的），以及排除判断 |
+| `delete.js` | 456 | 删除一律**移到** `.remove/`：`REMOVE_DIR` / `bucketNameIn` / `removeBucketFor`（挑一个日期桶 `YYYYMMDD`，同一天再来就排 `-2`、`-3`；「移出列表」用同一个 `bucketNameIn` 在**同层** `.remove/` 下开桶）/ `removeBucketName` / `moveIntoRemove`（文件与目录都靠 `renameSync` 搬进桶，桶内保留原相对路径；一次删除的东西全落在同一个桶里）/ `saveRemovedText`（内容级删除另存片段）/ `stashUids` 与 `readStashedUids`（把这次删掉的目录带走了哪个编号记进桶里的 `.rk-uids.json`；`readAllStashedUids` 把一个 `.remove/` 下所有桶记着的号合并读出来，恢复时按路径认回，名字（= 时间）晚的桶覆盖早的）；**素材跟着走**：`mediaRefsOf`（从被删笔记的正文里挑出 `…/*.assestfiles/*` 引用，`MEDIA_REF_RE` + `joinRel` 拼成 root 相对路径）/ `mediaStillReferenced`（拿文件名在 `notes/`、`questions/` 的 markdown 里再找一遍，扫不完返回 `true` = 留着）/ `moveMediaIntoBucket`（删小节 ⇒ 整个 `<uid>.assestfiles/` 目录进同一个桶；只删知识点 / 题目 ⇒ 只搬没人再引用的那几个文件；`mediaDirsOf` 列出可能空掉的目录，只 `rmdirSync` 空目录），以及排除判断 |
 | `scan.js` | 350 | 扫工作区、按目录聚章、把题目文件配回知识点、算统计、1 秒缓存（`*.assestfiles` 图片素材目录跳过、收着它们的 `media/` 那层也跳过，不然会被当成一章）；顺带把号带出来 —— 文件记录读 frontmatter 里的 `uid`（小节 / 知识点），知识点文件自己的号挂到它那条知识点上 |
 | `bin.js` | 507 | 回收站（只有两层有它）：根画布那层 `listRootBins`（把当前根、它上一层、画布列表里每张画布父目录的 `.remove` 合起来列，只留「顶层整条」= 整只画布，`notes` / `questions` 这类画布内部结构不算），一级画布那层 `listChapterBin`（只看这张画布自己的 `.remove`，按章把 `notes/<章>/…` 与平行的 `questions/<章>/…` 聚成一条）；恢复是 `restoreItem` / `restoreBucket` / `restoreChapter`（按记录所在的 `box` 落回对应目录、原位已有同名**文件**时跳过或拒绝、章级恢复是「原位缺什么补什么」的合并、号按那只桶里记的认回、空桶与空掉的 `.remove` 一起收掉）；`listBin` 是底座 —— 只列「影子树的根」（原位已经没有、父目录还在的那一层，所以恢复它就是把整棵子树搬回去），并且按 `isBucketName`（`YYYYMMDD` / `YYYYMMDD-2` / `YYYY-MM-DD_HHmmss`）区分新旧：不是日期桶的目录是**老格式**（`.remove/<相对路径>` 就是那条记录本身），交给 `collectLegacy` 收进一只 `at=旧格式`、桶名为空字符串的分组，`restoreItem` 也支持空的 `bucket`（记录直接躺在 `.remove` 下） |
 | `git.js` | 551 | git 状态（分支 / 领先落后 / 改动分组）与拉取合并、暂存提交、推送、AI 生成提交信息：`execFile` 直调 `git`，关掉交互式凭据提示，只做 `add -A` / `commit` / `push`，绝不 `reset` / `checkout` / `add -f` |
