@@ -239,6 +239,7 @@ export function createStore({ React, api, FONT_STEPS, KEYS }) {
 			isRemoved,
 			markRemoved,
 			unmarkRemoved,
+			removedRef,
 			libRev,
 			setLibRev,
 			libTick,
