@@ -24,7 +24,7 @@ export function createSizes() {
 		 * 卡片位置 = 列号 * (cardWidth + cardGap)，行号 * (cardHeight + cardGap)；
 		 * 「复位铺满」用 stageBox（舞台可视宽度，含内边距）算出能放几列，再按这套尺寸反推缩放。 */
 		rootCanvas: {
-			cardWidth: 450, /* 学习画布卡片宽度（只影响根画布这一级）。改宽 → 每行能放的列数自动变少（见 rootColsMax） */
+			cardWidth: 372, /* 学习画布卡片宽度（只影响根画布这一级）。改宽 → 每行能放的列数自动变少（见 rootColsMax） */
 			cardHeight: 188, /* 学习画布卡片高度。卡片里的标题/进度/统计是固定行高，加太高会留白 */
 			cardGap: 18, /* 卡片间距，横向纵向共用 */
 			rootColsMax: 3, /* 最多排几列：屏幕再宽也不超过这个数 */
@@ -37,7 +37,7 @@ export function createSizes() {
 		 * 章节卡排成一行（x = 序号 * (cardWidth + cardGap)），宽用这里的 cardWidth；
 		 * 卡高由内容决定（css.js 的 .rk-chapter），所以这里没有 cardHeight。 */
 		canvas: {
-			cardWidth: 372, /* 章节卡片宽度（只影响画布内这一级） */
+			cardWidth: 450, /* 章节卡片宽度（只影响画布内这一级） */
 			cardGap: 18, /* 章节卡片之间的间距 */
 			stagePadX: 22, /* 舞台左右内边距（与根画布那份互相独立） */
 			stagePadTop: 20, /* 舞台顶部内边距 */
