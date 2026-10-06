@@ -173,7 +173,8 @@ export function createCss(deps) {
 .rk-seg button.rk-on { background:var(--rk-bg-2); color:var(--rk-accent); }
 .rk-crumbs { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--rk-text-2); }
 .rk-crumbs b { color:var(--rk-text); font-weight:600; }
-.rk-stage { flex:1 1 auto; min-height:0; overflow:auto; position:relative; z-index:0; padding:${px(S.canvas.stagePadTop)} ${px(S.canvas.stagePadX)} ${px(S.canvas.stagePadBottom)}; background-color:var(--rk-bg-0); background-image:linear-gradient(rgba(var(--rk-a3),.06) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--rk-a3),.06) 1px, transparent 1px); background-size:26px 26px; }
+.rk-stage { flex:1 1 auto; min-height:0; overflow:auto; position:relative; z-index:0; padding:${px(S.rootCanvas.stagePadTop)} ${px(S.rootCanvas.stagePadX)} ${px(S.rootCanvas.stagePadBottom)}; background-color:var(--rk-bg-0); background-image:linear-gradient(rgba(var(--rk-a3),.06) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--rk-a3),.06) 1px, transparent 1px); background-size:26px 26px; }
+.rk-stage.rk-stage-inner:not(.rk-canvas) { padding:${px(S.canvas.stagePadTop)} ${px(S.canvas.stagePadX)} ${px(S.canvas.stagePadBottom)}; }
 .rk-plane { position:absolute; left:0; top:0; transform-origin:0 0; }
 /* 画布/导图整体是缩放过的(transform: scale), 让浏览器按几何精度排版与栅格化:
    optimizeLegibility 会把字形度量四舍五入到整数, 缩放后反而更容易发虚 */
@@ -723,6 +724,7 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 	.rk-head { padding:10px 14px; gap:10px; }
 	.rk-toolbar { padding:8px 14px; gap:8px; }
 	.rk-stage { padding:16px 16px 48px; }
+	.rk-stage.rk-stage-inner:not(.rk-canvas) { padding:16px 16px 48px; }
 	.rk-stat { padding:2px 7px; font-size:10.5px; }
 	/* 百分比按钮只是「显示当前值」, 窄了先让位给搜索框和缩放 */
 	.rk-ztag { display:none; }
@@ -749,6 +751,7 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 @container rk (max-width: ${px(S.breakpoints.tiny)}) {
 	.rk-h1 { font-size:14px; }
 	.rk-stage { padding:12px 12px 40px; }
+	.rk-stage.rk-stage-inner:not(.rk-canvas) { padding:12px 12px 40px; }
 }
 ${BIN_CSS}
 ${SKIN_CSS}

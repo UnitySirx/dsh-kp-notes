@@ -1130,7 +1130,7 @@ window.__ModuleLoader__.load({
 					h(
 						'div',
 						{
-							className: 'rk-stage' + (mapReady ? ' rk-canvas' : '') + (panning ? ' rk-panning' : '') + (interacting ? ' rk-interacting' : ''),
+							className: 'rk-stage' + (level1 ? ' rk-stage-root' : ' rk-stage-inner') + (mapReady ? ' rk-canvas' : '') + (panning ? ' rk-panning' : '') + (interacting ? ' rk-interacting' : ''),
 							ref: stageRef,
 							onPointerDown: onStagePointerDown,
 							onPointerMove: onStagePointerMove,
@@ -1439,7 +1439,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 181;
+		const MODULE_VERSION = 182;
 		const CLIENT_MODULES = ['sizes', 'api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 

@@ -37,17 +37,19 @@ export function createCanvas({ React, sizes }) {
 		/* 学习库配置里视野的键: 一级画布是 'roots', 每张画布用它自己的根目录路径 */
 		const zoomKey = level1 ? 'roots' : (catalog && catalog.root) || 'default';
 		const VIEW_VERSION = 2;
-		/* 尺寸来自 client/sizes.js(入口注入), 这里只取名 —— 想调卡片大小去那个文件改一处 */
-		const cardWidth = S.canvas.cardWidth;
-		const cardGap = S.canvas.cardGap;
-		const ROOT_CARD_H = S.canvas.cardHeight;
-		const MIN_SCALE = S.canvas.minScale; /* 一行卡片可能很长, 复位时允许缩得更小才能全铺满 */
-		const MAX_SCALE = S.canvas.maxScale;
+		/* 尺寸来自 client/sizes.js(入口注入): 根画布(rootCanvas)与画布内(canvas)两套卡片尺寸互不影响,
+		 * 缩放范围是共用的 stage —— 想调卡片大小去那个文件改对应的那一级 */
+		const G = level1 ? S.rootCanvas : S.canvas;
+		const cardWidth = G.cardWidth;
+		const cardGap = G.cardGap;
+		const ROOT_CARD_H = S.rootCanvas.cardHeight; /* 只有一级画布(根画布)的卡片是固定卡高 */
+		const MIN_SCALE = S.stage.minScale; /* 一行卡片可能很长, 复位时允许缩得更小才能全铺满 */
+		const MAX_SCALE = S.stage.maxScale;
 		/* 插件区域的实际宽度: 宿主侧栏展开/收起、拉窗口都由它驱动自适应 */
 		const [stageBox, setStageBox] = useState({ w: 0, h: 0 });
-		/* 一级画布的列数跟着可用宽度走(窄了就 1-2 列), 别硬撑 3 列;
-		 * 减掉的是舞台左右内边距(sizes.canvas.stagePadX, 与 css.js 的 .rk-stage 同源) */
-		const rootCols = stageBox.w > 0 ? Math.max(1, Math.min(S.canvas.rootColsMax, Math.floor((stageBox.w - S.canvas.stagePadX * 2 + cardGap) / (cardWidth + cardGap)))) : S.canvas.rootColsMax;
+		/* 一级画布的列数跟着可用宽度走(窄了就 1-2 列), 别硬撑 rootColsMax 列;
+		 * 减掉的是根画布舞台的左右内边距(sizes.rootCanvas.stagePadX, 与 css.js 的 .rk-stage 同源) */
+		const rootCols = stageBox.w > 0 ? Math.max(1, Math.min(S.rootCanvas.rootColsMax, Math.floor((stageBox.w - S.rootCanvas.stagePadX * 2 + cardGap) / (cardWidth + cardGap)))) : S.rootCanvas.rootColsMax;
 		/* 上次自动铺满时的尺寸, 用来区分「尺寸变了」和「内容变了」 */
 		const lastFit = useRef({ w: 0, h: 0 });
 		const interacting = panning;

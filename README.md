@@ -529,8 +529,8 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 > ```sh
 > # 1) host 半跨模块 import 的 ?v=N（当前 ?v=91）
 > sed -i '' 's/?v=90/?v=91/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 181；只改注释 / 只动宿主时不必动）
-> sed -i '' 's/MODULE_VERSION = 180;/MODULE_VERSION = 181;/' plugin/dsh-kp-notes/client.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 182；只改注释 / 只动宿主时不必动）
+> sed -i '' 's/MODULE_VERSION = 181;/MODULE_VERSION = 182;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
@@ -541,8 +541,8 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 | 模块 | 行数 | 职责 | 依赖 |
 | --- | --- | --- | --- |
 | `client/dict.js` | 664 | 中英文词典（`zh` / `en`） | — |
-| `client/sizes.js` | 119 | **全插件的「宽高」都在这一个文件里**（`createSizes()` → `{SIZES, px}`）：一级画布卡片与舞台（`canvas`）、思维导图各层列位置/列宽/行高（`mindmap`）、右键菜单与浮层（`menu`）、弹窗 / 抽屉 / 详情面板宽度（`dialog`）、编辑器与预览高度（`editor`）、git 面板等零散值（`misc`）、容器宽度断点（`breakpoints`）；纯数字 = px（`px(n)` 拼单位），vh / % 写成字符串；想调大小改这里一处，CSS 与画布几何一起变 | — |
-| `client/css.js` | 759 | 全部样式（`const CSS` + 末尾的 `HOST_CSS` 宿主主题映射层：`.rk-root.rk-follow` 把 `--rk-*` 指到宿主 `--dsw-alias-*`）；**所有尺寸都从注入的 `sizes` 拼出来**（`${px(S.dialog.pcardW)}`），文件里不再写死宽高 | sizes |
+| `client/sizes.js` | 135 | **全插件的「宽高」都在这一个文件里**（`createSizes()` → `{SIZES, px}`）：**根画布（还没进任何画布）的学习画布卡片与舞台 `rootCanvas`** 与 **画布内（进了某张画布）的章节卡片与舞台 `canvas`** —— 两套**互不影响**（改一个不会动另一个）—— 加两级共用的缩放上下限 `stage`、思维导图各层列位置/列宽/行高（`mindmap`）、右键菜单与浮层（`menu`）、弹窗 / 抽屉 / 详情面板宽度（`dialog`）、编辑器与预览高度（`editor`）、git 面板等零散值（`misc`）、容器宽度断点（`breakpoints`）；纯数字 = px（`px(n)` 拼单位），vh / % 写成字符串；想调大小改这里一处，CSS 与画布几何一起变 | — |
+| `client/css.js` | 762 | 全部样式（`const CSS` + 末尾的 `HOST_CSS` 宿主主题映射层：`.rk-root.rk-follow` 把 `--rk-*` 指到宿主 `--dsw-alias-*`）；**所有尺寸都从注入的 `sizes` 拼出来**（`${px(S.dialog.pcardW)}`），文件里不再写死宽高；舞台留白按级拆成 `.rk-stage`（根画布那份）与 `.rk-stage.rk-stage-inner:not(.rk-canvas)`（画布内那份，避开可拖动舞台自己的 `padding:0`） | sizes |
 | `client/util.js` | 94 | 缩放取整、字数、路径标签、小节 / 知识点查找、编辑器状态 | — |
 | `client/api.js` | 453 | 数据层：宿主路由的 fetch/post 包装（画布目录、roots、库配置、`state`、git；`fetchLibConfig` 会把宿主回的 `exists` / `isCanvas` / `hasConfig` / `hasTemplates` 四个探针挂到配置对象上，其中 **`exists` 是三态**（`true` / `false` / `null`，`null` = 问不出来，客户端只有 `true` 才算「读到了配置」），`isCanvas` / `hasConfig` / `hasTemplates` 仍按 `=== true` 认；老宿主不带这几个字段时按「在」处理，免得被误判成库目录丢了）+ `useCatalog` / `useGit` 两个轮询 hook + `activeRoot`（只活在本页面会话的当前根目录，面板通过 `getActiveRoot()` / `setActiveRoot()` 读写） | React |
 | `client/media.js` | 230 | 图片素材：插图**两步**（`upload(file, notePath)` **同步**交回一条 `blob:` 本地引用（`URL.createObjectURL(file)`）并把文件记进内存 —— 选文件阶段不写盘；`settleText(text)` 在图片真进正文（markdown 里带 `blob:`）之后才把字节 POST 到 `/rk-study/media` 落到 `.media/<小节uid>.assestfiles/`，`flush()` 供保存前等一等）+ 显示换算（`mediaUrl(src)` / `watchImages(rootEl)`：用 `MutationObserver` 盯住面板里所有 `<img>`，把相对 `src` 就地换成路由地址；只改 DOM，markdown 里那份相对路径原样不动）+ 写盘收口（`toMarkdownSrc(text, strict)`：把显示地址与没落盘的 `blob:` 换回相对路径，strict 时把落盘失败的图整段去掉）+ `maxFileSize`（16 MB）与 `allowedProtocols`（`['blob:']`，两个都喂给 vendor 的 `imageUpload`，不传它默认只让 5 MB、且不认 `blob:` 会把图从 markdown 里静默丢掉） | api |
@@ -551,7 +551,7 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 | `client/git.js` | 109 | Git 提交面板的状态与动作：未提交改动的角标数字（`gitPending` / `gitOutside`）、提交（可选顺手推送）/ 仅推送 / 拉取、让模型写候选 commit message（`gitAi`） | React、api |
 | `client/roots.js` | 342 | 画布目录与根目录管理：新建 / 改名（= 重命名磁盘目录）/ 移出列表（搬进同层 `.remove/` + 记墓碑）、扫盘核对 `probeRoot`、`⌂ 根目录` 弹窗（350ms 防抖预览 + `用上一层` + `设为根目录`，列表按扫盘结果**替换**）以及两个弹窗的状态 | React、api |
 | `client/editing.js` | 401 | 打开 / 编辑 / 新建 / 删除：小节与知识点的打开与编辑、新建小节 / 章节、章节改名、题目片段的新增与编辑、删除小节 / 章节 / 题目、舞台与卡片的右键菜单项（写盘一律 `postAction` 后 `reload(true)`） | React、api |
-| `client/canvas.js` | 512 | 画布视口与导图几何：视野（缩放 / 拖拽 / 自动铺满）、舞台尺寸与测量、导图树布局 `mind` / `positions` / `rootCards` / `extent`、指针与检索命中 `hits`、右键菜单状态；几何助手由入口注入，**几何常量（卡片宽高 / 间距 / 舞台内边距 / 缩放范围 / 每行列数上限 / 右键菜单尺寸）从 `sizes` 拿** | React、sizes |
+| `client/canvas.js` | 514 | 画布视口与导图几何：视野（缩放 / 拖拽 / 自动铺满）、舞台尺寸与测量、导图树布局 `mind` / `positions` / `rootCards` / `extent`、指针与检索命中 `hits`、右键菜单状态；几何助手由入口注入，**几何常量从 `sizes` 拿，并且按级取**：`const G = level1 ? S.rootCanvas : S.canvas`（卡片宽 / 间距），卡高与每行列数只属于根画布（`S.rootCanvas.cardHeight` / `rootColsMax`），缩放上下限是共用的 `S.stage` | React、sizes |
 | `client/view.js` | 394 | 渲染层：右键菜单、一级画布卡片、导图（含思维导图模式）、小节、知识点详情、正文 `body` / `detailBody`；只读面板状态与各域动作，生成 vdom | React |
 | `client/vendor.js` | 282 | KaTeX / mermaid 按需加载、公式与流程图组件（流程图配色跟着主题走，换主题自动重画） | React |
 | `client/md.js` | 461 | markdown 渲染器（表格 / 引用 / 代码 / 公式 / 流程图 / **图片**：`![]()` 渲染成真的 `<img>`，相对 src 由面板根那层 `watchImages` 换成路由地址）+ 实时预览；`\X` 按字面量渲染（代码 / 公式里的反斜杠原样保留；定界符自己被转义的 `\$A_i\$` 不算公式段），另导出 `unescapeRedundant` / `renderFingerprint` 给编辑器与弹窗做「去冗余转义」（`$` 另有宽松指纹：只放过「字面量 `$tex$` → 真公式」这一种变化） | React、vendor |
@@ -566,7 +566,7 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 
 > **改 client 后怎么让它生效**：`⌘R` 刷新即可 —— `client/` 下的模块由上面那条路由直出且 `no-store`，不参与 loader 的 rev 缓存。新加模块时：文件放进 `client/`、导出 `create<名字>(deps)`，并把名字加进入口的 `const CLIENT_MODULES` 列表；若它需要别的模块，在入口的调用处把依赖传进去。
 >
-> **想调插件的宽高**（卡片多大、导图列多宽、弹窗 / 抽屉多宽、编辑器多高、几档响应式断点）：只改 `plugin/dsh-kp-notes/client/sizes.js` 一个文件。它导出的 `SIZES` 分七组 —— `canvas`（一级画布卡片宽高 / 卡片间距 / 舞台内边距 / 缩放上下限 / 每行列数上限）、`mindmap`（思维导图各层的列位置、列宽、行高、行间距、组间距、画布留白）、`menu`（右键菜单 / 浮层 / markdown 菜单 / 肤色面板宽高）、`dialog`（各种弹窗、抽屉、详情面板、回收站的宽高）、`editor`（编辑器与预览框的最小 / 最大高度）、`misc`（git 面板的文件列表 / 输入框 / 输出框、知识点正文框）、`breakpoints`（容器宽度断点）。**单位约定**：纯数字就是 px（配 `px()` 拼成 `18px` 那样），要 `vh` / `%` 就直接写字符串。CSS 与画布几何都从这一份拼出来 —— `client/css.js` 用 `${px(S.…)}` 插值，`client/canvas.js` / `client/cards.js` / `client/mindmap.js` 直接读数值，所以同一个尺寸只在一个地方定义（例如右键菜单宽度同时是 `.rk-menu` 的 `min-width` 与 JS 里算菜单位置用的 `MENU_W`）。改完还是 `⌘R`；**故意没收进去的东西**：装饰性小件（圆角、1-2px 描边、图标与文字的间距）与 `100%` / `auto` 这类由布局决定的值 —— 它们不是「宽高配置」，跟着窗口走才对。
+> **想调插件的宽高**（卡片多大、导图列多宽、弹窗 / 抽屉多宽、编辑器多高、几档响应式断点）：只改 `plugin/dsh-kp-notes/client/sizes.js` 一个文件。它导出的 `SIZES` 分九组 —— **卡片相关按级分成两套：`rootCanvas`（根画布，也就是还没进任何画布时那层「学习画布卡片」：`cardWidth` / `cardHeight` / `cardGap` / `rootColsMax` / 舞台留白）与 `canvas`（画布内，也就是进了某张画布之后的「章节卡片」：`cardWidth` / `cardGap` / 舞台留白）—— 两者互不影响，改哪个只影响哪一级**；另有 `stage`（两级共用的缩放上下限）、`mindmap`（思维导图各层的列位置、列宽、行高、行间距、组间距、画布留白）、`menu`（右键菜单 / 浮层 / markdown 菜单 / 肤色面板宽高）、`dialog`（各种弹窗、抽屉、详情面板、回收站的宽高）、`editor`（编辑器与预览框的最小 / 最大高度）、`misc`（git 面板的文件列表 / 输入框 / 输出框、知识点正文框）、`breakpoints`（容器宽度断点）。**单位约定**：纯数字就是 px（配 `px()` 拼成 `18px` 那样），要 `vh` / `%` 就直接写字符串。CSS 与画布几何都从这一份拼出来 —— `client/css.js` 用 `${px(S.…)}` 插值（舞台留白按级分别落在 `.rk-stage` 与 `.rk-stage.rk-stage-inner:not(.rk-canvas)` 上），`client/canvas.js` 按 `level1` 取对应那套、`client/cards.js` / `client/mindmap.js` 直接读数值，所以同一个尺寸只在一个地方定义（例如右键菜单宽度同时是 `.rk-menu` 的 `min-width` 与 JS 里算菜单位置用的 `MENU_W`）。改完还是 `⌘R`；**故意没收进去的东西**：装饰性小件（圆角、1-2px 描边、图标与文字的间距）与 `100%` / `auto` 这类由布局决定的值 —— 它们不是「宽高配置」，跟着窗口走才对。**两个例外要知道**：①面板很窄时（`@container rk` 触发 `breakpoints.wide` / `breakpoints.tiny`）两级舞台留白都会被收紧成固定值（16/16/48 与 12/12/40，写在 `css.js` 的容器查询里）；②可拖动的舞台（`.rk-stage.rk-canvas`，画布/导图模式）本来就是 `padding:0`，那里量不到留白。
 
 路由：
 
