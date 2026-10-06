@@ -24,7 +24,7 @@
  * `uids` 里值写 null 表示「这个路径的号没了(删了/改名了)」; removed 是整份名单, 写就是替换。
  */
 
-import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE, REMOVED_FILE, UIDS_FILE } from './constants.js?v=91';
+import { CACHE_TTL_MS, CONFIG_DIR, CONFIG_FILE, REMOVED_FILE, UIDS_FILE } from './constants.js?v=92';
 
 const cache = new Map();
 /* 号池单独缓存: 键是 <库>/.config/rk-study-uids.json 的绝对路径 */
