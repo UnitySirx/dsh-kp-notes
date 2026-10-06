@@ -3,9 +3,10 @@
  * 由入口 client.js 用原生 import() 加载的 ES 模块(loader 的 chunk 协议只认插件根目录的
  * client.<名>.js, 装不下子目录)。依赖由入口注入, 本文件不碰 window.__ModuleLoader__。
  */
-export function createCards({ React, renderInline, renderMarkdown, formatCount, pathLabel, countExamples, SKINS }) {
+export function createCards({ React, renderInline, renderMarkdown, formatCount, pathLabel, countExamples, SKINS, sizes }) {
 	const h = React.createElement;
 	const { useState } = React;
+	const S = sizes; /* client/sizes.js 注入: 章节卡片默认宽度与画布卡片保持一致 */
 	function AnswerBlock({ markdown, index, t, revealAll }) {
 		const [choice, setChoice] = useState(null);
 		const open = choice === null ? Boolean(revealAll) : choice;
@@ -170,7 +171,7 @@ export function createCards({ React, renderInline, renderMarkdown, formatCount, 
 				className: 'rk-chapter' + (tone ? tone.cls : ''),
 				'data-chapter': chapter.id,
 				onContextMenu: (event) => onContextMenu && onContextMenu(event, chapter, null),
-				style: Object.assign({ left: x || 0, top: y || 0, width: width || 372 }, tone ? tone.vars : null),
+				style: Object.assign({ left: x || 0, top: y || 0, width: width || S.canvas.cardWidth }, tone ? tone.vars : null),
 			},
 			h(
 				'div',

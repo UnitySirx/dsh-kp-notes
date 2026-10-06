@@ -4,6 +4,11 @@
  * client.<名>.js, 装不下子目录)。依赖由入口注入, 本文件不碰 window.__ModuleLoader__。
  */
 export function createCss(deps) {
+	/* 所有「宽高」都来自 client/sizes.js（入口注入，见 client.js 的 CLIENT_MODULES）：
+	 * px() 把数字拼成 "18px"；非 px 的（vh / %）在 sizes.js 里就是带单位的字符串，直接插。
+	 * 这个文件从此不再写死尺寸 —— 想调大小去 client/sizes.js 改一处。 */
+	const S = deps.sizes;
+	const px = deps.px;
 	/* ===================== Material Design 配色（可切换皮肤） =====================
 	 * 每套皮肤 = Material 500 主色 + Material 300 亮色, 深底色/文字按主色的色相算出来,
 	 * 这样每套皮肤的层次与对比度保持一致, 只有"色"不同 —— 方便直接对比。
@@ -67,7 +72,7 @@ export function createCss(deps) {
 
 	/* 回收站面板: 全部用插件自己的 token, 跟随宿主主题时自动换色 */
 	const BIN_CSS = `
-.rk-modal-card.rk-bin { width:min(620px, 94%); max-height:76vh; display:flex; flex-direction:column; }
+.rk-modal-card.rk-bin { width:min(${px(S.dialog.binW)}, 94%); max-height:${S.dialog.binMaxH}; display:flex; flex-direction:column; }
 .rk-bin-hint { margin-bottom:10px; font-size:11.5px; line-height:1.6; color:var(--rk-muted); word-break:break-all; }
 .rk-bin-error { margin-bottom:10px; padding:7px 10px; border-radius:8px; border:1px solid var(--rk-danger, #e5484d); color:var(--rk-danger, #e5484d); font-size:11.5px; }
 .rk-bin-empty { padding:22px 0; text-align:center; font-size:12px; color:var(--rk-muted); }
@@ -76,7 +81,7 @@ export function createCss(deps) {
 .rk-bin-when { flex:1; font-family:var(--rk-mono); font-size:12px; color:var(--rk-text); }
 .rk-bin-count { font-size:11px; color:var(--rk-muted); }
 .rk-bin-src { max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--rk-mono); font-size:10.5px; color:var(--rk-muted); opacity:.85; }
-.rk-bin-list { margin:0; padding:0; list-style:none; max-height:44vh; overflow:auto; }
+.rk-bin-list { margin:0; padding:0; list-style:none; max-height:${S.dialog.binListMaxH}; overflow:auto; }
 .rk-bin-item { display:flex; align-items:center; gap:9px; padding:6px 11px; border-top:1px solid var(--rk-line-1, transparent); }
 .rk-bin-item:first-child { border-top:none; }
 .rk-bin-item:hover { background:rgba(var(--rk-a2),.07); }
@@ -168,7 +173,7 @@ export function createCss(deps) {
 .rk-seg button.rk-on { background:var(--rk-bg-2); color:var(--rk-accent); }
 .rk-crumbs { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--rk-text-2); }
 .rk-crumbs b { color:var(--rk-text); font-weight:600; }
-.rk-stage { flex:1 1 auto; min-height:0; overflow:auto; position:relative; z-index:0; padding:20px 22px 60px; background-color:var(--rk-bg-0); background-image:linear-gradient(rgba(var(--rk-a3),.06) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--rk-a3),.06) 1px, transparent 1px); background-size:26px 26px; }
+.rk-stage { flex:1 1 auto; min-height:0; overflow:auto; position:relative; z-index:0; padding:${px(S.canvas.stagePadTop)} ${px(S.canvas.stagePadX)} ${px(S.canvas.stagePadBottom)}; background-color:var(--rk-bg-0); background-image:linear-gradient(rgba(var(--rk-a3),.06) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--rk-a3),.06) 1px, transparent 1px); background-size:26px 26px; }
 .rk-plane { position:absolute; left:0; top:0; transform-origin:0 0; }
 /* 画布/导图整体是缩放过的(transform: scale), 让浏览器按几何精度排版与栅格化:
    optimizeLegibility 会把字形度量四舍五入到整数, 缩放后反而更容易发虚 */
@@ -201,7 +206,7 @@ export function createCss(deps) {
 .rk-librow .rk-input { flex:1 1 auto; min-width:0; }
 .rk-librow .rk-btn { flex:0 0 auto; }
 
-.rk-settings { width:min(560px, 92%); }
+.rk-settings { width:min(${px(S.dialog.settingsW)}, 92%); }
 .rk-settings-label { margin:10px 0 6px; font-size:12.4px; font-weight:600; color:var(--rk-text); }
 .rk-settings-hint { margin:8px 0 0; font-size:11.6px; line-height:1.65; color:var(--rk-text-2); }
 .rk-settings-rows { margin:12px 0 0; border:1px solid var(--rk-line-2); border-radius:10px; overflow:hidden; }
@@ -242,9 +247,9 @@ export function createCss(deps) {
 .rk-point-head { display:flex; align-items:flex-start; gap:9px; padding:12px 13px 8px; }
 .rk-point-no { flex:0 0 auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--rk-accent); padding-top:2px; }
 .rk-point-title { font-size:13.5px; font-weight:600; line-height:1.4; }
-.rk-point-body { padding:0 13px 10px; font-size:12px; color:var(--rk-text-2); line-height:1.6; max-height:96px; overflow:hidden; }
+.rk-point-body { padding:0 13px 10px; font-size:12px; color:var(--rk-text-2); line-height:1.6; max-height:${px(S.misc.pointBodyMaxH)}; overflow:hidden; }
 .rk-point-foot { display:flex; align-items:center; gap:6px; padding:8px 13px; border-top:1px solid var(--rk-line-1); flex-wrap:wrap; }
-.rk-doc { max-width:920px; }
+.rk-doc { max-width:${px(S.dialog.docMaxW)}; }
 .rk-panel { border:1px solid var(--rk-line-2); border-radius:13px; background:var(--rk-bg-1); padding:14px 16px; margin-bottom:14px; }
 .rk-panel-title { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--rk-text-2); letter-spacing:.05em; margin-bottom:10px; flex-wrap:wrap; }
 .rk-panel-title b { color:var(--rk-text); font-size:13px; letter-spacing:0; }
@@ -294,22 +299,22 @@ export function createCss(deps) {
 .rk-answer-bar { display:flex; align-items:center; gap:8px; width:100%; padding:8px 11px; border:0; background:transparent; color:var(--rk-warn); font-size:12px; cursor:pointer; text-align:left; font:inherit; }
 .rk-answer-bar:hover { background:var(--rk-bg-1); }
 .rk-answer-body { padding:2px 12px 10px; border-top:1px dashed var(--rk-line-2); }
-.rk-detail { position:relative; flex:0 0 auto; width:min(52%, 760px); min-width:340px; display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--rk-line-2); background:var(--rk-bg-1); box-shadow:-18px 0 40px rgba(0,0,0,.3); animation:rk-slide .18s ease-out; }
+.rk-detail { position:relative; flex:0 0 auto; width:min(${S.dialog.detailPct}%, ${px(S.dialog.detailW)}); min-width:${px(S.dialog.detailMinW)}; display:flex; flex-direction:column; min-height:0; border-left:1px solid var(--rk-line-2); background:var(--rk-bg-1); box-shadow:-18px 0 40px rgba(0,0,0,.3); animation:rk-slide .18s ease-out; }
 .rk-detail-bar { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid var(--rk-line-1); background:linear-gradient(180deg, rgba(8,16,32,.72), rgba(4,10,22,.42)); }
 .rk-detail-name { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--rk-mono); font-size:11.5px; color:#7f9ec2; }
 .rk-detail-body { flex:1 1 auto; min-height:0; overflow:auto; padding:14px 16px 48px; }
 @keyframes rk-slide { from { transform:translateX(12px); opacity:.35; } to { transform:none; opacity:1; } }
-.rk-drawer { position:absolute; inset:0 0 0 auto; width:min(620px, 92%); display:flex; flex-direction:column; border-left:1px solid var(--rk-line-2); background:var(--rk-bg-1); box-shadow:-18px 0 40px rgba(0,0,0,.3); z-index:5; }
+.rk-drawer { position:absolute; inset:0 0 0 auto; width:min(${px(S.dialog.drawerW)}, 92%); display:flex; flex-direction:column; border-left:1px solid var(--rk-line-2); background:var(--rk-bg-1); box-shadow:-18px 0 40px rgba(0,0,0,.3); z-index:5; }
 .rk-drawer-head { display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--rk-line-1); flex-wrap:wrap; }
 .rk-drawer-body { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; padding:12px 14px; gap:10px; }
 .rk-field { display:flex; flex-direction:column; gap:5px; }
 .rk-field label { font-size:11px; color:var(--rk-text-2); }
 .rk-field .rk-input { flex:0 0 auto; width:100%; box-sizing:border-box; height:34px; }
-.rk-textarea { flex:1 1 auto; min-height:220px; resize:none; padding:11px 12px; border-radius:9px; border:1px solid var(--rk-line-2); background:var(--rk-bg-0); color:var(--rk-text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.65; outline:none; tab-size:2; }
+.rk-textarea { flex:1 1 auto; min-height:${px(S.editor.textareaMinH)}; resize:none; padding:11px 12px; border-radius:9px; border:1px solid var(--rk-line-2); background:var(--rk-bg-0); color:var(--rk-text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.65; outline:none; tab-size:2; }
 .rk-textarea:focus { border-color:var(--rk-accent); }
 /* zt-react-milkdown 编辑器(编辑抽屉里的所见即所得视图) —— 编辑器样式来自
  * vendor/zt-milkdown/zt-milkdown.css, 那份 css 全限定在 .zt-md-editor 命名空间里; 这里只给个能撑满抽屉的壳 */
-.rk-mdedit { flex:1 1 auto; min-height:220px; min-width:0; overflow:auto; padding:2px 4px; border:1px solid var(--rk-line-2); border-radius:9px; background:var(--rk-bg-0); }
+.rk-mdedit { flex:1 1 auto; min-height:${px(S.editor.mdeditMinH)}; min-width:0; overflow:auto; padding:2px 4px; border:1px solid var(--rk-line-2); border-radius:9px; background:var(--rk-bg-0); }
 .rk-mdedit > * { min-width:0; }
 .rk-mdedit .zt-md-editor { background:transparent; }
 
@@ -324,10 +329,10 @@ export function createCss(deps) {
 
 /* 弹窗(题干 / 答案 / 解析 / 正文)里的富文本字段: 包自己的 min-height 是 160px, 对这几个小字段太高, 收一点 */
 .rk-mdfield { min-height:0; }
-.rk-mdfield .zt-md-editor { min-height:110px !important; max-height:300px; overflow:auto; font-size:13px; }
+.rk-mdfield .zt-md-editor { min-height:${px(S.editor.mdEditorMinH)} !important; max-height:${px(S.editor.mdEditorMaxH)}; overflow:auto; font-size:13px; }
 .rk-field.rk-grow .rk-mdfield { flex:1 1 auto; }
 .rk-field.rk-grow .rk-mdfield .zt-md-editor { max-height:none; }
-.rk-mdfield.rk-md-wait { min-height:110px; }
+.rk-mdfield.rk-md-wait { min-height:${px(S.editor.mdEditorMinH)}; }
 .rk-md-wait { display:flex; align-items:center; justify-content:center; color:var(--rk-text-2); font-size:12px; }
 .rk-drawer-body.rk-split > .rk-mdedit { flex:1 1 0; }
 .rk-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -404,8 +409,8 @@ export function createCss(deps) {
 .rk-hover-ring { position:absolute; left:0; top:0; box-sizing:border-box; pointer-events:none; opacity:0; z-index:1; border-radius:14px; border:1px solid rgba(var(--rk-a2),.62); box-shadow:0 0 0 1px rgba(var(--rk-a1),.2), 0 0 30px rgba(var(--rk-a1),.2), inset 0 0 30px rgba(var(--rk-a1),.05); }
 .rk-hover-ring.rk-on { opacity:1; }
 .rk-hover-ring.rk-card { background:linear-gradient(180deg, rgba(var(--rk-a1),.07), rgba(var(--rk-a1),0) 46%); }
-.rk-menu { position:absolute; left:0; top:0; z-index:8; min-width:196px; padding:5px; border-radius:11px; border:1px solid var(--rk-line-3); background:linear-gradient(180deg, rgba(12,22,42,.985), rgba(5,11,24,.99)); box-shadow:0 18px 44px rgba(1,6,16,.72), 0 0 0 1px rgba(var(--rk-a1),.06), inset 0 1px 0 rgba(120,190,255,.08); font-size:12.5px; color:var(--rk-text); user-select:none; }
-.rk-menu-item { display:flex; align-items:center; gap:8px; height:30px; padding:0 10px; border-radius:7px; cursor:pointer; white-space:nowrap; }
+.rk-menu { position:absolute; left:0; top:0; z-index:8; min-width:${px(S.menu.width)}; padding:5px; border-radius:11px; border:1px solid var(--rk-line-3); background:linear-gradient(180deg, rgba(12,22,42,.985), rgba(5,11,24,.99)); box-shadow:0 18px 44px rgba(1,6,16,.72), 0 0 0 1px rgba(var(--rk-a1),.06), inset 0 1px 0 rgba(120,190,255,.08); font-size:12.5px; color:var(--rk-text); user-select:none; }
+.rk-menu-item { display:flex; align-items:center; gap:8px; height:${px(S.menu.itemH)}; padding:0 10px; border-radius:7px; cursor:pointer; white-space:nowrap; }
 .rk-menu-item:hover { background:linear-gradient(90deg, rgba(var(--rk-a2),.2), rgba(var(--rk-a2),.02) 78%); color:#fff; }
 .rk-menu-item.rk-danger { color:var(--rk-danger); }
 .rk-menu-item.rk-danger:hover { background:linear-gradient(90deg, rgba(255,107,129,.2), rgba(255,107,129,.02) 78%); color:#ffd7dd; }
@@ -520,7 +525,7 @@ export function createCss(deps) {
 .rk-panel-title b { font-family:system-ui,-apple-system,sans-serif; font-size:13.5px; color:#eaf5ff; letter-spacing:0; }
 
 /* markdown 阅读排版 */
-.rk-doc { max-width:980px; }
+.rk-doc { max-width:${px(S.dialog.docMaxWideW)}; }
 .rk-md-p, .rk-md-list { font-size:12.8px; line-height:1.82; color:#dcebff; }
 .rk-md-h1 { background:linear-gradient(92deg,#f4fbff,#9fdcff); -webkit-background-clip:text; background-clip:text; color:transparent; }
 .rk-md-h2 { text-shadow:0 0 16px rgba(var(--rk-a1),.28); }
@@ -571,15 +576,15 @@ export function createCss(deps) {
 .rk-drawer-foot { background:rgba(4,9,20,.75); border-top:1px solid var(--rk-line-2); }
 .rk-textarea { background:#03080f; border:1px solid var(--rk-line-2); color:#d9ecff; caret-color:var(--rk-accent-2); line-height:1.7; }
 .rk-textarea:focus { border-color:var(--rk-accent-2); box-shadow:0 0 0 1px rgba(var(--rk-a1),.25), 0 0 26px rgba(var(--rk-a1),.12); }
-.rk-drawer.rk-wide { width:min(1120px, 94%); }
+.rk-drawer.rk-wide { width:min(${px(S.dialog.drawerWideW)}, 94%); }
 .rk-drawer-body.rk-split { flex-direction:row; align-items:stretch; gap:12px; }
 .rk-drawer-body.rk-split > .rk-textarea { flex:1 1 0; min-width:0; }
 .rk-drawer-body.rk-split > .rk-edit-col { flex:1 1 0; min-width:0; overflow:hidden; }
-.rk-drawer-body.rk-split > .rk-edit-col > .rk-textarea { flex:1 1 0; min-width:0; min-height:120px; }
+.rk-drawer-body.rk-split > .rk-edit-col > .rk-textarea { flex:1 1 0; min-width:0; min-height:${px(S.editor.splitTextareaMinH)}; }
 .rk-drawer-body.rk-split > .rk-edit-col > .rk-md-tools { flex:0 0 auto; }
 .rk-preview { flex:1 1 0; min-width:0; display:flex; flex-direction:column; border:1px solid var(--rk-line-2); border-radius:9px; background:#03080f; overflow:hidden; }
-.rk-preview-inline { flex:0 0 auto; margin-top:8px; max-height:300px; }
-.rk-preview-inline .rk-preview-body { max-height:262px; }
+.rk-preview-inline { flex:0 0 auto; margin-top:8px; max-height:${px(S.editor.previewInlineMaxH)}; }
+.rk-preview-inline .rk-preview-body { max-height:${px(S.editor.previewInlineBodyH)}; }
 .rk-preview-head { display:flex; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid var(--rk-line-1); background:linear-gradient(180deg, rgba(12,24,44,.72), rgba(6,13,28,.2)); font-size:11px; color:var(--rk-text-2); }
 .rk-preview-body { flex:1 1 auto; min-height:0; overflow:auto; padding:10px 12px; }
 .rk-preview-empty { font-size:12px; color:var(--rk-text-2); }
@@ -589,16 +594,16 @@ export function createCss(deps) {
 .rk-toast { background:linear-gradient(135deg, rgba(11,30,52,.96), rgba(8,18,38,.96)); border:1px solid var(--rk-line-3); color:#e9f7ff; box-shadow:0 0 0 1px rgba(var(--rk-a1),.25), 0 14px 40px rgba(1,6,16,.7), 0 0 34px rgba(var(--rk-a1),.16); }
 .rk-empty { color:#8fa8c9; }
 .rk-modal { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,6,14,.62); backdrop-filter:blur(3px); z-index:8; }
-.rk-modal-card { width:min(430px, 92%); padding:16px 18px; border-radius:14px; border:1px solid var(--rk-line-2); background:var(--rk-panel); box-shadow:0 24px 60px rgba(0,2,8,.7), 0 0 40px rgba(var(--rk-a1),.08); }
+.rk-modal-card { width:min(${px(S.dialog.modalW)}, 92%); padding:16px 18px; border-radius:14px; border:1px solid var(--rk-line-2); background:var(--rk-panel); box-shadow:0 24px 60px rgba(0,2,8,.7), 0 0 40px rgba(var(--rk-a1),.08); }
 .rk-modal-title { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:13px; font-weight:600; color:var(--rk-text); font-family:var(--rk-mono); letter-spacing:.02em; }
 .rk-modal-title::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--rk-accent-2); box-shadow:0 0 8px var(--rk-accent-2); }
-.rk-modal-card.rk-pcard, .rk-modal-card.rk-qcard { width:min(1180px, 95%); height:min(840px, 86vh, 92%); max-height:92%; overflow:hidden; display:flex; flex-direction:column; gap:10px; }
+.rk-modal-card.rk-pcard, .rk-modal-card.rk-qcard { width:min(${px(S.dialog.pcardW)}, 95%); height:min(${px(S.dialog.pcardH)}, 86vh, 92%); max-height:92%; overflow:hidden; display:flex; flex-direction:column; gap:10px; }
 /* 弹窗里的左右分栏: 左边写 markdown / 表单, 右边实时渲染 */
 .rk-edit-split { flex:1 1 auto; min-height:0; display:flex; flex-direction:row; align-items:stretch; gap:12px; }
 .rk-edit-col { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:8px; overflow:auto; padding-right:2px; }
 .rk-edit-col > .rk-field { flex:0 0 auto; }
 .rk-edit-col > .rk-field.rk-grow { flex:1 1 auto; min-height:0; }
-.rk-edit-col > .rk-field.rk-grow .rk-textarea { flex:1 1 auto; min-height:150px; }
+.rk-edit-col > .rk-field.rk-grow .rk-textarea { flex:1 1 auto; min-height:${px(S.editor.growTextareaMinH)}; }
 .rk-edit-split > .rk-preview { flex:1 1 0; min-width:0; }
 .rk-qfrom { font-size:11px; color:var(--rk-text-2); font-family:var(--rk-mono); }
 .rk-seg { display:flex; gap:6px; }
@@ -635,13 +640,13 @@ export function createCss(deps) {
 .rk-stage::-webkit-scrollbar-thumb:hover, .rk-detail-body::-webkit-scrollbar-thumb:hover, .rk-drawer-body::-webkit-scrollbar-thumb:hover, .rk-textarea::-webkit-scrollbar-thumb:hover { background:rgba(var(--rk-a2),.6); background-clip:padding-box; }
 
 /* Git 提交弹窗 */
-.rk-gcard { width:min(880px,94%); height:auto; max-height:88vh; }
+.rk-gcard { width:min(${px(S.dialog.guideW)},94%); height:auto; max-height:${S.dialog.guideMaxH}; }
 .rk-git { display:flex; flex-direction:column; gap:12px; padding:14px 16px 2px; min-height:0; }
 .rk-git-meta { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12px; color:var(--rk-text-2); align-items:baseline; }
 .rk-git-meta b { color:var(--rk-text); font-weight:600; }
 .rk-git-meta .rk-mono { font-family:var(--rk-mono); font-size:11.5px; color:var(--rk-text-2); }
 .rk-git-sub { font-size:11.5px; color:var(--rk-text-2); }
-.rk-git-files { border:1px solid var(--rk-line-1); border-radius:10px; background:rgba(3,8,16,.55); max-height:30vh; overflow:auto; }
+.rk-git-files { border:1px solid var(--rk-line-1); border-radius:10px; background:rgba(3,8,16,.55); max-height:${S.misc.gitFilesMaxH}; overflow:auto; }
 .rk-git-group { position:sticky; top:0; display:flex; gap:8px; align-items:center; padding:6px 12px; background:linear-gradient(180deg, rgba(10,20,38,.98), rgba(6,13,28,.94)); border-bottom:1px solid var(--rk-line-1); font-size:11.5px; letter-spacing:.04em; color:var(--rk-text-2); }
 .rk-git-group b { color:var(--rk-accent-2); font-family:var(--rk-mono); }
 .rk-git-file { display:flex; gap:10px; align-items:baseline; padding:4px 12px; font-family:var(--rk-mono); font-size:11.5px; border-bottom:1px solid rgba(var(--rk-a2),.06); }
@@ -659,11 +664,11 @@ export function createCss(deps) {
 .rk-git-chip.is-on { border-color:rgba(var(--rk-a1),.6); background:linear-gradient(180deg, rgba(var(--rk-a2),.22), rgba(var(--rk-a1),.08)); color:#fff; box-shadow:0 0 14px rgba(var(--rk-a1),.18); }
 .rk-git-chip b { font-family:var(--rk-mono); color:var(--rk-accent-2); }
 .rk-git-chip:disabled { opacity:.45; cursor:default; }
-.rk-git-msg { min-height:74px; resize:vertical; font-family:var(--rk-mono); font-size:12.5px; line-height:1.7; }
+.rk-git-msg { min-height:${px(S.misc.gitMsgMinH)}; resize:vertical; font-family:var(--rk-mono); font-size:12.5px; line-height:1.7; }
 .rk-git-result { border-radius:9px; padding:9px 12px; font-size:12.5px; border:1px solid var(--rk-line-1); background:rgba(6,14,28,.7); color:var(--rk-text-2); }
 .rk-git-result.is-ok { border-color:rgba(var(--rk-a1),.42); color:var(--rk-text); }
 .rk-git-result.is-bad { border-color:rgba(255,107,129,.45); color:#ffd7de; }
-.rk-git-out { margin-top:7px; max-height:118px; overflow:auto; font-family:var(--rk-mono); font-size:11px; white-space:pre-wrap; color:var(--rk-text-2); }
+.rk-git-out { margin-top:7px; max-height:${px(S.misc.gitOutMaxH)}; overflow:auto; font-family:var(--rk-mono); font-size:11px; white-space:pre-wrap; color:var(--rk-text-2); }
 .rk-git-hint { font-size:11.5px; color:var(--rk-text-2); }
 .rk-git-scope { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; font-size:12px; color:var(--rk-text); }
 .rk-git-ai { margin-left:auto; font-size:11.5px; padding:3px 10px; }
@@ -690,7 +695,7 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 .rk-md-wrap { position:relative; display:inline-flex; }
 .rk-md-dropzone { display:inline-flex; align-items:center; gap:4px; }
 .rk-md-more { min-width:auto; }
-.rk-md-menu { position:absolute; top:28px; left:0; z-index:6; width:252px; max-height:340px; overflow:auto; padding:6px; border-radius:10px; border:1px solid var(--rk-line-3); background:linear-gradient(180deg, rgba(12,22,42,.99), rgba(5,11,24,.99)); box-shadow:0 18px 44px rgba(1,6,16,.7); }
+.rk-md-menu { position:absolute; top:28px; left:0; z-index:6; width:${px(S.menu.markdownW)}; max-height:${px(S.menu.markdownMaxH)}; overflow:auto; padding:6px; border-radius:10px; border:1px solid var(--rk-line-3); background:linear-gradient(180deg, rgba(12,22,42,.99), rgba(5,11,24,.99)); box-shadow:0 18px 44px rgba(1,6,16,.7); }
 .rk-md-group { margin-bottom:6px; }
 .rk-md-group-name { padding:4px 6px 3px; font-size:11px; color:var(--rk-accent-2); letter-spacing:.02em; }
 .rk-md-item { display:block; width:100%; text-align:left; padding:5px 8px; margin:1px 0; border-radius:6px; border:1px solid transparent; background:transparent; color:var(--rk-text); font-size:12.5px; cursor:pointer; }
@@ -703,7 +708,7 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 /* ===================== 配色选择器 ===================== */
 .rk-skin-wrap { position:relative; display:inline-flex; }
 .rk-swatch-dot { width:11px; height:11px; border-radius:3px; border:1px solid rgba(255,255,255,.35); }
-.rk-skin-pop { position:absolute; right:0; top:32px; z-index:9; width:268px; padding:9px; border-radius:10px; border:1px solid var(--rk-line-3); background:linear-gradient(180deg, rgba(12,22,42,.99), rgba(5,11,24,.99)); box-shadow:0 18px 44px rgba(1,6,16,.7); }
+.rk-skin-pop { position:absolute; right:0; top:32px; z-index:9; width:${px(S.menu.skinW)}; padding:9px; border-radius:10px; border:1px solid var(--rk-line-3); background:linear-gradient(180deg, rgba(12,22,42,.99), rgba(5,11,24,.99)); box-shadow:0 18px 44px rgba(1,6,16,.7); }
 .rk-skin-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:9px; padding-top:8px; border-top:1px solid var(--rk-line-1); font-size:11px; color:var(--rk-text-2); }
 .rk-theme-seg { display:inline-flex; gap:4px; }
 .rk-theme-seg .rk-btn { padding:3px 7px; font-size:11px; }
@@ -714,7 +719,7 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 .rk-swatch:hover { transform:scale(1.1); }
 .rk-swatch.is-on { box-shadow:0 0 0 2px var(--rk-text), 0 0 10px rgba(255,255,255,.32); }
 /* ---- 自适应: 按插件容器宽度分级收拢(宿主侧栏占位时窗口可能很窄) ---- */
-@container rk (max-width: 1180px) {
+@container rk (max-width: ${px(S.breakpoints.wide)}) {
 	.rk-head { padding:10px 14px; gap:10px; }
 	.rk-toolbar { padding:8px 14px; gap:8px; }
 	.rk-stage { padding:16px 16px 48px; }
@@ -722,26 +727,26 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 	/* 百分比按钮只是「显示当前值」, 窄了先让位给搜索框和缩放 */
 	.rk-ztag { display:none; }
 }
-@container rk (max-width: 1000px) {
+@container rk (max-width: ${px(S.breakpoints.medium)}) {
 	.rk-badge { display:none; }
 	.rk-toolbar-hint { display:none; }
 	.rk-head .rk-stat:nth-child(n+4) { display:none; }
 	/* 右栏改成整块盖住画布, 不再把画布挤成一条 */
 	.rk-detail { position:absolute; inset:0; z-index:6; width:auto; min-width:0; }
 }
-@container rk (max-width: 860px) {
+@container rk (max-width: ${px(S.breakpoints.narrow)}) {
 	.rk-head { padding:9px 12px; gap:8px; flex-wrap:wrap; }
 	.rk-head .rk-stat { display:none; }
 	.rk-toolbar { padding:7px 12px; }
 	.rk-btn { padding:5px 9px; }
-	.rk-modal-card { width:96%; padding:14px 15px; }
+	.rk-modal-card { width:${S.dialog.modalNarrowPct}%; padding:14px 15px; }
 	.rk-modal-card.rk-pcard, .rk-modal-card.rk-qcard { width:100%; height:100%; max-height:100%; border-radius:0; }
 	.rk-drawer, .rk-drawer.rk-wide { width:100%; }
 	.rk-drawer-body.rk-split { flex-direction:column; }
-	.rk-drawer-body.rk-split > .rk-edit-col > .rk-textarea { min-height:150px; }
+	.rk-drawer-body.rk-split > .rk-edit-col > .rk-textarea { min-height:${px(S.editor.growTextareaMinH)}; }
 	.rk-zoomctl { display:none; }
 }
-@container rk (max-width: 700px) {
+@container rk (max-width: ${px(S.breakpoints.tiny)}) {
 	.rk-h1 { font-size:14px; }
 	.rk-stage { padding:12px 12px 40px; }
 }

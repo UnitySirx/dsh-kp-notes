@@ -10,12 +10,14 @@ function createMindmap(deps) {
 	const renderPointBody = deps.renderPointBody; /* 引子 + 小知识点分组(与详情面板同一套) */
 	const h = React.createElement;
 
-	/* 每层的列位置 / 节点宽高 / 行距(层深: 根 → 章 → 小节 → 知识点 → 知识点内容) */
-	const COL_X = [0, 258, 556, 828, 1180];
-	const COL_W = [214, 268, 250, 300, 470];
-	const ROW_H = [40, 34, 30, 30, 220];  /* 内容那层放整篇 markdown, 默认高度只是量出来之前的估值 */
-	const ROW_GAP = [18, 13, 10, 10, 12];
-	const GROUP_GAP = 12; /* 不同父节点的子树之间多留一点, 层次更清楚 */
+	/* 尺寸来自 client/sizes.js 的 mindmap 段(入口注入): 每层的列位置 / 节点宽高 / 行距
+	 * 数组下标 = 层深(根 → 章 → 小节 → 知识点 → 知识点内容), 想调宽度去那里改 */
+	const M = deps.sizes.mindmap;
+	const COL_X = M.colX;
+	const COL_W = M.colW;
+	const ROW_H = M.rowH;  /* 内容那层放整篇 markdown, 默认高度只是量出来之前的估值 */
+	const ROW_GAP = M.rowGap;
+	const GROUP_GAP = M.groupGap; /* 不同父节点的子树之间多留一点, 层次更清楚 */
 
 	const tier = (depth) => Math.min(COL_X.length - 1, Math.max(0, depth));
 
@@ -148,7 +150,7 @@ function createMindmap(deps) {
 			width = Math.max(width, node.x + node.w);
 			height = Math.max(height, node.y + node.h);
 		});
-		return { nodes, links, width: width + 24, height: height + 8 };
+		return { nodes, links, width: width + M.canvasPadX, height: height + M.canvasPadY };
 	}
 
 	/* 左→右的三次贝塞尔: 从父节点右边缘拉到子节点左边缘 */

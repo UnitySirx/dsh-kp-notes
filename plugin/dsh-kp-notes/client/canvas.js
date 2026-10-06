@@ -9,8 +9,9 @@
  *
  * 依赖全部由入口按名字注入, 子模块之间不互相 import(与 client/*.js 其余模块同一套范式)。
  */
-export function createCanvas({ React }) {
+export function createCanvas({ React, sizes }) {
 	const { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } = React;
+	const S = sizes; /* client/sizes.js 注入: 卡片宽高 / 间距 / 缩放上下限 / 舞台留白 / 菜单尺寸 */
 
 	/* t / mode / mapReady / level1 / catalog / query / reload / setRoute          —— 面板
 	 * folded / opened / roots / libTick / saveLib / zoomRef / libZoomRef / libReadyRef —— store
@@ -36,15 +37,17 @@ export function createCanvas({ React }) {
 		/* 学习库配置里视野的键: 一级画布是 'roots', 每张画布用它自己的根目录路径 */
 		const zoomKey = level1 ? 'roots' : (catalog && catalog.root) || 'default';
 		const VIEW_VERSION = 2;
-		const cardWidth = 372;
-		const cardGap = 18;
-		const ROOT_CARD_H = 188;
-		const MIN_SCALE = 0.2; /* 一行卡片可能很长, 复位时允许缩得更小才能全铺满 */
-		const MAX_SCALE = 2.4;
+		/* 尺寸来自 client/sizes.js(入口注入), 这里只取名 —— 想调卡片大小去那个文件改一处 */
+		const cardWidth = S.canvas.cardWidth;
+		const cardGap = S.canvas.cardGap;
+		const ROOT_CARD_H = S.canvas.cardHeight;
+		const MIN_SCALE = S.canvas.minScale; /* 一行卡片可能很长, 复位时允许缩得更小才能全铺满 */
+		const MAX_SCALE = S.canvas.maxScale;
 		/* 插件区域的实际宽度: 宿主侧栏展开/收起、拉窗口都由它驱动自适应 */
 		const [stageBox, setStageBox] = useState({ w: 0, h: 0 });
-		/* 一级画布的列数跟着可用宽度走(窄了就 1-2 列), 别硬撑 3 列 */
-		const rootCols = stageBox.w > 0 ? Math.max(1, Math.min(3, Math.floor((stageBox.w - 44 + cardGap) / (cardWidth + cardGap)))) : 3;
+		/* 一级画布的列数跟着可用宽度走(窄了就 1-2 列), 别硬撑 3 列;
+		 * 减掉的是舞台左右内边距(sizes.canvas.stagePadX, 与 css.js 的 .rk-stage 同源) */
+		const rootCols = stageBox.w > 0 ? Math.max(1, Math.min(S.canvas.rootColsMax, Math.floor((stageBox.w - S.canvas.stagePadX * 2 + cardGap) / (cardWidth + cardGap)))) : S.canvas.rootColsMax;
 		/* 上次自动铺满时的尺寸, 用来区分「尺寸变了」和「内容变了」 */
 		const lastFit = useRef({ w: 0, h: 0 });
 		const interacting = panning;
@@ -403,11 +406,12 @@ export function createCanvas({ React }) {
 			reload(true);
 		}, [reload]);
 
-		/* 右键菜单: 屏幕空间浮层(不参与画布缩放), 靠 stage 的 padding-box 定位 */
-		const MENU_W = 196;
-		const MENU_ITEM_H = 30;
-		const MENU_SEP_H = 11;
-		const MENU_PAD = 10;
+		/* 右键菜单: 屏幕空间浮层(不参与画布缩放), 靠 stage 的 padding-box 定位;
+		 * 四个尺寸与 css.js 的 .rk-menu / .rk-menu-item 同源(sizes.menu), 改一处两边一起变 */
+		const MENU_W = S.menu.width;
+		const MENU_ITEM_H = S.menu.itemH;
+		const MENU_SEP_H = S.menu.sepH;
+		const MENU_PAD = S.menu.pad;
 		const [menu, setMenu] = useState(null);
 		const menuRef = useRef(null);
 		const closeMenu = useCallback(() => setMenu(null), []);

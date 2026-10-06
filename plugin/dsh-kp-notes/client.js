@@ -1439,12 +1439,12 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 180;
-		const CLIENT_MODULES = ['api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
+		const MODULE_VERSION = 181;
+		const CLIENT_MODULES = ['sizes', 'api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 
 		async function apply(ctx) {
-			const [api, store, theme, gitPanel, rootsMod, editingMod, canvasMod, viewMod, dict, css, util, vendor, milkdown, md, media, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
+			const [sizes, api, store, theme, gitPanel, rootsMod, editingMod, canvasMod, viewMod, dict, css, util, vendor, milkdown, md, media, cards, dialogs, editor, snippets, mindmap] = await Promise.all(CLIENT_MODULES.map(loadClientModule));
 			/* api: 宿主路由的 fetch/post 包装 + 目录 / git 两个轮询 hook(见 client/api.js) */
 			const apiMods = api.createApi({ React });
 			/* store: 本机 localStorage + 学习库配置文件(<库>/.config/rk-study.json)的读写(见 client/store.js) */
@@ -1455,7 +1455,10 @@ window.__ModuleLoader__.load({
 				KEYS: { FONT_KEY, SKIN_KEY, ITEM_KEY, THEME_KEY },
 			});
 			const dictMods = dict.createDict();
-			const cssMods = css.createCss();
+			/* sizes: 全插件的「宽高」都在这一个文件里(client/sizes.js) —— 只是数据, 谁需要谁注入;
+			 * 必须最先建: css(拼样式) / canvas(几何) / cards / mindmap 都吃它 */
+			const sizeMods = sizes.createSizes();
+			const cssMods = css.createCss({ sizes: sizeMods.SIZES, px: sizeMods.px });
 			/* theme: 配色 / 主题 / 跟随宿主明暗 / 卡片各一色(见 client/theme.js) */
 			const themeMods = theme.createTheme({ React, KEYS: { FONT_KEY, SKIN_KEY, ITEM_KEY, THEME_KEY }, SKINS: cssMods.SKINS });
 			/* git: 提交 / 仅推送 / 拉取 / 模型写 commit message(见 client/git.js) */
@@ -1465,7 +1468,7 @@ window.__ModuleLoader__.load({
 			/* editing: 打开/编辑/新建/删除(见 client/editing.js) */
 			const editingMods = editingMod.createEditing({ React, api: apiMods });
 			/* canvas: 画布视口 / 导图几何 / 舞台指针(见 client/canvas.js) */
-			const canvasMods = canvasMod.createCanvas({ React });
+			const canvasMods = canvasMod.createCanvas({ React, sizes: sizeMods.SIZES });
 			/* view: 渲染层 —— 右键菜单 / 一级画布卡片 / 导图 / 小节 / 知识点 / 正文(见 client/view.js) */
 			const viewMods = viewMod.createView({ React });
 			const utilMods = util.createUtil();
@@ -1481,15 +1484,15 @@ window.__ModuleLoader__.load({
 			});
 			/* media: 图片素材 —— 插图落盘到 .media/<小节uid>.assestfiles/ + 面板里相对 src 的显示换算(见 client/media.js) */
 			const mediaMods = media.createMedia({ api: apiMods });
-			/* 依赖图无环: dict / css / util 是叶子, vendor 只要 React, milkdown 只要 react 家族, md 吃 vendor, cards 吃 md + util, editor 吃 md + cards, dialogs 吃 md */
+			/* 依赖图无环: sizes / dict / util 是叶子(css 吃 sizes, 不 import), vendor 只要 React, milkdown 只要 react 家族, md 吃 vendor, cards 吃 md + util + sizes, editor 吃 md + cards, dialogs 吃 md */
 			const mdMods = md.createMd({ React, MathNode: vendorMods.MathNode, MermaidBlock: vendorMods.MermaidBlock, looksLikeMath: vendorMods.looksLikeMath });
-			const cardMods = cards.createCards({ React, renderInline: mdMods.renderInline, renderMarkdown: mdMods.renderMarkdown, formatCount: utilMods.formatCount, pathLabel: utilMods.pathLabel, countExamples: utilMods.countExamples, SKINS: cssMods.SKINS });
+			const cardMods = cards.createCards({ React, renderInline: mdMods.renderInline, renderMarkdown: mdMods.renderMarkdown, formatCount: utilMods.formatCount, pathLabel: utilMods.pathLabel, countExamples: utilMods.countExamples, SKINS: cssMods.SKINS, sizes: sizeMods.SIZES });
 			/* snippets 只要 React: markdown 输入助手(小工具栏 + 公式/结构模板 + 快捷键) */
 			const snippetsMods = snippets.createSnippets({ React, rootQuery: apiMods.withRootQuery });
 			const dialogMods = dialogs.createDialogs({ React, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, unescapeRedundant: mdMods.unescapeRedundant, media: mediaMods, milkdown: milkdownMods });
 			const editorMods = editor.createEditor({ React, DeleteButton: cardMods.DeleteButton, LivePreview: mdMods.LivePreview, MarkdownToolbar: snippetsMods.MarkdownToolbar, snippetKeyDown: snippetsMods.snippetKeyDown, milkdown: milkdownMods, unescapeRedundant: mdMods.unescapeRedundant, media: mediaMods });
 			/* mindmap: 思维导图模式(左→右的章节 / 小节 / 知识点树), 知识点节点里渲染整篇 markdown 正文 */
-			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody });
+			const mindmapMods = mindmap.createMindmap({ React, renderMarkdown: mdMods.renderMarkdown, renderPointBody: cardMods.renderPointBody, sizes: sizeMods.SIZES });
 			/* 注意: Object.assign 是把每个模块工厂的返回**摊平**进 mods 的(面板直接解构 ChapterCard / useStore …),
 			 * 所以 media 这种「要整体拿走」的得写成字面量属性 { media: mediaMods } —— 直接把 mediaMods 当参数传进去
 			 * 只会把它的成员(isRelativeSrc / upload / watchImages …)摊到顶层, 面板里的 media 就是 undefined。 */
