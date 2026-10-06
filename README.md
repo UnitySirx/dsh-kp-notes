@@ -379,7 +379,7 @@ D. 非风险点
 | 点章节卡里的小节行 | **在右侧展开**详情面板：知识点卡片墙（题目在各知识点的详情页里）；左侧画布照旧可以平移、缩放 |
 | 点知识点卡片 | 右侧面板里进入知识点详情：说明 → 题目列表（答案默认遮挡）；卡片底部显示它来自哪个文件 |
 | 右侧面板右上角 `✕ 关闭` | 收起详情面板，画布恢复整宽 |
-| 面板里的 `‹ 返回` | 从知识点详情退回到所在小节 |
+| 面板里的 `‹ 返回` | 从知识点详情退回到所在小节（与 `编辑` / `删除本文件` 一起排在详情头部右侧；**知识点详情的头部与小节详情同一套**：`.rk-panel` + `.rk-panel-title`（`章节 chip › 小节标题` + 右侧动作组）+ `.rk-chapter-path` 路径行，挤不下时整组动作换行 —— 老版用的 `.rk-crumbs` 不换行，窄面板下会把「返回」和标题各拆成两行、按钮叠起来） |
 | 重新扫描 | 立刻重新读取文件（平时每 10 秒自动刷新一次）；在一级画布上则是**按磁盘刷新画布列表**——已手动删掉的画布目录会被移出并提示移出了几个；手动「移出列表」过的那几张**不会再被加回来**（它们的目录已经在同层的 `.remove/` 里，墓碑记在 `localStorage` 的 `rk-study:removed-roots`，重新导入这个库或在同一路径新建画布才解除） |
 | 顶栏 `⎇ Git 提交` | **只在一级画布（根节点）上出现**：打开 Git 提交弹窗，一次提交**整个学习库**（所有画布的笔记 + 库根目录的其它改动），按钮上的数字 = 未提交文件数；弹窗里看分支 / 领先落后 / 上次提交与逐条改动，写一句提交信息后「仅推送」/「仅提交」/「提交并推送」（本地已有提交但还没推上去时，可以直接点「仅推送」；想手动更新远程内容就点「拉取」；**提交前会先自动拉取合并**）。细节见「七、Git 提交」 |
 
@@ -529,8 +529,8 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 > ```sh
 > # 1) host 半跨模块 import 的 ?v=N（当前 ?v=91）
 > sed -i '' 's/?v=90/?v=91/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 183；只改注释 / 只动宿主时不必动）
-> sed -i '' 's/MODULE_VERSION = 182;/MODULE_VERSION = 183;/' plugin/dsh-kp-notes/client.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 184；只改注释 / 只动宿主时不必动）
+> sed -i '' 's/MODULE_VERSION = 183;/MODULE_VERSION = 184;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
@@ -552,7 +552,7 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 | `client/roots.js` | 342 | 画布目录与根目录管理：新建 / 改名（= 重命名磁盘目录）/ 移出列表（搬进同层 `.remove/` + 记墓碑）、扫盘核对 `probeRoot`、`⌂ 根目录` 弹窗（350ms 防抖预览 + `用上一层` + `设为根目录`，列表按扫盘结果**替换**）以及两个弹窗的状态 | React、api |
 | `client/editing.js` | 401 | 打开 / 编辑 / 新建 / 删除：小节与知识点的打开与编辑、新建小节 / 章节、章节改名、题目片段的新增与编辑、删除小节 / 章节 / 题目、舞台与卡片的右键菜单项（写盘一律 `postAction` 后 `reload(true)`） | React、api |
 | `client/canvas.js` | 514 | 画布视口与导图几何：视野（缩放 / 拖拽 / 自动铺满）、舞台尺寸与测量、导图树布局 `mind` / `positions` / `rootCards` / `extent`、指针与检索命中 `hits`、右键菜单状态；几何助手由入口注入，**几何常量从 `sizes` 拿，并且按级取**：`const G = level1 ? S.rootCanvas : S.canvas`（卡片宽 / 间距），卡高与每行列数只属于根画布（`S.rootCanvas.cardHeight` / `rootColsMax`），缩放上下限是共用的 `S.stage` | React、sizes |
-| `client/view.js` | 394 | 渲染层：右键菜单、一级画布卡片、导图（含思维导图模式）、小节、知识点详情、正文 `body` / `detailBody`；只读面板状态与各域动作，生成 vdom | React |
+| `client/view.js` | 404 | 渲染层：右键菜单、一级画布卡片、导图（含思维导图模式）、小节、知识点详情、正文 `body` / `detailBody`；只读面板状态与各域动作，生成 vdom | React |
 | `client/vendor.js` | 282 | KaTeX / mermaid 按需加载、公式与流程图组件（流程图配色跟着主题走，换主题自动重画） | React |
 | `client/md.js` | 461 | markdown 渲染器（表格 / 引用 / 代码 / 公式 / 流程图 / **图片**：`![]()` 渲染成真的 `<img>`，相对 src 由面板根那层 `watchImages` 换成路由地址）+ 实时预览；`\X` 按字面量渲染（代码 / 公式里的反斜杠原样保留；定界符自己被转义的 `\$A_i\$` 不算公式段），另导出 `unescapeRedundant` / `renderFingerprint` 给编辑器与弹窗做「去冗余转义」（`$` 另有宽松指纹：只放过「字面量 `$tex$` → 真公式」这一种变化） | React、vendor |
 | `client/cards.js` | 451 | 章节卡 / 知识点卡 / 答案遮挡 / 删除按钮 / 侧栏图标；**`renderPointBody`**（引子 + 小知识点分组，详情面板与思维导图共用）；卡片默认宽度 `width || S.canvas.cardWidth` | React、md、util、sizes |

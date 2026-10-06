@@ -151,7 +151,7 @@ export function createCss(deps) {
 .rk-stats { display:flex; align-items:center; gap:6px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }
 .rk-stat { display:inline-flex; align-items:baseline; gap:4px; padding:3px 8px; border-radius:6px; background:var(--rk-bg-2); border:1px solid var(--rk-line-1); font-size:11px; color:var(--rk-text-2); }
 .rk-stat b { font-size:12px; color:var(--rk-accent); font-weight:600; }
-.rk-btn { display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:7px; border:1px solid var(--rk-line-2); background:var(--rk-bg-2); color:var(--rk-text); font-size:12px; cursor:pointer; transition:border-color .15s,color .15s,background .15s; }
+.rk-btn { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; padding:5px 11px; border-radius:7px; border:1px solid var(--rk-line-2); background:var(--rk-bg-2); color:var(--rk-text); font-size:12px; cursor:pointer; transition:border-color .15s,color .15s,background .15s; }
 .rk-btn:hover { border-color:var(--rk-accent); color:var(--rk-accent); }
 .rk-btn.rk-primary { border-color:var(--rk-accent); color:var(--rk-accent); }
 .rk-btn[disabled] { opacity:.5; cursor:default; }

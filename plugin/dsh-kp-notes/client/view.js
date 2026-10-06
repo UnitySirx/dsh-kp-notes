@@ -336,38 +336,48 @@ export function createView({ React }) {
 			const renderPoint = () => {
 				if (!current || !currentPoint) return h('div', { className: 'rk-empty' }, t('noMatch'));
 				const { chapter, section } = current;
+				const pointPath = currentPoint.path || section.path;
+				/* 头部与「小节详情」同一套(.rk-panel + .rk-panel-title): 位置是 chip › b, 动作在右边那一组,
+				 * 挤不下时整组换行(panel-title 自带 flex-wrap) —— 老版用 .rk-crumbs, 它不换行,
+				 * 于是窄面板下「返回」被拆成两行、章节名与小节名各折一行、按钮叠在一起 */
 				return h(
 					'div',
 					{ className: 'rk-doc' },
 					h(
 						'div',
-						{ className: 'rk-crumbs', style: { marginBottom: 12 } },
-						h('button', { className: 'rk-btn rk-ghost', type: 'button', onClick: () => setRoute({ view: 'section', path: section.path }) }, '‹ ' + t('back')),
-						h('span', null, chapter.title),
-						h('span', null, '›'),
-						h('span', null, section.title),
+						{ className: 'rk-panel' },
 						h(
-							'span',
-							{ className: 'rk-row', style: { marginLeft: 'auto' } },
-							currentPoint.path && currentPoint.path !== section.path
-								? h('span', { className: 'rk-chip' }, pathLabel(currentPoint.path))
-								: null,
+							'div',
+							{ className: 'rk-panel-title' },
+							h('span', { className: 'rk-chip' }, chapter.title),
+							h('span', { className: 'rk-sec-idx' }, '›'),
+							h('b', null, section.title),
 							h(
-								'button',
-								{
-									className: 'rk-btn',
-									type: 'button',
-									onClick: () => (currentPoint.path ? editPoint(currentPoint) : openEditorForSection(section.path)),
-								},
-								t('edit'),
+								'span',
+								{ className: 'rk-row', style: { marginLeft: 'auto' } },
+								h(
+									'button',
+									{ className: 'rk-btn', type: 'button', onClick: () => setRoute({ view: 'section', path: section.path }) },
+									'‹ ' + t('back'),
+								),
+								h(
+									'button',
+									{
+										className: 'rk-btn',
+										type: 'button',
+										onClick: () => (currentPoint.path ? editPoint(currentPoint) : openEditorForSection(section.path)),
+									},
+									t('edit'),
+								),
+								h(DeleteButton, {
+									t,
+									label: t('delFile'),
+									onError: flashError,
+									onConfirm: () => removeEntry(pointPath),
+								}),
 							),
-							h(DeleteButton, {
-								t,
-								label: t('delFile'),
-								onError: flashError,
-								onConfirm: () => removeEntry(currentPoint.path || section.path),
-							}),
 						),
+						h('div', { className: 'rk-chapter-path' }, pathLabel(pointPath) + '.md'),
 					),
 					h(PointDetail, {
 						point: currentPoint,
