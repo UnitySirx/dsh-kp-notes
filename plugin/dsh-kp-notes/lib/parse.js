@@ -1,8 +1,8 @@
 /* rk-study · host/parse —— 从 host.js 第 403-638 行原样切出 */
-import { FENCE_RE, MAX_POINT_CHARS, QUESTION_PATH_RE } from './constants.js?v=92';
-import { buildNodes, isAnswerTitle, nodeMarkdown, scanHeadings, splitAnswer, splitAnswerBlock, summarize, subtreeEnd, takeOptions } from './headings.js?v=92';
-import { questionBlockNodes, removeQuestionBlock } from './questions.js?v=92';
-import { baseName, classifyFile, collectTags, countWords, numericPrefix, parseFrontmatter, stripInline, stripNumericPrefix } from './util.js?v=92';
+import { FENCE_RE, MAX_POINT_CHARS, QUESTION_PATH_RE } from './constants.js?v=93';
+import { buildNodes, isAnswerTitle, nodeMarkdown, scanHeadings, splitAnswer, splitAnswerBlock, summarize, subtreeEnd, takeOptions } from './headings.js?v=93';
+import { questionBlockNodes, removeQuestionBlock, stripBlockUidLines } from './questions.js?v=93';
+import { baseName, classifyFile, collectTags, countWords, numericPrefix, parseFrontmatter, stripInline, stripNumericPrefix } from './util.js?v=93';
 
 /* --------------------------------------------------------------- parsing */
 
@@ -11,11 +11,13 @@ export function toItem(node, lines, id) {
 	let stemLines;
 	let answerLines;
 	if (answerChild) {
-		stemLines = node.bodyLines;
+		/* 块里的 `<!-- rk-uid: … -->` 是插件自己挂的身份号(见 questions.js 的 withBlockUid):
+		 * 解析前必须摘掉, 否则它会混进题干与摘要, 在界面上原样显示出来 */
+		stemLines = stripBlockUidLines(node.bodyLines);
 		answerLines = [`**${answerChild.title}**`, nodeMarkdown(answerChild, lines)];
 	} else {
 		/* 题目下面自带「### 问题」这类子标题时, 题干与答案要连着子标题一起看 */
-		const body = node.children.length > 0 ? nodeMarkdown(node, lines).split('\n') : node.bodyLines;
+		const body = stripBlockUidLines(node.children.length > 0 ? nodeMarkdown(node, lines).split('\n') : node.bodyLines);
 		const split = splitAnswer(body);
 		stemLines = split.stem;
 		answerLines = split.answer;

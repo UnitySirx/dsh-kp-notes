@@ -1,6 +1,6 @@
 /* rk-study · host/questions —— 从 host.js 第 1185-1252 行原样切出 */
-import { buildNodes, hasAnswerLine, isQuestionHeading, scanHeadings } from './headings.js?v=92';
-import { parseFrontmatter, stripInline } from './util.js?v=92';
+import { buildNodes, hasAnswerLine, isQuestionHeading, scanHeadings } from './headings.js?v=93';
+import { parseFrontmatter, stripInline } from './util.js?v=93';
 
 /* 题目块的身份号: 单独一行挂在标题下面, 形如 `<!-- rk-uid: q0001 -->`。
    为什么单独一行 —— renumberQuestionBlocks 会重写标题行(`## 题目 N`), 号放标题行里会被冲掉;
@@ -14,6 +14,16 @@ export function blockUidOf(text) {
 		if (matched) return matched[1];
 	}
 	return '';
+}
+
+/**
+ * 把 `<!-- rk-uid: … -->` 标记行从一段文本(或一组行)里摘掉。
+ * 解析/渲染前用: 这个号是给我们自己认身份用的, 不该出现在界面上的题干、摘要里。
+ * 传字符串按行拆、传数组直接用, 返回的都是「行数组」。
+ */
+export function stripBlockUidLines(text) {
+	const parts = Array.isArray(text) ? text : String(text ?? '').split(/\r?\n/);
+	return parts.filter((line) => !BLOCK_UID_RE.test(line));
 }
 
 /** 先把块文本里原有的标记行摘干净, 再把号挂到标题行的下一行(没有标题就挂最前面) */
