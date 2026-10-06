@@ -314,7 +314,7 @@ export function createDialogs(deps) {
 					'div',
 					{ className: 'rk-modal-title' },
 					mode === 'new' ? t('qNew') : t('qEdit'),
-					from ? h('span', { className: 'rk-qfrom' }, from) : null,
+					from ? h('span', { className: 'rk-qfrom', title: from }, from) : null,
 					modeSwitch(),
 				),
 				/* 左栏: 表单字段 */
@@ -510,7 +510,7 @@ export function createDialogs(deps) {
 						}
 					},
 				},
-				h('div', { className: 'rk-modal-title' }, t('pointEdit'), h('span', { className: 'rk-qfrom' }, form.path), modeSwitch()),
+				h('div', { className: 'rk-modal-title' }, t('pointEdit'), h('span', { className: 'rk-qfrom', title: form.path }, form.path), modeSwitch()),
 				/* 左栏: 表单字段 */
 				h(
 					'div',

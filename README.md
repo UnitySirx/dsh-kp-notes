@@ -529,8 +529,8 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 > ```sh
 > # 1) host 半跨模块 import 的 ?v=N（当前 ?v=91）
 > sed -i '' 's/?v=90/?v=91/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 182；只改注释 / 只动宿主时不必动）
-> sed -i '' 's/MODULE_VERSION = 181;/MODULE_VERSION = 182;/' plugin/dsh-kp-notes/client.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 183；只改注释 / 只动宿主时不必动）
+> sed -i '' 's/MODULE_VERSION = 182;/MODULE_VERSION = 183;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >

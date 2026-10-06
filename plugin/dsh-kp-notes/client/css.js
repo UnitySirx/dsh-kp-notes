@@ -168,7 +168,7 @@ export function createCss(deps) {
 .rk-input { flex:1 1 240px; min-width:160px; padding:6px 10px; border-radius:7px; border:1px solid var(--rk-line-2); background:var(--rk-bg-1); color:var(--rk-text); font-size:12px; outline:none; }
 .rk-input:focus { border-color:var(--rk-accent); }
 .rk-seg { display:inline-flex; border:1px solid var(--rk-line-2); border-radius:7px; overflow:hidden; }
-.rk-seg button { padding:5px 11px; border:0; background:var(--rk-bg-1); color:var(--rk-text-2); font-size:12px; cursor:pointer; }
+.rk-seg button { white-space:nowrap; padding:5px 11px; border:0; background:var(--rk-bg-1); color:var(--rk-text-2); font-size:12px; cursor:pointer; }
 .rk-seg button + button { border-left:1px solid var(--rk-line-1); }
 .rk-seg button.rk-on { background:var(--rk-bg-2); color:var(--rk-accent); }
 .rk-crumbs { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--rk-text-2); }
@@ -596,8 +596,8 @@ export function createCss(deps) {
 .rk-empty { color:#8fa8c9; }
 .rk-modal { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,6,14,.62); backdrop-filter:blur(3px); z-index:8; }
 .rk-modal-card { width:min(${px(S.dialog.modalW)}, 92%); padding:16px 18px; border-radius:14px; border:1px solid var(--rk-line-2); background:var(--rk-panel); box-shadow:0 24px 60px rgba(0,2,8,.7), 0 0 40px rgba(var(--rk-a1),.08); }
-.rk-modal-title { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:13px; font-weight:600; color:var(--rk-text); font-family:var(--rk-mono); letter-spacing:.02em; }
-.rk-modal-title::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--rk-accent-2); box-shadow:0 0 8px var(--rk-accent-2); }
+.rk-modal-title { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0; white-space:nowrap; margin-bottom:12px; font-size:13px; font-weight:600; color:var(--rk-text); font-family:var(--rk-mono); letter-spacing:.02em; }
+.rk-modal-title::before { flex:0 0 auto; content:''; width:6px; height:6px; border-radius:50%; background:var(--rk-accent-2); box-shadow:0 0 8px var(--rk-accent-2); }
 .rk-modal-card.rk-pcard, .rk-modal-card.rk-qcard { width:min(${px(S.dialog.pcardW)}, 95%); height:min(${px(S.dialog.pcardH)}, 86vh, 92%); max-height:92%; overflow:hidden; display:flex; flex-direction:column; gap:10px; }
 /* 弹窗里的左右分栏: 左边写 markdown / 表单, 右边实时渲染 */
 .rk-edit-split { flex:1 1 auto; min-height:0; display:flex; flex-direction:row; align-items:stretch; gap:12px; }
@@ -606,9 +606,9 @@ export function createCss(deps) {
 .rk-edit-col > .rk-field.rk-grow { flex:1 1 auto; min-height:0; }
 .rk-edit-col > .rk-field.rk-grow .rk-textarea { flex:1 1 auto; min-height:${px(S.editor.growTextareaMinH)}; }
 .rk-edit-split > .rk-preview { flex:1 1 0; min-width:0; }
-.rk-qfrom { font-size:11px; color:var(--rk-text-2); font-family:var(--rk-mono); }
-.rk-seg { display:flex; gap:6px; }
-.rk-seg-item { padding:5px 13px; border-radius:8px; border:1px solid var(--rk-line-2); background:rgba(8,17,33,.7); color:var(--rk-text-2); font:inherit; font-size:12px; cursor:pointer; }
+.rk-qfrom { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:var(--rk-text-2); font-family:var(--rk-mono); }
+.rk-seg { flex:0 0 auto; display:flex; gap:6px; }
+.rk-seg-item { flex:0 0 auto; white-space:nowrap; padding:5px 13px; border-radius:8px; border:1px solid var(--rk-line-2); background:rgba(8,17,33,.7); color:var(--rk-text-2); font:inherit; font-size:12px; cursor:pointer; }
 .rk-seg-item.rk-on { border-color:var(--rk-line-3); color:var(--rk-text); background:linear-gradient(180deg, rgba(var(--rk-a1),.16), rgba(var(--rk-a1),.03)); box-shadow:0 0 0 1px rgba(var(--rk-a1),.18); }
 .rk-qopt { display:flex; align-items:center; gap:8px; }
 .rk-qopt input[type=radio] { flex:0 0 auto; width:15px; height:15px; accent-color:var(--rk-accent-2); cursor:pointer; }
@@ -646,7 +646,7 @@ export function createCss(deps) {
 .rk-git-meta { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12px; color:var(--rk-text-2); align-items:baseline; }
 .rk-git-meta b { color:var(--rk-text); font-weight:600; }
 .rk-git-meta .rk-mono { font-family:var(--rk-mono); font-size:11.5px; color:var(--rk-text-2); }
-.rk-git-sub { font-size:11.5px; color:var(--rk-text-2); }
+.rk-git-sub { flex:0 0 auto; white-space:nowrap; font-size:11.5px; color:var(--rk-text-2); }
 .rk-git-files { border:1px solid var(--rk-line-1); border-radius:10px; background:rgba(3,8,16,.55); max-height:${S.misc.gitFilesMaxH}; overflow:auto; }
 .rk-git-group { position:sticky; top:0; display:flex; gap:8px; align-items:center; padding:6px 12px; background:linear-gradient(180deg, rgba(10,20,38,.98), rgba(6,13,28,.94)); border-bottom:1px solid var(--rk-line-1); font-size:11.5px; letter-spacing:.04em; color:var(--rk-text-2); }
 .rk-git-group b { color:var(--rk-accent-2); font-family:var(--rk-mono); }
