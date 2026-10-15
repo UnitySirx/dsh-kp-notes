@@ -305,6 +305,8 @@ export function createCss(deps) {
 .rk-detail-name { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--rk-mono); font-size:11.5px; color:#7f9ec2; }
 .rk-detail-body { flex:1 1 auto; min-height:0; overflow:auto; padding:14px 16px 48px; }
 @keyframes rk-slide { from { transform:translateX(12px); opacity:.35; } to { transform:none; opacity:1; } }
+/* 抽屉的层位: 宽面板下只要压过右栏(5 > auto)就够了; 窄面板下右栏自己也变成整块浮层,
+ * 那时三块(右栏 / 抽屉 / 舞台)的层位由下面的 @container rk (max-width: medium) 一段接管, 改这里要看那一段。 */
 .rk-drawer { position:absolute; inset:0 0 0 auto; width:min(${px(S.dialog.drawerW)}, 92%); display:flex; flex-direction:column; border-left:1px solid var(--rk-line-2); background:var(--rk-bg-1); box-shadow:-18px 0 40px rgba(0,0,0,.3); z-index:5; }
 .rk-drawer-head { display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--rk-line-1); flex-wrap:wrap; }
 .rk-drawer-body { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; padding:12px 14px; gap:10px; }
@@ -735,6 +737,17 @@ html.rk-focus [data-rk-focus] [class*="handle"] { display:none !important; }
 	.rk-head .rk-stat:nth-child(n+4) { display:none; }
 	/* 右栏改成整块盖住画布, 不再把画布挤成一条 */
 	.rk-detail { position:absolute; inset:0; z-index:6; width:auto; min-width:0; }
+	/* 编辑抽屉在窄面板下也是整块浮层, 而且基础层位要跟右栏一样高: 两块都是不透明的整块盖板,
+	   压不过去就等于「点了编辑/源码没反应」(抽屉挂在右栏底下, 谁也看不见)。
+	   两个同时开着时谁在上由 .rk-root[data-rk-top] 决定 —— 客户端每次打开详情/抽屉时把这里设成
+	   最后打开的那个(见 client.js 的 topLayer), 所以「详情里点编辑」抽屉在上、「抽屉开着时点搜索结果」详情在上。 */
+	.rk-drawer { z-index:6; }
+	.rk-root[data-rk-top="detail"] .rk-detail { z-index:7; }
+	.rk-root[data-rk-top="editor"] .rk-drawer { z-index:7; }
+	/* 舞台整体上台: 搜索结果与卡片右键菜单都长在 .rk-stage 里面(它自己 z-index:0 是个层叠上下文,
+	   里层再高的 z-index 也只在它内部比大小), 详情/抽屉开着时不给舞台让位就等于「搜了没结果」。
+	   跟两块盖板同层(7), 谁在上由 data-rk-top 一个值说了算; 浮窗 .rk-modal/.rk-menu 的 8 仍在最上面。 */
+	.rk-root[data-rk-top="stage"] .rk-stage { z-index:7; }
 }
 @container rk (max-width: ${px(S.breakpoints.narrow)}) {
 	.rk-head { padding:9px 12px; gap:8px; flex-wrap:wrap; }

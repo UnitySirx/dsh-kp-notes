@@ -327,6 +327,11 @@ window.__ModuleLoader__.load({
 
 
 			const [route, setRoute] = useState({ view: 'map' });
+			/* 窄面板下「小节 / 知识点详情」「编辑抽屉」「画布舞台」都是整块浮层(见 client/css.js 的 @container medium):
+			   这里记下最后打开的是哪一个(detail / editor / stage), 让它压在上面 —— 否则从详情里点「编辑 / 源码」时
+			   抽屉会被详情整块盖住, 看上去就像点了没反应; 搜索时一个道理(命中卡片与卡片菜单都长在舞台里),
+			   不让舞台上来就等于「搜了没结果」。宽面板下三者不重叠, 这个值只影响窄面板(z-index 规则写在容器查询里)。 */
+			const [topLayer, setTopLayer] = useState(null);
 			const [query, setQuery] = useState('');
 			const [editor, setEditor] = useState(null);
 			const [nameDialog, setNameDialog] = useState(null);
@@ -839,8 +844,27 @@ window.__ModuleLoader__.load({
 				folded, opened, roots, libTick, saveLib, zoomRef, libZoomRef, libReadyRef,
 				roundScale, snapToDevice, layoutMindmap, buildMindmapTree, flattenPoints,
 			});
-			const openSection = useCallback((path) => setRoute({ view: 'section', path }), []);
-			const openPoint = useCallback((path, pointId) => setRoute({ view: 'point', path, pointId }), []);
+			const openSection = useCallback((path) => {
+				setTopLayer('detail');
+				setRoute({ view: 'section', path });
+			}, []);
+			const openPoint = useCallback((path, pointId) => {
+				setTopLayer('detail');
+				setRoute({ view: 'point', path, pointId });
+			}, []);
+			/* 打开抽屉时把叠放层让给抽屉; 关闭(null)不动 —— 关掉之后详情自然露出来 */
+			const openEditor = useCallback((next) => {
+				if (next) setTopLayer('editor');
+				setEditor(next);
+			}, []);
+			/* 搜索框是「画布上的交互」: 一打字就把叠放层交给画布 —— 窄面板下搜索结果和卡片菜单都长在
+			   .rk-stage 里面(见 client/view.js 的 renderMenu 与搜索结果块), 否则会被详情面板/抽屉整块盖住,
+			   搜了也白搜。清空搜索时再让回详情(点搜索结果会走 openPoint/openSection 自动让回)。 */
+			const onQueryChange = useCallback((value) => {
+				setQuery(value);
+				const detail = route.view === 'section' || route.view === 'point';
+				setTopLayer(value.trim() !== '' ? 'stage' : detail ? 'detail' : null);
+			}, [route.view]);
 
 			/* 导图节点点击: 知识点 → 详情; 小节 → 小节视图; 章节 → 它的第一个小节; 根 → 复位 */
 			/* 折叠 / 展开一个导图节点 */
@@ -874,7 +898,7 @@ window.__ModuleLoader__.load({
 			} = useEditing({
 				t, flash, reload, pathLabel, pointError, questionError,
 				openMenu, openNewRoot, fitView, openSection, mapReady, mind, level1,
-				setRoute, setSaving, editor, setEditor,
+				setRoute, setSaving, editor, setEditor: openEditor,
 				nameDialog, setNameDialog, pointDialog, setPointDialog, questionDialog, setQuestionDialog,
 			});
 			/* 渲染层(菜单 / 一级画布卡片 / 导图 / 小节 / 知识点 / 正文)搬到了 client/view.js */
@@ -941,7 +965,7 @@ window.__ModuleLoader__.load({
 
 			const panelRoot = h(
 				'div',
-				{ className: 'rk-root rk-skin-' + skin + (follow ? ' rk-follow' : ''), ref: panelRootRef, style: { zoom: String(fontScale / 100) } },
+				{ className: 'rk-root rk-skin-' + skin + (follow ? ' rk-follow' : ''), 'data-rk-top': (menu ? 'stage' : topLayer) || undefined, ref: panelRootRef, style: { zoom: String(fontScale / 100) } },
 				h(
 					'div',
 					{ className: 'rk-head' },
@@ -989,7 +1013,7 @@ window.__ModuleLoader__.load({
 								className: 'rk-input',
 								value: query,
 								placeholder: t('search'),
-								onChange: (event) => setQuery(event.target.value),
+								onChange: (event) => onQueryChange(event.target.value),
 							}),
 					h(
 						'div',
@@ -1181,7 +1205,7 @@ window.__ModuleLoader__.load({
 								state: editorState(editor, catalog),
 								t,
 								saving,
-								onClose: () => setEditor(null),
+								onClose: () => openEditor(null),
 								onSave: submitEditor,
 								onDelete: removeEntry,
 								onError: flashError,
@@ -1439,7 +1463,7 @@ window.__ModuleLoader__.load({
 		 * 「把插件关一次开一次」会出现「新的 client.js 跑在旧的 client/*.js 上」的静默错配。
 		 * 路由会先切掉 query 再解析文件(见 host 半 lib/routes.js), 所以带版本号是零成本的。
 		 * 改 client/ 或 client.js 时, 与 host.js / cordis.patch.yml 的版本号一起 +1。 */
-		const MODULE_VERSION = 184;
+		const MODULE_VERSION = 187;
 		const CLIENT_MODULES = ['sizes', 'api', 'store', 'theme', 'git', 'roots', 'editing', 'canvas', 'view', 'dict', 'css', 'util', 'vendor', 'milkdown', 'md', 'media', 'cards', 'dialogs', 'editor', 'snippets', 'mindmap'];
 		const loadClientModule = (name) => import('/rk-study/client/' + name + '.js?v=' + MODULE_VERSION);
 

@@ -373,7 +373,7 @@ D. 非风险点
 | `A－` / `字号 N%` / `A＋` | 改**整个插件的字号**（85% ~ 160%，六档，等比放大，等价于在根节点上设 CSS `zoom`）。点中间的 `字号 N%` 恢复 100%；选择存在浏览器本地（`localStorage` 的 `rk-study:font-scale`），刷新后保持；在一级画布上改还会同步进 `<库>/.config/rk-study.json` 的 `ui.fontScale`，换浏览器也保持。**注意**：本机存的那份要是「没设过」的出厂默认 `100`，就不算「存过」—— 这时以配置文件里那份为准（否则 `localStorage` 被清过一次之后，这个默认值会把库 / 画布里真正的字号**永久**顶掉，「离开插件再进来字号被重置」就是这个病）；同理，**库配置还没读回来之前一个字都不往本机 / 文件里写**。因为根节点整体缩放，画布的屏幕坐标换算都除以了缩放比，右键落点、滚轮锚点、拖动跟手都仍然精确 |
 | `◍ 配色` | 换整套配色（顶栏最右）。点开是 15 个色块：科技蓝（默认） + 14 个 **Material Design** 色（蓝 / 青 / 蓝绿 / 绿 / 柠檬 / 琥珀 / 橙 / 深橙 / 红 / 粉 / 紫 / 深紫 / 靛蓝 / 蓝灰），点一下立刻整块换色（菜单**不关**，方便一个个点着对比）。底色、描边、正文色都跟着主色色相算出来，保证层次与对比度一致。选择存在 `localStorage` 的 `rk-study:skin`，刷新后保持（一级画布上改还会同步进 `<库>/.config/rk-study.json` 的 `ui.skin`）；跟字号一样，全屏专注时也生效。弹层下面还有一个 **卡片各用一色** 开关（默认开）：让每个章节 / 小节 / 知识点带自己的颜色，一屏里不会全是同一个色，记在 `localStorage` 的 `rk-study:card-colors`（`0` = 关）。弹层顶部还有 **主题** 一档（两档）：**插件配色**（默认，就是这套黑蓝科技皮肤，一个字没改）/ **跟随主题**。选「跟随主题」时插件不再用自己的底色，而是直接吃当前 **DeepSeek Harness** 主题的 `--dsw-alias-*` token —— 根节点背景透明、卡片 / 面板 / 输入框 / 弹层取宿主 `bg-layer-1/2/3`，文字取 `label-primary/secondary`，线条取 `border-l1/l2/l3`，强调色取宿主 `brand-primary`（换算成 `--rk-a1/--rk-a2/--rk-a3` 三个色相三元组），画布网格与径向光晕整个撤掉，配色色块变半透明并禁用（跟随主题时颜色由宿主决定），所以**不会覆盖平台主题**。宿主在 `html[data-ds-theme-source]` / `body[data-ds-dark-theme]` 上标了明暗，`client.js` 用 `MutationObserver` 盯着它们，宿主一换明暗插件立刻跟着换（不用刷新页面）。主题记在 `localStorage` 的 `rk-study:theme`（`plugin` / `follow`，老值 `light` / `auto` 自动迁到 `follow`），一级画布上改也会同步进 `<库>/.config/rk-study.json` 的 `ui.theme`；正文里的流程图（mermaid）与富文本编辑器（Milkdown）也跟着一起换 |
 | `⤢ 全屏` | 把左侧边栏与右侧栏一起藏掉，画布占满整个窗口（宿主的壳是「侧栏 \| 中列 \| 右栏」的网格，插件给 `<html>` 挂 `rk-focus`、把两侧列压成 `0px` 并把中列显式放到第二列；不改宿主代码，宿主结构变了顶多全屏不生效）。按钮随即变成 `⤡ 退出全屏`，按 `Esc` 也能退出。开关记在 `localStorage` 的 `rk-study:focus`，刷新后保持（老版本 `rk-study:window` 里 `floating:true` 的会自动升级成全屏） |
-| 拉窗口 / 藏侧栏 / 全屏 | 界面按**插件自己那一块**的宽度自适应：一级画布的列数在 3 / 2 / 1 列之间自动切换（卡片跟着重排，不再硬撑三列），缩到装不下时自动重新铺满一次（自己调好的视野不会被动），顶栏标题、路径与工具条提示超长一律省略号；容器窄于 1000px 时右侧详情面板改成**整块盖住画布**（不再把画布挤成一条缝）、顶栏统计与工具条提示收起，窄于 860px 按钮更紧凑、弹窗铺满容器、编辑抽屉的左右分栏改上下；窄于 700px 藏掉缩放 `－/＋`（`⌘`+滚轮、「复位」仍在）。用的是 CSS `@container rk (...)` 容器查询（只跟插件容器宽度走，宿主侧栏开合也算），不是 `@media` |
+| 拉窗口 / 藏侧栏 / 全屏 | 界面按**插件自己那一块**的宽度自适应：一级画布的列数在 3 / 2 / 1 列之间自动切换（卡片跟着重排，不再硬撑三列），缩到装不下时自动重新铺满一次（自己调好的视野不会被动），顶栏标题、路径与工具条提示超长一律省略号；容器窄于 1000px 时右侧详情面板改成**整块盖住画布**（不再把画布挤成一条缝）、顶栏统计与工具条提示收起，窄于 860px 按钮更紧凑、弹窗铺满容器、编辑抽屉的左右分栏改上下；**窄于 1000px 时编辑抽屉也是一块整块浮层**（基础层位跟详情面板一样高，不再被详情面板整块压住 —— 否则从详情里点「编辑 / 源码」看起来像点了没反应），两块都开着时谁在上由「最后打开的那个」决定（根元素上的 `data-rk-top="detail" / "editor" / "stage"`，见 `client.js` 的 `topLayer`）：详情里点编辑 → 抽屉在上，抽屉开着时又打开一个详情 → 详情在上，**在搜索框里打字则整个舞台抬上来**（搜索结果与卡片右键菜单都长在 `.rk-stage` 里，它自己 `z-index:0` 是个层叠上下文，不让位就会被详情 / 抽屉整块盖住，表现成「搜了没结果」），点某条搜索结果、或把搜索清空，再让回详情；关掉上面那层，下面那层原样露出来；窄于 700px 藏掉缩放 `－/＋`（`⌘`+滚轮、「复位」仍在）。用的是 CSS `@container rk (...)` 容器查询（只跟插件容器宽度走，宿主侧栏开合也算），不是 `@media` |
 | 搜索框 | 搜章节名、小节名、知识点标题与说明，命中后直接列知识点卡片 |
 | 章节卡右上角「改名」 | 弹出输入框改章节名（改的就是目录名） |
 | 点章节卡里的小节行 | **在右侧展开**详情面板：知识点卡片墙（题目在各知识点的详情页里）；左侧画布照旧可以平移、缩放 |
@@ -497,7 +497,7 @@ D. 非风险点
 | --- | --- |
 | `plugin/dsh-kp-notes/host.js` | Host 半入口：只有 16 行，把 `lib/*` 里的东西重新导出（`name` / `inject` / `apply`） |
 | `plugin/dsh-kp-notes/lib/*.js` | Host 半的实现，按职责拆成 14 个 ESM 模块（见下表） |
-| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（1525 行，含回收站面板与那块 `panelRoot` JSX）；数据层 / 持久化 / 配色主题 / Git 面板 / 画布目录与根目录 / 编辑动作 / 画布视口与导图几何 / 渲染层 / 宽高配置分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` / `client/roots.js` / `client/editing.js` / `client/canvas.js` / `client/view.js` / `client/sizes.js` |
+| `plugin/dsh-kp-notes/client.js` | Client 半入口：模块注册 + `apply`（加载 `client/` 下的模块、注入依赖）+ 面板本体（1548 行，含回收站面板与那块 `panelRoot` JSX）；数据层 / 持久化 / 配色主题 / Git 面板 / 画布目录与根目录 / 编辑动作 / 画布视口与导图几何 / 渲染层 / 宽高配置分别搬到了 `client/api.js` / `client/store.js` / `client/theme.js` / `client/git.js` / `client/roots.js` / `client/editing.js` / `client/canvas.js` / `client/view.js` / `client/sizes.js` |
 | `plugin/dsh-kp-notes/client/*.js` | Client 半的实现，按职责拆成 21 个**原生 ESM** 模块（见下表），由入口用 `import()` 经插件自己的 `/rk-study/client/` 路由取回；其中 `client/sizes.js` 是**全插件唯一**的「宽高配置」入口 |
 | `plugin/dsh-kp-notes/vendor/` | 渲染引擎 + 编辑器静态资源：`katex.min.js` / `katex.min.css` / `fonts/*.woff2`（KaTeX 0.16.47）、`mermaid.min.js`（mermaid 11.17.2）、`zt-milkdown/zt-milkdown.js` + `zt-milkdown.css`（zt-react-milkdown 0.1.32，MIT） |
 | `plugin/dsh-kp-notes/package.json` | 包清单（`dsh.bundle.patch`、`dsh.client`、图标） |
@@ -529,8 +529,8 @@ host 半边（`plugin/dsh-kp-notes/lib/`，按依赖从下往上）：
 > ```sh
 > # 1) host 半跨模块 import 的 ?v=N（当前 ?v=93）
 > sed -i '' 's/?v=92/?v=93/g' plugin/dsh-kp-notes/host.js plugin/dsh-kp-notes/lib/*.js
-> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 184；只改注释 / 只动宿主时不必动）
-> sed -i '' 's/MODULE_VERSION = 183;/MODULE_VERSION = 184;/' plugin/dsh-kp-notes/client.js
+> # 2) client.js 里加载 client/ 各模块的 MODULE_VERSION（当前 187；只改注释 / 只动宿主时不必动）
+> sed -i '' 's/MODULE_VERSION = 186;/MODULE_VERSION = 187;/' plugin/dsh-kp-notes/client.js
 > # 3) 已废弃：cordis.patch.yml 现在写的是包名 dsh-kp-notes，没有 ?entry=N 这个缓存戳
 > ```
 >
@@ -542,7 +542,7 @@ client 半边（`plugin/dsh-kp-notes/client/`，按依赖从下往上；每个�
 | --- | --- | --- | --- |
 | `client/dict.js` | 664 | 中英文词典（`zh` / `en`） | — |
 | `client/sizes.js` | 135 | **全插件的「宽高」都在这一个文件里**（`createSizes()` → `{SIZES, px}`）：**根画布（还没进任何画布）的学习画布卡片与舞台 `rootCanvas`** 与 **画布内（进了某张画布）的章节卡片与舞台 `canvas`** —— 两套**互不影响**（改一个不会动另一个）—— 加两级共用的缩放上下限 `stage`、思维导图各层列位置/列宽/行高（`mindmap`）、右键菜单与浮层（`menu`）、弹窗 / 抽屉 / 详情面板宽度（`dialog`）、编辑器与预览高度（`editor`）、git 面板等零散值（`misc`）、容器宽度断点（`breakpoints`）；纯数字 = px（`px(n)` 拼单位），vh / % 写成字符串；想调大小改这里一处，CSS 与画布几何一起变 | — |
-| `client/css.js` | 762 | 全部样式（`const CSS` + 末尾的 `HOST_CSS` 宿主主题映射层：`.rk-root.rk-follow` 把 `--rk-*` 指到宿主 `--dsw-alias-*`）；**所有尺寸都从注入的 `sizes` 拼出来**（`${px(S.dialog.pcardW)}`），文件里不再写死宽高；舞台留白按级拆成 `.rk-stage`（根画布那份）与 `.rk-stage.rk-stage-inner:not(.rk-canvas)`（画布内那份，避开可拖动舞台自己的 `padding:0`） | sizes |
+| `client/css.js` | 775 | 全部样式（`const CSS` + 末尾的 `HOST_CSS` 宿主主题映射层：`.rk-root.rk-follow` 把 `--rk-*` 指到宿主 `--dsw-alias-*`）；**所有尺寸都从注入的 `sizes` 拼出来**（`${px(S.dialog.pcardW)}`），文件里不再写死宽高；舞台留白按级拆成 `.rk-stage`（根画布那份）与 `.rk-stage.rk-stage-inner:not(.rk-canvas)`（画布内那份，避开可拖动舞台自己的 `padding:0`） | sizes |
 | `client/util.js` | 94 | 缩放取整、字数、路径标签、小节 / 知识点查找、编辑器状态 | — |
 | `client/api.js` | 453 | 数据层：宿主路由的 fetch/post 包装（画布目录、roots、库配置、`state`、git；`fetchLibConfig` 会把宿主回的 `exists` / `isCanvas` / `hasConfig` / `hasTemplates` 四个探针挂到配置对象上，其中 **`exists` 是三态**（`true` / `false` / `null`，`null` = 问不出来，客户端只有 `true` 才算「读到了配置」），`isCanvas` / `hasConfig` / `hasTemplates` 仍按 `=== true` 认；老宿主不带这几个字段时按「在」处理，免得被误判成库目录丢了）+ `useCatalog` / `useGit` 两个轮询 hook + `activeRoot`（只活在本页面会话的当前根目录，面板通过 `getActiveRoot()` / `setActiveRoot()` 读写） | React |
 | `client/media.js` | 230 | 图片素材：插图**两步**（`upload(file, notePath)` **同步**交回一条 `blob:` 本地引用（`URL.createObjectURL(file)`）并把文件记进内存 —— 选文件阶段不写盘；`settleText(text)` 在图片真进正文（markdown 里带 `blob:`）之后才把字节 POST 到 `/rk-study/media` 落到 `.media/<小节uid>.assestfiles/`，`flush()` 供保存前等一等）+ 显示换算（`mediaUrl(src)` / `watchImages(rootEl)`：用 `MutationObserver` 盯住面板里所有 `<img>`，把相对 `src` 就地换成路由地址；只改 DOM，markdown 里那份相对路径原样不动）+ 写盘收口（`toMarkdownSrc(text, strict)`：把显示地址与没落盘的 `blob:` 换回相对路径，strict 时把落盘失败的图整段去掉）+ `maxFileSize`（16 MB）与 `allowedProtocols`（`['blob:']`，两个都喂给 vendor 的 `imageUpload`，不传它默认只让 5 MB、且不认 `blob:` 会把图从 markdown 里静默丢掉） | api |

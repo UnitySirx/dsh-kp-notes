@@ -357,7 +357,7 @@ export function createView({ React }) {
 								{ className: 'rk-row', style: { marginLeft: 'auto' } },
 								h(
 									'button',
-									{ className: 'rk-btn', type: 'button', onClick: () => setRoute({ view: 'section', path: section.path }) },
+									{ className: 'rk-btn', type: 'button', onClick: () => openSection(section.path) },
 									'‹ ' + t('back'),
 								),
 								h(
